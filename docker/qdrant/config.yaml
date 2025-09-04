@@ -1,0 +1,29 @@
+# Qdrant向量数据库配置
+log_level: INFO
+
+storage:
+  # 存储配置
+  storage_path: /qdrant/storage
+  snapshots_path: /qdrant/snapshots
+  temp_path: /qdrant/temp
+  
+  # 性能配置
+  performance:
+    max_search_threads: 0  # 0 = auto detect
+    max_optimization_threads: 0  # 0 = auto detect
+
+service:
+  # 服务配置
+  http_port: 6333
+  grpc_port: 6334
+  enable_cors: true
+  
+  # 最大请求大小 (64MB)
+  max_request_size_mb: 64
+  
+  # 最大超时时间
+  max_timeout_seconds: 60
+
+cluster:
+  # 集群配置 (单节点模式)
+  enabled: false

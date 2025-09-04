@@ -1,0 +1,257 @@
+# 🐳 企业AI工作空间 - 轻量级Docker编排
+# 简单、直接、够用的5服务架构
+
+version: '3.8'
+
+services:
+  # ===========================================
+  # 核心应用层
+  # ===========================================
+  
+  # API网关 + 静态文件服务
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8100:80"    # 主入口 (避开80/8080)
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - ./public/uploads:/var/www/uploads:ro
+    depends_on:
+      - app
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Next.js主应用
+  app:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile.prod
+    # ports: 不暴露到主机，只在内部网络访问
+    environment:
+      # 应用配置
+      - NODE_ENV=development
+      - NEXT_TELEMETRY_DISABLED=1
+      - NEXT_PUBLIC_APP_URL=http://localhost:8100
+      
+      # 安全密钥
+      - JWT_SECRET=${JWT_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      
+      # 数据库连接
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      
+      # 服务连接
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      
+      # 业务配置
+      - DEFAULT_ADMIN_EMAIL=${DEFAULT_ADMIN_EMAIL}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD}
+      - DEFAULT_DIFY_BASE_URL=${DEFAULT_DIFY_BASE_URL}
+      
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===========================================
+  # 数据存储层
+  # ===========================================
+  
+  # PostgreSQL主数据库
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5433:5432"  # 避开默认5432端口
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/lightweight-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.track=all
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Redis缓存 + 会话存储
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"  # 避开默认6379端口
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # ===========================================
+  # AI服务层
+  # ===========================================
+  
+
+
+  # ===========================================
+  # 文件存储层 (可选)
+  # ===========================================
+  
+  # MinIO对象存储
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9100:9000"  # API端口 (避开9000)
+      - "9101:9001"  # 控制台端口
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - app-network
+    restart: unless-stopped
+    profiles: ["storage"]
+
+  # ===========================================
+  # 监控服务层 (可选)
+  # ===========================================
+  
+  # Prometheus监控
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9091:9090"  # 避开默认9090端口
+    volumes:
+      - prometheus_data:/prometheus
+      - ./docker/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    networks:
+      - app-network
+    restart: unless-stopped
+    profiles: ["monitoring"]
+
+  # Grafana仪表板
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"  # 避开常用3000端口
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/monitoring/grafana:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - app-network
+    restart: unless-stopped
+    profiles: ["monitoring"]
+
+# ===========================================
+# 数据卷定义
+# ===========================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# ===========================================
+# 网络定义
+# ===========================================
+networks:
+  app-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
+# ===========================================
+# 部署配置说明
+# ===========================================
+# 
+# 基础部署 (4个核心服务):
+#   docker-compose up -d nginx app postgres redis
+#
+# 完整部署 (包含文件存储):
+#   docker-compose --profile storage up -d
+#
+# 监控部署 (包含监控服务):
+#   docker-compose --profile monitoring up -d
+#
+# 全功能部署:
+#   docker-compose --profile storage --profile monitoring up -d
+#
+# 端口规划:
+#   18000 - Nginx网关 (主入口)
+#   18080 - Next.js应用
+#   15432 - PostgreSQL
+#   6380 - Redis
+#   19000 - MinIO API (可选)
+#   19001 - MinIO Console (可选)
+#   19090 - Prometheus (可选)
+#   13001 - Grafana (可选)

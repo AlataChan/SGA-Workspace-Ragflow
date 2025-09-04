@@ -15,6 +15,7 @@ export async function sendToDifyStream(
   message: string,
   conversationId?: string,
   onChunk?: (chunk: string) => void,
+  userId?: string
 ): Promise<DifyResponse> {
   try {
     const response = await fetch(`${apiUrl}/chat-messages`, {
@@ -28,7 +29,7 @@ export async function sendToDifyStream(
         query: message,
         response_mode: "streaming",
         conversation_id: conversationId,
-        user: "user",
+        user: userId || "anonymous",
       }),
     })
 
@@ -95,6 +96,7 @@ export async function sendToDify(
   apiKey: string,
   message: string,
   conversationId?: string,
+  userId?: string
 ): Promise<DifyResponse> {
   try {
     // 验证输入参数
@@ -113,7 +115,7 @@ export async function sendToDify(
         query: message.trim(),
         response_mode: "blocking",
         conversation_id: conversationId,
-        user: "user",
+        user: userId || "anonymous",
       }),
     })
 

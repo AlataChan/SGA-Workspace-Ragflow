@@ -1,12 +1,17 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+// import { Alert, AlertDescription } from "@/components/ui/alert"
+// import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+// import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+// import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+// import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   Dialog,
   DialogContent,
@@ -18,262 +23,565 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { FileUpload } from "@/components/ui/file-upload"
-import { Plus, Trash2, Users } from "lucide-react"
-import type { AIAgent, Profile } from "@/lib/types/database"
-import { createClient } from "@/lib/supabase/client"
-import { getCompanyAgents, getCompanyUsers } from "@/lib/database/queries"
+import { Checkbox } from "@/components/ui/checkbox"
+import { 
+  Plus, 
+  Bot, 
+  Trash2, 
+  Edit, 
+  Settings, 
+  Search, 
+  MoreVertical,
+  Users,
+  MessageSquare,
+  Zap,
+  Globe,
+  Key,
+  RefreshCw,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Eye,
+  EyeOff
+} from "lucide-react"
+import { logger } from "@/lib/utils/logger"
+import { cn } from "@/lib/utils"
 
-interface AgentManagementProps {
-  companyId?: string
+interface AgentWithStats {
+  id: string
+  name: string
+  description?: string
+  platform: "dify" | "openai" | "custom"
+  api_url: string
+  api_key: string
+  model_config?: Record<string, any>
+  avatar_url?: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  user_count: number
+  session_count: number
 }
 
-export default function AgentManagement({ companyId }: AgentManagementProps) {
-  const [agents, setAgents] = useState<AIAgent[]>([])
-  const [users, setUsers] = useState<Profile[]>([])
-  const [userAccess, setUserAccess] = useState<Record<string, boolean>>({})
-  const [isLoading, setIsLoading] = useState(true)
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const [isAccessDialogOpen, setIsAccessDialogOpen] = useState(false)
-  const [selectedAgent, setSelectedAgent] = useState<AIAgent | null>(null)
+interface AgentManagementProps {
+  className?: string
+}
 
-  // 新智能体表单
-  const [newAgent, setNewAgent] = useState({
+export default function AgentManagement({ className }: AgentManagementProps) {
+  const [agents, setAgents] = useState<AgentWithStats[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [platformFilter, setPlatformFilter] = useState<string>("all")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  
+  // 分页状态
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0
+  })
+
+  // 对话框状态
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isUsersDialogOpen, setIsUsersDialogOpen] = useState(false)
+  const [selectedAgent, setSelectedAgent] = useState<AgentWithStats | null>(null)
+
+  // 表单状态
+  const [formData, setFormData] = useState({
     name: "",
     description: "",
     platform: "dify" as "dify" | "openai" | "custom",
-    apiUrl: "",
-    apiKey: "",
-    avatarUrl: "",
-    isActive: true,
+    api_url: "",
+    api_key: "",
+    avatar_url: "",
+    is_active: true,
+    model_config: {} as Record<string, any>
   })
 
-  useEffect(() => {
-    loadAgents()
-    loadUsers()
-  }, [companyId])
+  const [showApiKey, setShowApiKey] = useState(false)
 
-  useEffect(() => {
-    if (selectedAgent) {
-      loadUserAccess(selectedAgent.id)
-    }
-  }, [selectedAgent])
-
-  const loadAgents = async () => {
-    if (!companyId) return
-
-    setIsLoading(true)
-    const { data } = await getCompanyAgents(companyId)
-    if (data) {
-      setAgents(data)
-    }
-    setIsLoading(false)
-  }
-
-  const loadUsers = async () => {
-    if (!companyId) return
-
-    const { data } = await getCompanyUsers(companyId)
-    if (data) {
-      setUsers(data)
-    }
-  }
-
-  const loadUserAccess = async (agentId: string) => {
-    const supabase = createClient()
-    const { data } = await supabase.from("user_agent_access").select("user_id").eq("agent_id", agentId)
-
-    const accessMap: Record<string, boolean> = {}
-    users.forEach((user) => {
-      accessMap[user.id] = data?.some((access) => access.user_id === user.id) || false
-    })
-    setUserAccess(accessMap)
-  }
-
-  const handleAddAgent = async () => {
-    if (!newAgent.name || !newAgent.apiUrl || !newAgent.apiKey) return
-
-    const supabase = createClient()
-
+  // 获取智能体列表
+  const fetchAgents = async () => {
     try {
-      const testResponse = await fetch("/api/test-agent", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          platform: newAgent.platform,
-          apiUrl: newAgent.apiUrl,
-          apiKey: newAgent.apiKey,
-          modelConfig: {},
-        }),
+      setIsLoading(true)
+      setError(null)
+
+      const params = new URLSearchParams({
+        page: pagination.page.toString(),
+        limit: pagination.limit.toString(),
       })
 
-      const testResult = await testResponse.json()
+      if (searchQuery) params.append("search", searchQuery)
+      if (platformFilter !== "all") params.append("platform", platformFilter)
+      if (statusFilter !== "all") params.append("is_active", statusFilter === "active" ? "true" : "false")
 
-      if (!testResult.success) {
-        alert(`API连接测试失败: ${testResult.message}`)
-        return
+      const response = await fetch(`/api/admin/agents?${params}`)
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "获取智能体列表失败")
       }
 
-      const { error } = await supabase.from("ai_agents").insert({
-        name: newAgent.name,
-        description: newAgent.description,
-        platform: newAgent.platform,
-        api_url: newAgent.apiUrl,
-        api_key: newAgent.apiKey,
-        avatar_url: newAgent.avatarUrl,
-        company_id: companyId,
-        is_active: newAgent.isActive,
+      const data = await response.json()
+      setAgents(data.data || [])
+      setPagination(prev => ({
+        ...prev,
+        total: data.pagination.total,
+        totalPages: data.pagination.totalPages
+      }))
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "获取智能体列表失败"
+      setError(errorMessage)
+      logger.error("获取智能体列表失败", error as Error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // 创建智能体
+  const handleCreateAgent = async () => {
+    try {
+      setIsLoading(true)
+      
+      const response = await fetch("/api/admin/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData)
       })
 
-      if (error) throw error
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "创建智能体失败")
+      }
 
-      // 重置表单并刷新列表
-      setNewAgent({
+      setIsAddDialogOpen(false)
+      setFormData({
         name: "",
         description: "",
         platform: "dify",
-        apiUrl: "",
-        apiKey: "",
-        avatarUrl: "",
-        isActive: true,
+        api_url: "",
+        api_key: "",
+        avatar_url: "",
+        is_active: true,
+        model_config: {}
       })
-      setIsAddDialogOpen(false)
-      loadAgents()
-
-      alert("智能体添加成功！")
+      
+      await fetchAgents()
+      
     } catch (error) {
-      console.error("添加智能体失败:", error)
-      alert("添加智能体失败，请检查配置")
+      const errorMessage = error instanceof Error ? error.message : "创建智能体失败"
+      setError(errorMessage)
+      logger.error("创建智能体失败", error as Error)
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const handleDeleteAgent = async (agentId: string) => {
-    if (!confirm("确定要删除这个智能体吗？")) return
+  // 更新智能体
+  const handleUpdateAgent = async () => {
+    if (!selectedAgent) return
 
-    const supabase = createClient()
-    const { error } = await supabase.from("ai_agents").delete().eq("id", agentId)
+    try {
+      setIsLoading(true)
+      
+      const response = await fetch(`/api/admin/agents/${selectedAgent.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData)
+      })
 
-    if (!error) {
-      loadAgents()
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "更新智能体失败")
+      }
+
+      setIsEditDialogOpen(false)
+      setSelectedAgent(null)
+      await fetchAgents()
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "更新智能体失败"
+      setError(errorMessage)
+      logger.error("更新智能体失败", error as Error)
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const handleToggleActive = async (agentId: string, isActive: boolean) => {
-    const supabase = createClient()
-    const { error } = await supabase.from("ai_agents").update({ is_active: isActive }).eq("id", agentId)
+  // 删除智能体
+  const handleDeleteAgent = async (agent: AgentWithStats) => {
+    if (!confirm(`确定要删除智能体 "${agent.name}" 吗？此操作不可撤销。`)) {
+      return
+    }
 
-    if (!error) {
-      loadAgents()
+    try {
+      setIsLoading(true)
+      
+      const response = await fetch(`/api/admin/agents/${agent.id}`, {
+        method: "DELETE"
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "删除智能体失败")
+      }
+
+      await fetchAgents()
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "删除智能体失败"
+      setError(errorMessage)
+      logger.error("删除智能体失败", error as Error)
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const openAccessDialog = (agent: AIAgent) => {
+  // 打开编辑对话框
+  const openEditDialog = (agent: AgentWithStats) => {
     setSelectedAgent(agent)
-    setIsAccessDialogOpen(true)
+    setFormData({
+      name: agent.name,
+      description: agent.description || "",
+      platform: agent.platform,
+      api_url: agent.api_url,
+      api_key: agent.api_key,
+      avatar_url: agent.avatar_url || "",
+      is_active: agent.is_active,
+      model_config: agent.model_config || {}
+    })
+    setIsEditDialogOpen(true)
   }
 
-  const handleToggleUserAccess = async (userId: string, hasAccess: boolean) => {
-    if (!selectedAgent) return
+  // 打开用户权限管理对话框
+  const openUsersDialog = (agent: AgentWithStats) => {
+    setSelectedAgent(agent)
+    setIsUsersDialogOpen(true)
+  }
 
-    const supabase = createClient()
-
-    try {
-      if (hasAccess) {
-        // 添加访问权限
-        const { error } = await supabase.from("user_agent_access").insert({
-          user_id: userId,
-          agent_id: selectedAgent.id,
-        })
-        if (error) throw error
-      } else {
-        // 移除访问权限
-        const { error } = await supabase
-          .from("user_agent_access")
-          .delete()
-          .eq("user_id", userId)
-          .eq("agent_id", selectedAgent.id)
-        if (error) throw error
-      }
-
-      // 更新本地状态
-      setUserAccess((prev) => ({
-        ...prev,
-        [userId]: hasAccess,
-      }))
-    } catch (error) {
-      console.error("更新权限失败:", error)
-      alert("更新权限失败")
+  // 获取平台图标
+  const getPlatformIcon = (platform: string) => {
+    switch (platform) {
+      case "dify":
+        return <Bot className="w-4 h-4" />
+      case "openai":
+        return <Zap className="w-4 h-4" />
+      case "custom":
+        return <Globe className="w-4 h-4" />
+      default:
+        return <Bot className="w-4 h-4" />
     }
   }
 
-  const handleSaveAllAccess = async () => {
-    if (!selectedAgent) return
-
-    const supabase = createClient()
-
-    try {
-      // 先删除所有现有权限
-      await supabase.from("user_agent_access").delete().eq("agent_id", selectedAgent.id)
-
-      // 添加新的权限
-      const accessesToAdd = Object.entries(userAccess)
-        .filter(([_, hasAccess]) => hasAccess)
-        .map(([userId]) => ({
-          user_id: userId,
-          agent_id: selectedAgent.id,
-        }))
-
-      if (accessesToAdd.length > 0) {
-        const { error } = await supabase.from("user_agent_access").insert(accessesToAdd)
-        if (error) throw error
-      }
-
-      alert("权限设置已保存")
-      setIsAccessDialogOpen(false)
-    } catch (error) {
-      console.error("保存权限失败:", error)
-      alert("保存权限失败")
+  // 获取平台颜色
+  const getPlatformColor = (platform: string) => {
+    switch (platform) {
+      case "dify":
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+      case "openai":
+        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+      case "custom":
+        return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+      default:
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
     }
   }
+
+  // 初始化数据
+  useEffect(() => {
+    fetchAgents()
+  }, [pagination.page, searchQuery, platformFilter, statusFilter])
+
+  // 搜索防抖
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setPagination(prev => ({ ...prev, page: 1 }))
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">智能体管理</h2>
-          <p className="text-gray-500">管理AI智能体和访问权限</p>
+    <TooltipProvider>
+      <div className={cn("space-y-6", className)}>
+        {/* 页面标题和操作 */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">智能体管理</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">
+              管理企业AI智能体，配置API接口和用户权限
+            </p>
+          </div>
+          <Button onClick={() => setIsAddDialogOpen(true)} className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600">
+            <Plus className="w-4 h-4 mr-2" />
+            添加智能体
+          </Button>
         </div>
+
+        {/* 错误提示 */}
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* 搜索和过滤 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">搜索和过滤</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Input
+                  placeholder="搜索智能体名称或描述..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              
+              <Select value={platformFilter} onValueChange={setPlatformFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择平台" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">所有平台</SelectItem>
+                  <SelectItem value="dify">Dify</SelectItem>
+                  <SelectItem value="openai">OpenAI</SelectItem>
+                  <SelectItem value="custom">自定义</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择状态" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">所有状态</SelectItem>
+                  <SelectItem value="active">启用</SelectItem>
+                  <SelectItem value="inactive">禁用</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Button variant="outline" onClick={fetchAgents} disabled={isLoading}>
+                <RefreshCw className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")} />
+                刷新
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 智能体列表 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>智能体列表</span>
+              <Badge variant="secondary">
+                {pagination.total} 个智能体
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="space-y-3">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="flex items-center space-x-4 animate-pulse">
+                    <div className="w-12 h-12 bg-gray-200 rounded-full"></div>
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                    </div>
+                    <div className="w-20 h-6 bg-gray-200 rounded"></div>
+                  </div>
+                ))}
+              </div>
+            ) : agents.length === 0 ? (
+              <div className="text-center py-12">
+                <Bot className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                  {searchQuery || platformFilter !== "all" || statusFilter !== "all" ? "未找到匹配的智能体" : "暂无智能体"}
+                </h3>
+                <p className="text-gray-500 dark:text-gray-400 mb-4">
+                  {searchQuery || platformFilter !== "all" || statusFilter !== "all"
+                    ? "尝试调整搜索条件或过滤器"
+                    : "开始添加智能体来为用户提供AI服务"
+                  }
+                </p>
+                {!searchQuery && platformFilter === "all" && statusFilter === "all" && (
+                  <Button onClick={() => setIsAddDialogOpen(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    添加第一个智能体
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>智能体</TableHead>
+                      <TableHead>平台</TableHead>
+                      <TableHead>状态</TableHead>
+                      <TableHead>用户数</TableHead>
+                      <TableHead>会话数</TableHead>
+                      <TableHead>创建时间</TableHead>
+                      <TableHead className="text-right">操作</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {agents.map((agent) => (
+                      <TableRow key={agent.id}>
+                        <TableCell>
+                          <div className="flex items-center space-x-3">
+                            <Avatar className="w-10 h-10">
+                              <AvatarImage src={agent.avatar_url || ""} />
+                              <AvatarFallback>
+                                {agent.name[0]}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <div className="font-medium text-gray-900 dark:text-gray-100">
+                                {agent.name}
+                              </div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate">
+                                {agent.description || "暂无描述"}
+                              </div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={cn("capitalize", getPlatformColor(agent.platform))}>
+                            {getPlatformIcon(agent.platform)}
+                            <span className="ml-1">{agent.platform}</span>
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={agent.is_active ? "default" : "secondary"}>
+                            {agent.is_active ? (
+                              <>
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                启用
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="w-3 h-3 mr-1" />
+                                禁用
+                              </>
+                            )}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-1">
+                            <Users className="w-4 h-4 text-gray-400" />
+                            <span>{agent.user_count}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-1">
+                            <MessageSquare className="w-4 h-4 text-gray-400" />
+                            <span>{agent.session_count}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            {new Date(agent.created_at).toLocaleDateString()}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreVertical className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openEditDialog(agent)}>
+                                <Edit className="w-4 h-4 mr-2" />
+                                编辑
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => openUsersDialog(agent)}>
+                                <Users className="w-4 h-4 mr-2" />
+                                用户权限
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handleDeleteAgent(agent)}
+                                className="text-red-600 dark:text-red-400"
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                删除
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            {/* 分页 */}
+            {pagination.totalPages > 1 && (
+              <div className="flex items-center justify-between mt-6">
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  显示 {(pagination.page - 1) * pagination.limit + 1} 到{" "}
+                  {Math.min(pagination.page * pagination.limit, pagination.total)} 条，
+                  共 {pagination.total} 条记录
+                </div>
+                <div className="flex space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                    disabled={pagination.page <= 1}
+                  >
+                    上一页
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                    disabled={pagination.page >= pagination.totalPages}
+                  >
+                    下一页
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* 添加智能体对话框 */}
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              添加智能体
-            </Button>
-          </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>添加新智能体</DialogTitle>
-              <DialogDescription>配置一个新的AI智能体</DialogDescription>
+              <DialogTitle>添加智能体</DialogTitle>
+              <DialogDescription>配置新的AI智能体，为用户提供智能服务</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">智能体名称</Label>
+                  <Label htmlFor="name">智能体名称 *</Label>
                   <Input
                     id="name"
-                    value={newAgent.name}
-                    onChange={(e) => setNewAgent({ ...newAgent, name: e.target.value })}
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="请输入智能体名称"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="platform">平台类型</Label>
+                  <Label htmlFor="platform">平台类型 *</Label>
                   <Select
-                    value={newAgent.platform}
+                    value={formData.platform}
                     onValueChange={(value: "dify" | "openai" | "custom") =>
-                      setNewAgent({ ...newAgent, platform: value })
+                      setFormData({ ...formData, platform: value })
                     }
                   >
                     <SelectTrigger>
@@ -287,155 +595,81 @@ export default function AgentManagement({ companyId }: AgentManagementProps) {
                   </Select>
                 </div>
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="description">描述</Label>
                 <Textarea
                   id="description"
-                  value={newAgent.description}
-                  onChange={(e) => setNewAgent({ ...newAgent, description: e.target.value })}
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="请输入智能体描述"
+                  rows={3}
                 />
               </div>
+
               <div className="space-y-2">
-                <Label>智能体头像</Label>
-                <div className="flex items-center space-x-4">
-                  <Avatar className="w-16 h-16">
-                    <AvatarImage src={newAgent.avatarUrl || "/placeholder.svg"} />
-                    <AvatarFallback>{newAgent.name[0] || "A"}</AvatarFallback>
-                  </Avatar>
-                  <FileUpload
-                    type="agent_avatar"
-                    currentUrl={newAgent.avatarUrl}
-                    onUpload={(url) => setNewAgent({ ...newAgent, avatarUrl: url })}
-                    accept="image/*"
+                <Label htmlFor="api_url">API地址 *</Label>
+                <Input
+                  id="api_url"
+                  value={formData.api_url}
+                  onChange={(e) => setFormData({ ...formData, api_url: e.target.value })}
+                  placeholder="https://api.example.com"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="api_key">API密钥 *</Label>
+                <div className="relative">
+                  <Input
+                    id="api_key"
+                    type={showApiKey ? "text" : "password"}
+                    value={formData.api_key}
+                    onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                    placeholder="请输入API密钥"
                   />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                  >
+                    {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </Button>
                 </div>
-                <p className="text-xs text-gray-500">支持 JPG、PNG 格式，建议尺寸 128x128px</p>
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="apiUrl">API URL</Label>
+                <Label htmlFor="avatar_url">头像地址</Label>
                 <Input
-                  id="apiUrl"
-                  value={newAgent.apiUrl}
-                  onChange={(e) => setNewAgent({ ...newAgent, apiUrl: e.target.value })}
-                  placeholder="请输入API地址"
+                  id="avatar_url"
+                  value={formData.avatar_url}
+                  onChange={(e) => setFormData({ ...formData, avatar_url: e.target.value })}
+                  placeholder="https://example.com/avatar.png"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="apiKey">API Key</Label>
-                <Input
-                  id="apiKey"
-                  type="password"
-                  value={newAgent.apiKey}
-                  onChange={(e) => setNewAgent({ ...newAgent, apiKey: e.target.value })}
-                  placeholder="请输入API密钥"
-                />
-              </div>
+
               <div className="flex items-center space-x-2">
                 <Switch
-                  id="isActive"
-                  checked={newAgent.isActive}
-                  onCheckedChange={(checked) => setNewAgent({ ...newAgent, isActive: checked })}
+                  id="is_active"
+                  checked={formData.is_active}
+                  onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
                 />
-                <Label htmlFor="isActive">启用智能体</Label>
+                <Label htmlFor="is_active">启用智能体</Label>
               </div>
-              <Button onClick={handleAddAgent} className="w-full">
-                添加智能体
-              </Button>
+
+              <div className="flex justify-end space-x-2">
+                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                  取消
+                </Button>
+                <Button onClick={handleCreateAgent} disabled={isLoading}>
+                  {isLoading ? "创建中..." : "创建智能体"}
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
       </div>
-
-      {/* 智能体列表 */}
-      <div className="grid gap-4">
-        {isLoading ? (
-          <Card>
-            <CardContent className="p-6">
-              <p className="text-center text-gray-500">加载中...</p>
-            </CardContent>
-          </Card>
-        ) : agents.length === 0 ? (
-          <Card>
-            <CardContent className="p-6">
-              <p className="text-center text-gray-500">暂无智能体</p>
-            </CardContent>
-          </Card>
-        ) : (
-          agents.map((agent) => (
-            <Card key={agent.id}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <Avatar className="w-12 h-12">
-                      <AvatarImage src={agent.avatar_url || ""} />
-                      <AvatarFallback>{agent.name[0]}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <h3 className="font-semibold">{agent.name}</h3>
-                      <p className="text-sm text-gray-500">{agent.description}</p>
-                      <div className="flex items-center space-x-2 mt-1">
-                        <Badge variant="secondary">{agent.platform}</Badge>
-                        <Badge variant={agent.is_active ? "default" : "outline"}>
-                          {agent.is_active ? "启用" : "禁用"}
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Button variant="outline" size="sm" onClick={() => openAccessDialog(agent)}>
-                      <Users className="w-4 h-4 mr-2" />
-                      权限设置
-                    </Button>
-                    <Switch
-                      checked={agent.is_active}
-                      onCheckedChange={(checked) => handleToggleActive(agent.id, checked)}
-                    />
-                    <Button variant="ghost" size="sm" onClick={() => handleDeleteAgent(agent.id)}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
-
-      {/* 权限设置对话框 */}
-      <Dialog open={isAccessDialogOpen} onOpenChange={setIsAccessDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>设置访问权限</DialogTitle>
-            <DialogDescription>选择可以访问 "{selectedAgent?.name}" 的用户</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="max-h-96 overflow-y-auto space-y-2">
-              {users.map((user) => (
-                <div key={user.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <Avatar>
-                      <AvatarImage src={user.avatar_url || ""} />
-                      <AvatarFallback>{user.display_name?.[0] || user.username[0]}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium">{user.display_name || user.username}</p>
-                      <p className="text-sm text-gray-500">@{user.username}</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={userAccess[user.id] || false}
-                    onCheckedChange={(checked) => handleToggleUserAccess(user.id, checked)}
-                  />
-                </div>
-              ))}
-            </div>
-            <Button onClick={handleSaveAllAccess} className="w-full">
-              保存权限设置
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+    </TooltipProvider>
   )
 }

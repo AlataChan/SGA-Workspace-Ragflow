@@ -1,0 +1,26 @@
+import type { NextRequest } from "next/server"
+import { NextResponse } from "next/server"
+
+export async function middleware(request: NextRequest) {
+  // 开发环境简化中间件，跳过复杂的认证逻辑
+  if (process.env.NODE_ENV === 'development') {
+    return NextResponse.next()
+  }
+
+  // 生产环境可以在这里添加认证逻辑
+  return NextResponse.next()
+}
+
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths except:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - images - .svg, .png, .jpg, .jpeg, .gif, .webp
+     * Feel free to modify this pattern to include more paths.
+     */
+    "/((?!_next/static|_next/image|favicon.ico|.*.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
+}

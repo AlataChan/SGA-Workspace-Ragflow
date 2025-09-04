@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+// import { createClient } from "@/lib/supabase/server" // 暂时注释掉
 import { testAPIConnection } from "@/lib/api/dify"
 
 export async function POST(request: NextRequest) {
