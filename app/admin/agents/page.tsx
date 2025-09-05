@@ -59,7 +59,10 @@ import {
   Crown,
   Shield,
   Megaphone,
-  Building
+  Building,
+  TrendingUp,
+  Users,
+  Settings
 } from "lucide-react"
 import NewAdminLayout from "@/components/admin/new-admin-layout"
 
@@ -145,7 +148,10 @@ const getIconComponent = (iconName: string) => {
     Bot: Bot,
     Shield: Shield,
     Megaphone: Megaphone,
+    TrendingUp: TrendingUp,
+    Users: Users,
     Building: Building,
+    Settings: Settings,
   }
   return iconMap[iconName] || Building
 }

@@ -28,16 +28,20 @@ import {
   Crown,
   Network,
   UserCheck,
-  Cog,
-  Shield,
-  Edit,
   Bot,
+  Shield,
+  Megaphone,
+  TrendingUp,
+  Cog,
+  Edit,
   History,
   MessageCircle,
   Wallet,
-  Megaphone,
   GraduationCap,
-  ChevronUp
+  ChevronUp,
+  Mic,
+  Video,
+  Phone
 } from "lucide-react"
 
 interface Agent {
@@ -181,6 +185,14 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
         return <Bot className="w-4 h-4" />
       case 'Shield':
         return <Shield className="w-4 h-4" />
+      case 'Megaphone':
+        return <Megaphone className="w-4 h-4" />
+      case 'TrendingUp':
+        return <TrendingUp className="w-4 h-4" />
+      case 'Users':
+        return <Users className="w-4 h-4" />
+      case 'Settings':
+        return <Settings className="w-4 h-4" />
       case 'Building':
         return <Building className="w-4 h-4" />
       default:
@@ -550,14 +562,14 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
                 <DropdownMenu open={isUserDropdownOpen} onOpenChange={setIsUserDropdownOpen}>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="w-full flex items-center justify-between text-[#e0e0e0] hover:text-white hover:bg-[#2d2d2d] p-3 rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        <Avatar className="w-8 h-8 border-2 border-[#6a5acd]">
+                      <div className="flex items-center space-x-4">
+                        <Avatar className="w-12 h-12 border-2 border-[#6a5acd] ring-2 ring-[#6a5acd]/20">
                           <AvatarImage src={user.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"} />
-                          <AvatarFallback className="bg-[#6a5acd] text-white text-sm">
+                          <AvatarFallback className="bg-[#6a5acd] text-white text-base font-semibold">
                             {user.display_name?.[0] || user.username?.[0] || 'U'}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="text-sm font-medium">{user.display_name || user.username || '用户'}</span>
+                        <span className="text-base font-medium">{user.display_name || user.username || '用户'}</span>
                       </div>
                       <ChevronDown className="w-4 h-4" />
                     </Button>
@@ -606,17 +618,20 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
 
             {realAgents[selectedIndex] && (
               <div className="flex flex-col flex-1">
-                {/* Agent基本信息 - 移到中间位置 */}
-                <div className="p-6 text-center border-b border-[#2d2d2d] mt-8">
+                {/* 上方留空区域 - 减少留空 */}
+                <div className="flex-1 min-h-[40px]"></div>
+
+                {/* Agent基本信息 - 稍微往下 */}
+                <div className="p-6 text-center border-b border-[#2d2d2d] mb-6">
                   <img
                     src={realAgents[selectedIndex].avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop'}
                     alt={realAgents[selectedIndex].chineseName}
-                    className="w-20 h-20 rounded-full object-cover border-3 border-[#6a5acd] mx-auto mb-4"
+                    className="w-28 h-28 rounded-full object-cover border-4 border-[#6a5acd] ring-4 ring-[#6a5acd]/20 mx-auto mb-6 shadow-lg shadow-[#6a5acd]/30"
                   />
-                  <h3 className="text-xl font-semibold text-white mb-2">
+                  <h3 className="text-2xl font-semibold text-white mb-3">
                     {realAgents[selectedIndex].chineseName}
                   </h3>
-                  <p className="text-sm text-[#9aa0a6] mb-4">
+                  <p className="text-base text-[#9aa0a6] mb-6">
                     {realAgents[selectedIndex].position}
                   </p>
                   <div className="flex items-center justify-center">
@@ -627,8 +642,8 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
                   </div>
                 </div>
 
-                {/* 详细信息区域 - 中间位置，下面留空 */}
-                <div className="overflow-y-auto scrollbar-thin scrollbar-thumb-[#3c4043] scrollbar-track-transparent p-6 space-y-4 max-h-[400px]">
+                {/* 详细信息区域 - 增加间距 */}
+                <div className="overflow-y-auto scrollbar-thin scrollbar-thumb-[#3c4043] scrollbar-track-transparent px-6 space-y-6 max-h-[280px]">
                   {/* 部门信息 */}
                   <div>
                     <h4 className="text-sm font-medium text-[#e8eaed] mb-2 flex items-center">
@@ -720,31 +735,55 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
                   )}
                 </div>
 
-                {/* 操作按钮 - 在详细信息下面 */}
-                <div className="p-6 space-y-3">
+                {/* 操作按钮区域 - 增加间距和新按钮 */}
+                <div className="p-6 pt-10 space-y-6">
+                  {/* 主要操作按钮 */}
                   <button
                     onClick={() => handleStartChat(realAgents[selectedIndex])}
                     disabled={!realAgents[selectedIndex]?.isOnline || !realAgents[selectedIndex]?.difyUrl || !realAgents[selectedIndex]?.difyKey}
-                    className={`w-full flex items-center justify-center px-4 py-3 rounded-lg transition-colors text-sm font-medium ${
+                    className={`w-full flex items-center justify-center px-4 py-3 rounded-lg transition-all duration-300 text-sm font-medium shadow-lg ${
                       realAgents[selectedIndex]?.isOnline && realAgents[selectedIndex]?.difyUrl && realAgents[selectedIndex]?.difyKey
-                        ? 'bg-[#6a5acd] hover:bg-[#5a4abd] text-white cursor-pointer'
+                        ? 'bg-gradient-to-r from-[#6a5acd] to-[#8a7aed] hover:from-[#5a4abd] hover:to-[#7a6add] text-white cursor-pointer hover:shadow-[#6a5acd]/50'
                         : 'bg-gray-600 text-gray-400 cursor-not-allowed'
                     }`}
                   >
                     <MessageCircle className="w-4 h-4 mr-2" />
                     {realAgents[selectedIndex]?.isOnline
-                      ? (realAgents[selectedIndex]?.difyUrl && realAgents[selectedIndex]?.difyKey ? '进入聊天' : '配置缺失')
+                      ? (realAgents[selectedIndex]?.difyUrl && realAgents[selectedIndex]?.difyKey ? '智能对话' : '配置缺失')
                       : '离线状态'
                     }
                   </button>
-                  <button className="w-full flex items-center justify-center px-4 py-3 bg-[#2d2d2d] hover:bg-[#3c4043] text-[#e8eaed] rounded-lg transition-colors text-sm border border-[#3c4043]">
+
+                  {/* 次要操作按钮组 */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      disabled
+                      className="flex items-center justify-center px-3 py-3 bg-[#2d2d2d]/50 text-gray-500 rounded-lg transition-all duration-300 text-sm border border-[#3c4043]/50 cursor-not-allowed"
+                    >
+                      <Mic className="w-4 h-4 mr-2" />
+                      语音通话
+                    </button>
+                    <button
+                      disabled
+                      className="flex items-center justify-center px-3 py-3 bg-[#2d2d2d]/50 text-gray-500 rounded-lg transition-all duration-300 text-sm border border-[#3c4043]/50 cursor-not-allowed"
+                    >
+                      <Video className="w-4 h-4 mr-2" />
+                      视频会议
+                    </button>
+                  </div>
+
+                  {/* 附加功能按钮 */}
+                  <button
+                    disabled
+                    className="w-full flex items-center justify-center px-4 py-3 bg-[#2d2d2d]/50 text-gray-500 rounded-lg transition-all duration-300 text-sm border border-[#3c4043]/50 cursor-not-allowed"
+                  >
                     <History className="w-4 h-4 mr-2" />
-                    查看历史
+                    交互历史
                   </button>
                 </div>
 
-                {/* 底部留空区域 */}
-                <div className="flex-1"></div>
+                {/* 下方留空区域 - 适度留空 */}
+                <div className="flex-1 min-h-[40px]"></div>
               </div>
             )}
           </div>

@@ -18,16 +18,8 @@ async function createAdminUser() {
       console.log('创建默认公司...')
       company = await prisma.company.create({
         data: {
-          id: 'sga_company_001',
           name: 'Solo Genius Agent',
           logoUrl: '/placeholder-logo.svg',
-          description: '智能体组织架构',
-          website: 'https://sologenai.com',
-          industry: '人工智能',
-          size: 'SMALL',
-          timezone: 'Asia/Shanghai',
-          language: 'zh-CN',
-          currency: 'CNY',
         }
       })
       console.log('公司创建成功:', company.name)

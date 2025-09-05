@@ -13,13 +13,12 @@ async function main() {
   console.log('🚀 开始初始化 SGA 数据库...')
 
   try {
-    // 1. 创建公司信息
+    // 1. 创建公司信息（使用默认cuid格式）
     console.log('📊 创建公司信息...')
     const company = await prisma.company.upsert({
       where: { name: 'Solo Genius Agent' },
       update: {},
       create: {
-        id: 'sga_company_001',
         name: 'Solo Genius Agent',
         logoUrl: '/assets/sga-logo.svg',
       },
@@ -30,28 +29,24 @@ async function main() {
     console.log('🏢 创建部门结构...')
     const departments = [
       {
-        id: 'dept_management',
         name: '管理层',
         description: '公司高级管理团队',
         icon: 'Crown',
         sortOrder: 1,
       },
       {
-        id: 'dept_consultant',
         name: 'Ai Consultant 中心',
         description: '人工智能咨询服务团队',
         icon: 'Bot',
         sortOrder: 2,
       },
       {
-        id: 'dept_finance',
         name: '财务及风控中心',
         description: '财务管理和风险控制团队',
         icon: 'Shield',
         sortOrder: 3,
       },
       {
-        id: 'dept_marketing',
         name: '市场营销部',
         description: '市场推广和营销团队',
         icon: 'Megaphone',
@@ -61,7 +56,12 @@ async function main() {
 
     for (const dept of departments) {
       await prisma.department.upsert({
-        where: { id: dept.id },
+        where: {
+          companyId_name: {
+            companyId: company.id,
+            name: dept.name
+          }
+        },
         update: {},
         create: {
           ...dept,
@@ -148,7 +148,7 @@ async function main() {
     const passwordHash = await bcrypt.hash('admin123', 10)
     
     const adminUser = await prisma.user.upsert({
-      where: { 
+      where: {
         unique_user_id: {
           companyId: company.id,
           userId: 'admin'
@@ -156,13 +156,17 @@ async function main() {
       },
       update: {},
       create: {
-        id: 'user_admin',
         companyId: company.id,
+        username: 'admin',
         userId: 'admin',
         phone: '13800000000',
         passwordHash,
+        chineseName: '系统管理员',
+        englishName: 'System Admin',
+        email: 'admin@sologenai.com',
         displayName: '系统管理员',
         role: 'ADMIN',
+        isActive: true,
       },
     })
     console.log('✅ 管理员用户创建完成:', adminUser.displayName)

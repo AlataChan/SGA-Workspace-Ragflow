@@ -42,6 +42,7 @@ model Department {
   agents      Agent[]
   users       User[]
 
+  @@unique([companyId, name], name: "companyId_name")
   @@map("departments")
 }
 

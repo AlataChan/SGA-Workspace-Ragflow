@@ -146,7 +146,13 @@ export default function CompanySettingsPage() {
         const data = await response.json()
         setCompanyInfo(data.data)
         setFormData(prev => ({ ...prev, logoFile: null }))
+        setLogoPreview(null) // 清除预览
         setMessage({ type: 'success', text: '公司信息保存成功' })
+
+        // 强制刷新页面以更新所有Logo显示
+        setTimeout(() => {
+          window.location.reload()
+        }, 1000)
       } else {
         const error = await response.json()
         throw new Error(error.error?.message || '保存失败')

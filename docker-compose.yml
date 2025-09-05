@@ -66,6 +66,7 @@ services:
         condition: service_healthy
     volumes:
       - ./uploads:/app/uploads
+      - ./public/uploads:/app/public/uploads
       - ./logs:/app/logs
     networks:
       - app-network

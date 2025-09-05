@@ -459,6 +459,15 @@ export default function EnhancedChatWithSidebar({
   const actualAgentAvatar = agentConfig?.agentAvatar || agentAvatar
   const actualUserAvatar = agentConfig?.userAvatar
 
+  // 调试用户头像
+  useEffect(() => {
+    console.log('用户头像调试:', {
+      userAvatar: agentConfig?.userAvatar,
+      actualUserAvatar,
+      agentConfig
+    })
+  }, [agentConfig?.userAvatar, actualUserAvatar])
+
   // 文件上传处理
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
@@ -1738,10 +1747,10 @@ export default function EnhancedChatWithSidebar({
       {/* 主聊天区域 */}
       <div className="flex-1 flex flex-col">
         <div className="p-4 border-b border-blue-500/20 bg-slate-900/30 backdrop-blur-sm">
-          <div className="flex items-center space-x-3">
-            <Avatar className="w-8 h-8">
+          <div className="flex items-center space-x-4">
+            <Avatar className="w-12 h-12 ring-2 ring-blue-500/30">
               <AvatarImage src={actualAgentAvatar} />
-              <AvatarFallback className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white">
+              <AvatarFallback className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-lg font-semibold">
                 {agentName[0]}
               </AvatarFallback>
             </Avatar>
@@ -1754,28 +1763,31 @@ export default function EnhancedChatWithSidebar({
           </div>
         </div>
 
-        <ScrollArea className="flex-1 p-4">
-          <div className="space-y-4 max-w-6xl mx-auto">
+        <ScrollArea className="flex-1 p-6">
+          <div className="space-y-6 w-full">
             {currentSession?.messages.map((message) => {
               const isUser = message.role === 'user'
-              
+
               return (
-                <div key={message.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'} space-x-3 mb-4`}>
-                  {!isUser && (
-                    <Avatar className="w-[60px] h-[60px]">
-                      <AvatarImage src={actualAgentAvatar} />
-                      <AvatarFallback className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-lg">
-                        {agentName[0]}
+                <div key={message.id} className={`flex w-full ${isUser ? 'justify-end pr-8' : 'justify-start pl-8'} mb-6`}>
+                  <div className={`flex ${isUser ? 'flex-row-reverse' : 'flex-row'} items-start space-x-4 ${isUser ? 'space-x-reverse' : ''} max-w-[75%]`}>
+                    <Avatar className="w-[50px] h-[50px] flex-shrink-0 mt-1">
+                      <AvatarImage src={isUser ? actualUserAvatar : actualAgentAvatar} />
+                      <AvatarFallback className={`text-white text-lg ${
+                        isUser
+                          ? 'bg-gradient-to-r from-green-500 to-emerald-500'
+                          : 'bg-gradient-to-r from-blue-500 to-cyan-500'
+                      }`}>
+                        {isUser ? (actualUserAvatar ? 'U' : '用') : agentName[0]}
                       </AvatarFallback>
                     </Avatar>
-                  )}
 
-                  <div className={`max-w-[75%] ${isUser ? 'order-first' : ''}`}>
-                    <div className={`rounded-xl px-3 py-2 text-sm ${
+                    <div className="flex-1 min-w-0">
+                    <div className={`rounded-xl px-4 py-3 text-sm leading-relaxed ${
                       isUser
-                        ? 'bg-blue-600 text-white shadow-lg user-message'
+                        ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg user-message'
                         : 'bg-white/95 text-gray-800 border border-gray-200 shadow-sm'
-                    }`}>
+                    }`} style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                       {message.isStreaming ? (
                         message.content ? (
                           <TypewriterEffect content={message.content} speed={20} />
@@ -1840,7 +1852,7 @@ export default function EnhancedChatWithSidebar({
                     </div>
 
                     {/* 时间戳 */}
-                    <div className={`text-xs text-blue-200/50 mt-1 ${isUser ? 'text-right' : 'text-left'}`}>
+                    <div className={`text-xs text-blue-200/50 mt-2 ${isUser ? 'text-right' : 'text-left'}`}>
                       {message.timestamp && !isNaN(message.timestamp)
                         ? new Date(message.timestamp).toLocaleTimeString('zh-CN', {
                             hour: '2-digit',
@@ -1850,16 +1862,8 @@ export default function EnhancedChatWithSidebar({
                         : '刚刚'
                       }
                     </div>
+                    </div>
                   </div>
-
-                  {isUser && (
-                    <Avatar className="w-[60px] h-[60px]">
-                      <AvatarImage src={actualUserAvatar} />
-                      <AvatarFallback className="bg-gradient-to-r from-green-500 to-emerald-500 text-white text-lg">
-                        U
-                      </AvatarFallback>
-                    </Avatar>
-                  )}
                 </div>
               )
             })}

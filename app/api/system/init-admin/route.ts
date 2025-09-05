@@ -49,15 +49,47 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // 创建默认公司
-      const company = await prisma.company.upsert({
-        where: { name: 'Solo Genius Agent' },
-        update: {},
-        create: {
-          name: 'Solo Genius Agent',
-          logoUrl: '/logo.png'
-        }
+      // 创建默认公司 - 修复ID格式问题
+      let company = await prisma.company.findFirst({
+        where: { name: 'Solo Genius Agent' }
       })
+
+      if (!company) {
+        // 如果不存在，创建新公司（使用默认的cuid格式）
+        company = await prisma.company.create({
+          data: {
+            name: 'Solo Genius Agent',
+            logoUrl: '/logo.png'
+          }
+        })
+        console.log('创建新公司:', company.id)
+      } else {
+        // 检查现有公司ID格式是否正确
+        const isCuidFormat = /^c[a-z0-9]{24}$/.test(company.id)
+        if (!isCuidFormat) {
+          console.log('发现格式不正确的公司ID:', company.id)
+
+          // 检查是否有关联数据
+          const userCount = await prisma.user.count({ where: { companyId: company.id } })
+          const deptCount = await prisma.department.count({ where: { companyId: company.id } })
+          const agentCount = await prisma.agent.count({ where: { companyId: company.id } })
+
+          if (userCount === 0 && deptCount === 0 && agentCount === 0) {
+            // 如果没有关联数据，删除旧记录并创建新的
+            console.log('删除格式不正确的公司记录并重新创建')
+            await prisma.company.delete({ where: { id: company.id } })
+            company = await prisma.company.create({
+              data: {
+                name: 'Solo Genius Agent',
+                logoUrl: '/logo.png'
+              }
+            })
+            console.log('重新创建公司:', company.id)
+          } else {
+            console.log('公司有关联数据，保持现有记录')
+          }
+        }
+      }
 
       // 创建密码哈希
       const passwordHash = await bcrypt.hash(password, 12)

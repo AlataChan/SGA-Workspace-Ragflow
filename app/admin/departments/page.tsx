@@ -45,7 +45,13 @@ import {
   Bot,
   Shield,
   Megaphone,
-  Settings
+  Settings,
+  TrendingUp,
+  Briefcase,
+  Heart,
+  Zap,
+  Target,
+  Globe
 } from "lucide-react"
 import NewAdminLayout from "@/components/admin/new-admin-layout"
 
@@ -80,9 +86,15 @@ const iconOptions = [
   { value: 'Bot', label: 'AI中心', icon: Bot },
   { value: 'Shield', label: '风控', icon: Shield },
   { value: 'Megaphone', label: '营销', icon: Megaphone },
+  { value: 'TrendingUp', label: '市场营销', icon: TrendingUp },
   { value: 'Users', label: '团队', icon: Users },
   { value: 'Building', label: '部门', icon: Building },
   { value: 'Settings', label: '技术', icon: Settings },
+  { value: 'Briefcase', label: '业务', icon: Briefcase },
+  { value: 'Heart', label: '服务', icon: Heart },
+  { value: 'Zap', label: '创新', icon: Zap },
+  { value: 'Target', label: '目标', icon: Target },
+  { value: 'Globe', label: '全球', icon: Globe },
 ]
 
 export default function DepartmentsPage() {

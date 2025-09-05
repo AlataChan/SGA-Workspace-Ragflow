@@ -187,7 +187,7 @@ export const PUT = withAuth(async (request) => {
     // 更新用户信息
     const updatedUser = await prisma.user.update({
       where: {
-        userId: user.userId, // 使用userId而不是id
+        id: user.userId, // 使用正确的id字段
       },
       data: updateFields,
       select: {
