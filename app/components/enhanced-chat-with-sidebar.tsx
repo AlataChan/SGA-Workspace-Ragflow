@@ -22,7 +22,8 @@ import {
   ArrowLeft,
   Edit3,
   Check,
-  MoreVertical
+  MoreVertical,
+  Copy
 } from "lucide-react"
 import { nanoid } from 'nanoid'
 import { marked } from 'marked'
@@ -147,7 +148,74 @@ const TypewriterEffect: React.FC<TypewriterEffectProps> = ({ content, speed = 30
   }, [currentIndex, content, speed])
 
   return (
+    <EnhancedMessageContent content={displayedContent} />
+  )
+}
+
+// 增强的消息内容组件，支持代码块复制
+interface EnhancedMessageContentProps {
+  content: string
+}
+
+const EnhancedMessageContent: React.FC<EnhancedMessageContentProps> = ({ content }) => {
+  const [copiedStates, setCopiedStates] = useState<{[key: string]: boolean}>({})
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  // 复制代码到剪贴板
+  const copyToClipboard = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedStates(prev => ({ ...prev, [id]: true }))
+      toast.success('代码已复制到剪贴板')
+      setTimeout(() => {
+        setCopiedStates(prev => ({ ...prev, [id]: false }))
+      }, 2000)
+    } catch (err) {
+      console.error('复制失败:', err)
+      toast.error('复制失败')
+    }
+  }
+
+  // 处理代码块，添加复制按钮
+  const processCodeBlocks = (htmlContent: string) => {
+    return htmlContent.replace(
+      /<pre><code([^>]*)>([\s\S]*?)<\/code><\/pre>/g,
+      (match, attributes, codeContent) => {
+        const codeId = nanoid()
+        const decodedContent = codeContent
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&amp;/g, '&')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+
+        return `
+          <div class="code-block-container">
+            <button
+              class="copy-button ${copiedStates[codeId] ? 'copied' : ''}"
+              onclick="window.copyCode('${codeId}', \`${decodedContent.replace(/`/g, '\\`')}\`)"
+              title="复制代码"
+            >
+              ${copiedStates[codeId] ? '已复制' : '复制'}
+            </button>
+            <pre><code${attributes}>${codeContent}</code></pre>
+          </div>
+        `
+      }
+    )
+  }
+
+  useEffect(() => {
+    // 将复制函数暴露到全局，供按钮调用
+    ;(window as any).copyCode = copyToClipboard
+  }, [])
+
+  const htmlContent = content ? marked.parse(content, { async: false }) as string : ''
+  const processedContent = processCodeBlocks(htmlContent)
+
+  return (
     <div
+      ref={contentRef}
       className="message-content"
       style={{
         maxWidth: '100%',
@@ -155,7 +223,7 @@ const TypewriterEffect: React.FC<TypewriterEffectProps> = ({ content, speed = 30
         overflowWrap: 'break-word'
       }}
       dangerouslySetInnerHTML={{
-        __html: displayedContent ? marked.parse(displayedContent, { async: false }) as string : ''
+        __html: processedContent
       }}
     />
   )
@@ -415,7 +483,7 @@ export default function EnhancedChatWithSidebar({
     messages: initialMessages || [{
       id: '1',
       role: 'assistant' as const,
-      content: `你好！我是${agentName}，很高兴为您服务。我可以帮助你解答问题、处理文件、分析图片等。有什么我可以帮助你的吗？`,
+      content: `你好！我是${agentName}。`,
       timestamp: Date.now()
     }],
     lastUpdate: new Date()
@@ -667,7 +735,7 @@ export default function EnhancedChatWithSidebar({
       messages: [{
         id: nanoid(),
         role: 'assistant',
-        content: `你好，我是${agentName}`,
+        content: `你好！我是${agentName}。`,
         timestamp: Date.now()
       }],
       lastUpdate: new Date(),
@@ -727,7 +795,8 @@ export default function EnhancedChatWithSidebar({
           // 转换 Dify 消息格式到本地格式
           // DIFY的每条消息包含query(用户)和answer(助手)，需要拆分成两条消息
           convertedMessages = []
-          messages.reverse().forEach((msg: any) => {
+          // 不需要reverse，保持原始顺序（最新消息在底部）
+          messages.forEach((msg: any) => {
             const timestamp = msg.created_at ? (msg.created_at * 1000) : Date.now()
 
             // 用户消息
@@ -774,7 +843,7 @@ export default function EnhancedChatWithSidebar({
         id: nanoid(),
         title: historyConv.name || '历史对话',
         messages: convertedMessages,
-        lastUpdate: new Date(historyConv.created_at),
+        lastUpdate: new Date(Number(historyConv.created_at) * 1000), // 转换为毫秒
         difyConversationId: historyConv.id,
         isHistory: true,
         agentName: agentName,
@@ -1171,8 +1240,17 @@ export default function EnhancedChatWithSidebar({
                 conversationId = message.conversationId
               }
 
+              // 优先使用 complete 消息中的完整内容，如果不存在则使用累积的内容
+              let finalContent = fullContent
+              if (message.content && typeof message.content === 'string' && message.content.length > fullContent.length) {
+                console.log('[EnhancedChat] 使用 complete 消息中的完整内容，长度:', message.content.length, '累积内容长度:', fullContent.length)
+                finalContent = message.content
+              } else if (message.content && typeof message.content === 'string') {
+                console.log('[EnhancedChat] complete 消息内容长度:', message.content.length, '累积内容长度:', fullContent.length)
+              }
+
               // 最终检测下载链接
-              const finalDetectedAttachments = detectDownloadLinks(fullContent)
+              const finalDetectedAttachments = detectDownloadLinks(finalContent)
               console.log('[EnhancedChat] 最终检测到的附件:', finalDetectedAttachments)
 
               // 处理附件信息（优先使用API返回的附件，然后是检测到的附件）
@@ -1203,7 +1281,7 @@ export default function EnhancedChatWithSidebar({
                         msg.id === assistantMessage.id
                           ? {
                               ...msg,
-                              content: fullContent,
+                              content: finalContent,
                               attachments: finalAttachments.length > 0 ? finalAttachments : msg.attachments,
                               isStreaming: false
                             }
@@ -1235,6 +1313,23 @@ export default function EnhancedChatWithSidebar({
     } catch (error) {
       console.error('发送消息失败:', error)
 
+      // 根据错误类型提供更友好的错误信息
+      let errorMessage = '抱歉，发送消息时出现错误';
+
+      if (error instanceof Error) {
+        if (error.message.includes('timeout') || error.message.includes('超时')) {
+          errorMessage = '请求超时，Dify服务响应时间较长。如果您在使用工具功能，这是正常现象，请稍后重试';
+        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = '网络连接错误，请检查网络连接后重试';
+        } else if (error.message.includes('401')) {
+          errorMessage = 'API密钥无效，请联系管理员检查配置';
+        } else if (error.message.includes('429')) {
+          errorMessage = '请求过于频繁，请稍后重试';
+        } else {
+          errorMessage = `发送失败：${error.message}`;
+        }
+      }
+
       setSessions(prev => prev.map(session =>
         session.id === currentSessionId
           ? {
@@ -1243,7 +1338,7 @@ export default function EnhancedChatWithSidebar({
                 msg.id === assistantMessage.id
                   ? {
                       ...msg,
-                      content: `抱歉，发送消息时出现错误：${error instanceof Error ? error.message : '未知错误'}`,
+                      content: errorMessage,
                       isStreaming: false,
                       hasError: true
                     }
@@ -1343,13 +1438,46 @@ export default function EnhancedChatWithSidebar({
           color: #ffffff !important;
         }
 
+        /* 代码块容器样式 */
+        .message-content .code-block-container {
+          position: relative !important;
+          margin: 16px 0 !important;
+        }
+
+        .message-content .copy-button {
+          position: absolute !important;
+          top: 8px !important;
+          right: 8px !important;
+          background: rgba(255, 255, 255, 0.1) !important;
+          border: 1px solid rgba(255, 255, 255, 0.2) !important;
+          border-radius: 4px !important;
+          padding: 4px 8px !important;
+          color: #f8f8f2 !important;
+          font-size: 12px !important;
+          cursor: pointer !important;
+          transition: all 0.2s ease !important;
+          z-index: 10 !important;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        }
+
+        .message-content .copy-button:hover {
+          background: rgba(255, 255, 255, 0.2) !important;
+          border-color: rgba(255, 255, 255, 0.3) !important;
+        }
+
+        .message-content .copy-button.copied {
+          background: rgba(34, 197, 94, 0.2) !important;
+          border-color: rgba(34, 197, 94, 0.3) !important;
+          color: #22c55e !important;
+        }
+
         /* 代码块样式 */
         .message-content pre {
           background: #1e1e1e !important;
           border: 1px solid #333 !important;
           border-radius: 8px !important;
           padding: 16px !important;
-          margin: 16px 0 !important;
+          margin: 0 !important;
           overflow-x: auto !important;
           font-family: 'Fira Code', 'Monaco', 'Consolas', monospace !important;
           font-size: 14px !important;
@@ -1388,6 +1516,85 @@ export default function EnhancedChatWithSidebar({
         .message-content img:hover {
           transform: scale(1.02) !important;
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+        }
+
+        /* 列表样式优化 - 仿Dify样式，保持原生编号 */
+        .message-content ul,
+        .message-content ol {
+          margin: 16px 0 20px 0 !important;
+          padding-left: 28px !important;
+          list-style-position: outside !important;
+        }
+
+        .message-content ol {
+          list-style-type: decimal !important;
+        }
+
+        .message-content ul {
+          list-style-type: disc !important;
+        }
+
+        .message-content li {
+          margin: 8px 0 !important;
+          line-height: 1.7 !important;
+          padding-left: 8px !important;
+        }
+
+        /* 列表标记样式 */
+        .message-content ol li::marker {
+          font-weight: 600 !important;
+          color: #1f2937 !important;
+        }
+
+        .message-content ul li::marker {
+          color: #1f2937 !important;
+        }
+
+        /* 嵌套列表 */
+        .message-content ul ul,
+        .message-content ol ol,
+        .message-content ul ol,
+        .message-content ol ul {
+          margin: 8px 0 !important;
+          padding-left: 24px !important;
+        }
+
+        /* 链接样式优化 - 仿Dify */
+        .message-content a {
+          color: #1a73e8 !important;
+          text-decoration: none !important;
+          border-bottom: 1px solid transparent !important;
+          transition: all 0.2s ease !important;
+          padding: 1px 2px !important;
+          border-radius: 3px !important;
+        }
+
+        .message-content a:hover {
+          background-color: rgba(26, 115, 232, 0.1) !important;
+          border-bottom-color: #1a73e8 !important;
+        }
+
+        /* 强调文本样式 - 仿Dify */
+        .message-content strong {
+          font-weight: 600 !important;
+          color: #1f2937 !important;
+        }
+
+        /* 分类标题样式 */
+        .message-content p:has(strong) {
+          margin: 16px 0 8px 0 !important;
+        }
+
+        /* 引用块样式 */
+        .message-content blockquote {
+          border-left: 4px solid #3b82f6 !important;
+          padding-left: 16px !important;
+          margin: 16px 0 !important;
+          color: #6b7280 !important;
+          font-style: italic !important;
+          background-color: #f8fafc !important;
+          padding: 12px 16px !important;
+          border-radius: 0 8px 8px 0 !important;
         }
       `}</style>
 
@@ -1783,7 +1990,7 @@ export default function EnhancedChatWithSidebar({
                     </Avatar>
 
                     <div className="flex-1 min-w-0">
-                    <div className={`rounded-xl px-4 py-3 text-sm leading-relaxed ${
+                    <div className={`rounded-xl px-4 py-3 text-base leading-relaxed ${
                       isUser
                         ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg user-message'
                         : 'bg-white/95 text-gray-800 border border-gray-200 shadow-sm'
@@ -1795,12 +2002,7 @@ export default function EnhancedChatWithSidebar({
                           <TypingIndicator />
                         )
                       ) : (
-                        <div
-                          className="message-content"
-                          dangerouslySetInnerHTML={{
-                            __html: message.content ? marked.parse(message.content, { async: false }) as string : ''
-                          }}
-                        />
+                        <EnhancedMessageContent content={message.content} />
                       )}
 
                       {message.attachments && message.attachments.length > 0 && (

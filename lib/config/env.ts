@@ -64,7 +64,8 @@ const envSchema = z.object({
   
   // Dify配置
   DEFAULT_DIFY_BASE_URL: z.string().url().default("http://192.144.232.60/v1"),
-  DEFAULT_DIFY_TIMEOUT: z.coerce.number().min(1000).default(30000),
+  DEFAULT_DIFY_TIMEOUT: z.coerce.number().min(1000).default(180000), // 180秒，适应工具调用
+  DIFY_MAX_RETRIES: z.coerce.number().min(0).max(10).default(3), // 最大重试次数
   
   // 功能开关
   ENABLE_USER_REGISTRATION: z.coerce.boolean().default(false),

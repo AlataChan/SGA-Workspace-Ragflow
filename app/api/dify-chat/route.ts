@@ -4,6 +4,50 @@ import { NextRequest, NextResponse } from "next/server";
 const DEFAULT_DIFY_BASE_URL = "http://192.144.232.60/v1";
 const DEFAULT_DIFY_API_KEY = "app-P0zICVDnPuLSteB4iM7SClQi";
 
+// 超时和重试配置
+const DIFY_TIMEOUT_MS = 180000; // 180秒，适应工具调用的长时间需求
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [1000, 2000, 4000]; // 指数退避：1s, 2s, 4s
+
+// 创建带超时的fetch函数
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
+// 判断是否应该重试的错误
+function shouldRetry(error: any, attempt: number): boolean {
+  if (attempt >= MAX_RETRIES) return false;
+
+  // 网络错误或超时错误应该重试
+  if (error.name === 'AbortError' || error.name === 'TypeError') return true;
+
+  // HTTP 5xx 服务器错误应该重试
+  if (error.status >= 500) return true;
+
+  // HTTP 429 (Too Many Requests) 应该重试
+  if (error.status === 429) return true;
+
+  return false;
+}
+
+// 延迟函数
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export async function POST(req: NextRequest) {
   console.log("[Dify Chat] 收到请求:", req.method, req.url);
 
@@ -144,15 +188,48 @@ export async function POST(req: NextRequest) {
     const targetUrl = `${difyBaseUrl}/chat-messages`;
     console.log("[Dify Chat] 目标URL:", targetUrl);
 
-    // 发送请求到Dify
-    const response = await fetch(targetUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${difyApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(difyRequestBody)
-    });
+    // 发送请求到Dify，带重试机制
+    let response: Response;
+    let lastError: any;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        console.log(`[Dify Chat] 尝试第 ${attempt + 1} 次请求...`);
+
+        response = await fetchWithTimeout(targetUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${difyApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(difyRequestBody)
+        }, DIFY_TIMEOUT_MS);
+
+        // 请求成功，跳出重试循环
+        break;
+
+      } catch (error) {
+        lastError = error;
+        console.error(`[Dify Chat] 第 ${attempt + 1} 次请求失败:`, error);
+
+        // 判断是否应该重试
+        if (shouldRetry(error, attempt)) {
+          const delayMs = RETRY_DELAYS[attempt] || RETRY_DELAYS[RETRY_DELAYS.length - 1];
+          console.log(`[Dify Chat] ${delayMs}ms 后进行第 ${attempt + 2} 次重试...`);
+          await delay(delayMs);
+          continue;
+        } else {
+          // 不应该重试的错误，直接抛出
+          throw error;
+        }
+      }
+    }
+
+    // 如果所有重试都失败了
+    if (!response!) {
+      console.error(`[Dify Chat] 所有 ${MAX_RETRIES + 1} 次请求都失败了`);
+      throw lastError || new Error('所有重试都失败了');
+    }
 
     console.log("[Dify Chat] Dify响应状态:", response.status, response.statusText);
 
@@ -492,9 +569,33 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error("[Dify Chat] 错误:", error);
+
+    // 根据错误类型返回不同的错误信息
+    let errorMessage = "服务暂时不可用，请稍后重试";
+    let statusCode = 500;
+
+    if (error.name === 'AbortError') {
+      errorMessage = "请求超时，Dify服务响应时间过长。如果您在使用工具功能，请稍后重试";
+      statusCode = 408; // Request Timeout
+    } else if (error.message?.includes('fetch')) {
+      errorMessage = "无法连接到Dify服务，请检查网络连接";
+      statusCode = 503; // Service Unavailable
+    } else if (error.status === 401) {
+      errorMessage = "Dify API密钥无效，请检查配置";
+      statusCode = 401;
+    } else if (error.status === 429) {
+      errorMessage = "请求过于频繁，请稍后重试";
+      statusCode = 429;
+    }
+
     return NextResponse.json(
-      { error: "Internal server error", details: error instanceof Error ? error.message : String(error) },
-      { status: 500 }
+      {
+        error: errorMessage,
+        details: error instanceof Error ? error.message : String(error),
+        retries_attempted: MAX_RETRIES + 1,
+        timeout_seconds: DIFY_TIMEOUT_MS / 1000
+      },
+      { status: statusCode }
     );
   }
 }

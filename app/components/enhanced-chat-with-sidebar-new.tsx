@@ -1958,8 +1958,14 @@ export default function EnhancedChatWithSidebar({
                             overflowWrap: 'break-word'
                           }}
                           dangerouslySetInnerHTML={{
-                            __html: message.content ? marked.parse(message.content) : ''
+                            __html: message.content ? marked.parse(message.content, {
+                              breaks: true,
+                              gfm: true,
+                              sanitize: false,
+                              smartypants: true
+                            }) : ''
                           }}
+
                         />
                       )}
 
@@ -1978,22 +1984,32 @@ export default function EnhancedChatWithSidebar({
 
                         {/* Gemini 风格深色主题样式 */}
                         <style jsx global>{`
-                          /* 消息内容样式 - 参考 Gemini */
+                          /* 消息内容样式 - 优化格式化显示 */
                           .message-content {
                             font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
                             font-size: 14px !important;
-                            line-height: 1.6 !important;
+                            line-height: 1.7 !important;
                             color: #1f2937 !important;
                             letter-spacing: 0.25px !important;
                           }
 
                           .message-content p {
-                            margin: 0 0 12px 0 !important;
-                            line-height: 1.6 !important;
+                            margin: 0 0 18px 0 !important;
+                            line-height: 1.7 !important;
                           }
 
                           .message-content p:last-child {
                             margin-bottom: 0 !important;
+                          }
+
+                          /* 段落间距优化 - 仿Dify */
+                          .message-content > *:not(:last-child) {
+                            margin-bottom: 16px !important;
+                          }
+
+                          /* 特殊段落样式 */
+                          .message-content p:first-child {
+                            margin-top: 0 !important;
                           }
 
                           .message-content h1,
@@ -2003,9 +2019,25 @@ export default function EnhancedChatWithSidebar({
                           .message-content h5,
                           .message-content h6 {
                             color: #111827 !important;
-                            font-weight: 500 !important;
-                            margin: 16px 0 8px 0 !important;
+                            font-weight: 600 !important;
+                            margin: 20px 0 12px 0 !important;
                             line-height: 1.4 !important;
+                          }
+
+                          .message-content h1 {
+                            font-size: 20px !important;
+                            border-bottom: 2px solid #e5e7eb !important;
+                            padding-bottom: 8px !important;
+                          }
+
+                          .message-content h2 {
+                            font-size: 18px !important;
+                            border-bottom: 1px solid #f3f4f6 !important;
+                            padding-bottom: 6px !important;
+                          }
+
+                          .message-content h3 {
+                            font-size: 16px !important;
                           }
 
                           .message-content strong {
@@ -2013,12 +2045,53 @@ export default function EnhancedChatWithSidebar({
                             font-weight: 600 !important;
                           }
 
+                          /* 列表样式优化 - 仿Dify样式，保持原生编号 */
+                          .message-content ul,
+                          .message-content ol {
+                            margin: 16px 0 20px 0 !important;
+                            padding-left: 28px !important;
+                            list-style-position: outside !important;
+                          }
+
+                          .message-content ol {
+                            list-style-type: decimal !important;
+                          }
+
+                          .message-content ul {
+                            list-style-type: disc !important;
+                          }
+
+                          .message-content li {
+                            margin: 8px 0 !important;
+                            line-height: 1.7 !important;
+                            padding-left: 8px !important;
+                          }
+
+                          /* 列表标记样式 */
+                          .message-content ol li::marker {
+                            font-weight: 600 !important;
+                            color: #1f2937 !important;
+                          }
+
+                          .message-content ul li::marker {
+                            color: #1f2937 !important;
+                          }
+
+                          /* 嵌套列表 */
+                          .message-content ul ul,
+                          .message-content ol ol,
+                          .message-content ul ol,
+                          .message-content ol ul {
+                            margin: 8px 0 !important;
+                            padding-left: 24px !important;
+                          }
+
                           .message-content code {
                             background: #f3f4f6 !important;
                             color: #374151 !important;
-                            padding: 2px 6px !important;
+                            padding: 3px 6px !important;
                             border-radius: 4px !important;
-                            font-family: 'Roboto Mono', monospace !important;
+                            font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
                             font-size: 13px !important;
                           }
 
@@ -2035,17 +2108,8 @@ export default function EnhancedChatWithSidebar({
                           .message-content pre code {
                             background: transparent !important;
                             padding: 0 !important;
-                          }
-
-                          .message-content ul,
-                          .message-content ol {
-                            margin: 12px 0 !important;
-                            padding-left: 24px !important;
-                          }
-
-                          .message-content li {
-                            margin: 4px 0 !important;
-                            line-height: 1.6 !important;
+                            color: #212529 !important;
+                            font-size: 13px !important;
                           }
 
                           .message-content blockquote {
@@ -2093,84 +2157,81 @@ export default function EnhancedChatWithSidebar({
                           }
 
                           /* 标题样式 - 黑色文字 */
-                          .message-content h1,
-                          .message-content h2,
-                          .message-content h3,
-                          .message-content h4,
-                          .message-content h5,
-                          .message-content h6 {
-                            color: #000000 !important;
-                            margin: 20px 0 16px 0;
-                            font-weight: 600;
-                            line-height: 1.3;
-                          }
-
-                          .message-content h2 {
-                            font-size: 20px;
-                            border-bottom: 2px solid #000000;
-                            padding-bottom: 8px;
-                          }
-
-                          /* 段落样式 - 黑色文字 */
-                          .message-content p {
-                            margin: 12px 0;
-                            line-height: 1.6;
-                            color: #000000 !important;
-                          }
-
-                          /* 列表样式 - 黑色文字 */
-                          .message-content ul,
-                          .message-content ol {
-                            margin: 16px 0;
-                            padding-left: 24px;
-                            color: #000000 !important;
-                          }
-
-                          .message-content li {
-                            margin: 8px 0;
-                            line-height: 1.5;
-                            color: #000000 !important;
-                          }
-
-                          /* 强调文本样式 - 黑色加粗 */
-                          .message-content strong {
-                            color: #000000 !important;
-                            font-weight: 600;
-                          }
-
-                          .message-content em {
-                            color: #000000 !important;
-                            font-style: italic;
-                          }
-
-                          /* 代码样式 - 浅灰背景黑色文字 */
-                          .message-content code {
-                            background: #f8f9fa;
-                            color: #000000;
-                            padding: 2px 6px;
-                            border-radius: 4px;
-                            border: 1px solid #dee2e6;
-                            font-family: 'Consolas', 'Monaco', monospace;
-                          }
-
-                          /* 引用样式 - 浅灰背景黑色文字 */
-                          .message-content blockquote {
-                            border-left: 4px solid #000000;
-                            margin: 16px 0;
-                            padding: 12px 16px;
-                            background: #f8f9fa;
-                            color: #000000;
-                            border-radius: 0 4px 4px 0;
-                          }
-
-                          /* 链接样式 - 蓝色 */
+                          /* 链接样式优化 - 仿Dify样式 */
                           .message-content a {
-                            color: #0066cc !important;
-                            text-decoration: underline;
+                            color: #1a73e8 !important;
+                            text-decoration: none !important;
+                            font-weight: 500 !important;
+                            transition: all 0.2s ease !important;
+                            padding: 2px 4px !important;
+                            border-radius: 4px !important;
+                            border-bottom: 1px solid transparent !important;
+                            position: relative !important;
                           }
 
                           .message-content a:hover {
-                            color: #004499 !important;
+                            color: #1557b0 !important;
+                            background-color: rgba(26, 115, 232, 0.08) !important;
+                            border-bottom: 1px solid #1a73e8 !important;
+                          }
+
+                          /* 移除链接的自动编号，因为列表已经有编号了 */
+
+                          /* 表格样式 - 仿Dify */
+                          .message-content table {
+                            width: 100% !important;
+                            border-collapse: collapse !important;
+                            margin: 16px 0 !important;
+                            border: 1px solid #e5e7eb !important;
+                            border-radius: 8px !important;
+                            overflow: hidden !important;
+                            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+                          }
+
+                          .message-content th,
+                          .message-content td {
+                            padding: 12px 16px !important;
+                            text-align: left !important;
+                            border-bottom: 1px solid #e5e7eb !important;
+                            vertical-align: top !important;
+                          }
+
+                          .message-content th {
+                            background-color: #f9fafb !important;
+                            font-weight: 600 !important;
+                            color: #374151 !important;
+                            border-bottom: 2px solid #e5e7eb !important;
+                          }
+
+                          .message-content tr:last-child td {
+                            border-bottom: none !important;
+                          }
+
+                          .message-content tr:hover {
+                            background-color: #f9fafb !important;
+                          }
+
+                          /* 文字分类样式 - 仿Dify */
+                          .message-content strong {
+                            font-weight: 600 !important;
+                            color: #1f2937 !important;
+                          }
+
+                          /* 分类标题样式 */
+                          .message-content p:has(strong) {
+                            margin: 16px 0 8px 0 !important;
+                          }
+
+                          /* 引用块样式 */
+                          .message-content blockquote {
+                            border-left: 4px solid #3b82f6 !important;
+                            padding-left: 16px !important;
+                            margin: 16px 0 !important;
+                            color: #6b7280 !important;
+                            font-style: italic !important;
+                            background-color: #f8fafc !important;
+                            padding: 12px 16px !important;
+                            border-radius: 0 8px 8px 0 !important;
                           }
                         `}</style>
 

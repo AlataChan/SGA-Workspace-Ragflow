@@ -30,8 +30,12 @@ export interface DifyClientConfig {
 export class EnhancedDifyClient {
   private config: DifyClientConfig
   private currentController: AbortController | null = null
+  private currentTimeoutId: NodeJS.Timeout | null = null
   private conversationId: string | null = null
   private isWarmedUp = false
+
+  // 超时配置
+  private static readonly TIMEOUT_MS = 180000 // 3分钟超时
 
   constructor(config: DifyClientConfig) {
     this.config = {
@@ -68,12 +72,23 @@ export class EnhancedDifyClient {
     files?: any[]
   ): Promise<void> {
     try {
-      // 取消之前的请求
+      // 取消之前的请求和超时
       if (this.currentController) {
         this.currentController.abort()
       }
+      if (this.currentTimeoutId) {
+        clearTimeout(this.currentTimeoutId)
+      }
 
       this.currentController = new AbortController()
+
+      // 设置超时
+      this.currentTimeoutId = setTimeout(() => {
+        console.warn('[DifyClient] 请求超时，正在取消...')
+        if (this.currentController) {
+          this.currentController.abort()
+        }
+      }, EnhancedDifyClient.TIMEOUT_MS)
 
       console.log('[DifyClient] 发送消息:', {
         query: query.substring(0, 100) + (query.length > 100 ? '...' : ''),
@@ -133,6 +148,15 @@ export class EnhancedDifyClient {
       if (error instanceof Error && error.name !== 'AbortError') {
         console.error('[DifyClient] 发送消息失败:', error)
         onError?.(error)
+      } else if (error instanceof Error && error.name === 'AbortError') {
+        console.warn('[DifyClient] 请求被取消（可能是超时）')
+        onError?.(new Error('请求超时，请稍后重试'))
+      }
+    } finally {
+      // 清理超时
+      if (this.currentTimeoutId) {
+        clearTimeout(this.currentTimeoutId)
+        this.currentTimeoutId = null
       }
     }
   }
