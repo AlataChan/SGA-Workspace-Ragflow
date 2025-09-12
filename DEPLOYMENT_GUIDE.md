@@ -107,7 +107,58 @@ Health check failed
    docker compose logs -f app
    ```
 
-### 3. UUID初始化问题
+### 3. 管理员创建失败问题
+
+**错误信息:**
+```
+创建管理员失败
+系统初始化失败
+```
+
+**解决方案:**
+
+#### A. 使用诊断工具（推荐）
+```cmd
+# Windows
+debug-admin.bat
+
+# Linux/macOS
+node debug-admin-creation.js
+```
+
+#### B. 手动重置数据库
+```cmd
+# Windows
+reset-database.bat
+
+# Linux/macOS
+npx prisma db push --force-reset --accept-data-loss
+npx prisma generate
+```
+
+#### C. 检查常见问题
+1. **数据库连接问题**
+   ```bash
+   # 检查数据库服务状态
+   docker compose ps postgres
+   docker compose logs postgres
+   ```
+
+2. **环境变量问题**
+   ```bash
+   # 检查.env文件是否存在
+   ls -la .env
+   # 或在Windows: dir .env
+   ```
+
+3. **端口冲突问题**
+   ```bash
+   # 检查端口占用
+   netstat -tulpn | grep :5433  # Linux
+   netstat -ano | findstr :5433  # Windows
+   ```
+
+### 4. UUID初始化问题
 
 **错误信息:**
 ```
