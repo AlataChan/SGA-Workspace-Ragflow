@@ -113,8 +113,8 @@ export const UNFINISHED_INPUT = (id: string) => "unfinished-input-" + id;
 
 export const STORAGE_KEY = "chatgpt-next-web";
 
-export const REQUEST_TIMEOUT_MS = 60000;
-export const REQUEST_TIMEOUT_MS_FOR_THINKING = REQUEST_TIMEOUT_MS * 5;
+export const REQUEST_TIMEOUT_MS = 120000; // 增加到2分钟
+export const REQUEST_TIMEOUT_MS_FOR_THINKING = REQUEST_TIMEOUT_MS * 3; // 6分钟，适应Dify工具调用
 
 export const EXPORT_MESSAGE_CLASS_NAME = "export-markdown";
 

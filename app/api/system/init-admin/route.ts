@@ -5,10 +5,10 @@ import prisma from '@/lib/prisma'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { username, email, password, displayName, position } = body
+    const { username, userId, phone, email, password, displayName, position } = body
 
     // 验证必填字段
-    if (!username || !email || !password || !displayName || !position) {
+    if (!username || !userId || !phone || !email || !password || !displayName || !position) {
       return NextResponse.json(
         { success: false, error: '所有字段都是必填的' },
         { status: 400 }
@@ -40,8 +40,14 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      // 检查是否已有用户
-      const existingUserCount = await prisma.user.count()
+      // 检查是否已有用户（排除系统超级管理员）
+      const existingUserCount = await prisma.user.count({
+        where: {
+          NOT: {
+            id: '00000000-0000-0000-0000-000000000001' // 排除系统超级管理员
+          }
+        }
+      })
       if (existingUserCount > 0) {
         return NextResponse.json(
           { success: false, error: '系统已经初始化，不能重复创建管理员' },
@@ -49,13 +55,12 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // 创建默认公司 - 修复ID格式问题
+      // 创建默认公司
       let company = await prisma.company.findFirst({
         where: { name: 'Solo Genius Agent' }
       })
 
       if (!company) {
-        // 如果不存在，创建新公司（使用默认的cuid格式）
         company = await prisma.company.create({
           data: {
             name: 'Solo Genius Agent',
@@ -91,16 +96,16 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 创建密码哈希
-      const passwordHash = await bcrypt.hash(password, 12)
+      // 创建密码哈希 - 使用与登录验证一致的轮数
+      const passwordHash = await bcrypt.hash(password, 10)
 
       // 创建管理员用户
       const adminUser = await prisma.user.create({
         data: {
           companyId: company.id,
           username,
-          userId: username,
-          phone: '13800000000',
+          userId,
+          phone,
           passwordHash,
           chineseName: displayName,
           englishName: displayName,
@@ -131,7 +136,7 @@ export async function POST(request: NextRequest) {
     } catch (dbError) {
       console.error('数据库操作失败:', dbError)
       return NextResponse.json(
-        { success: false, error: '创建管理员失败' },
+        { success: false, error: '创建管理员失败，请检查数据库连接' },
         { status: 500 }
       )
     }

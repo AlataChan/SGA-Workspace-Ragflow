@@ -339,9 +339,38 @@ CREATE TRIGGER update_system_configs_updated_at BEFORE UPDATE ON system_configs 
 -- ===========================================
 
 -- 插入默认企业
-INSERT INTO companies (name, slug, description) VALUES 
-('示例企业', 'demo-company', '演示企业，用于系统测试')
+INSERT INTO companies (id, name, slug, description) VALUES
+('00000000-0000-0000-0000-000000000001', '示例企业', 'demo-company', '演示企业，用于系统测试')
 ON CONFLICT (name) DO NOTHING;
+
+-- 插入固定的超级管理员账号（不可删除）
+-- 密码: sga0303 (使用bcrypt加密)
+INSERT INTO users (
+    id,
+    company_id,
+    username,
+    email,
+    display_name,
+    password_hash,
+    salt,
+    role,
+    is_active,
+    email_verified
+) VALUES (
+    '00000000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000001',
+    'admin',
+    'admin@system.local',
+    '系统管理员',
+    '$2a$12$ZYaqH0KbjfBYnnfyj66h7ub/PUxheLAHjgVq5nM3R6m5P7NP2SZzK', -- sga0303
+    'system_salt',
+    'super_admin',
+    true,
+    true
+) ON CONFLICT (username) DO UPDATE SET
+    password_hash = EXCLUDED.password_hash,
+    role = 'super_admin',
+    is_active = true;
 
 -- 插入系统配置
 INSERT INTO system_configs (key, value, description, is_public) VALUES

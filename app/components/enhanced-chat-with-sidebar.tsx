@@ -28,8 +28,58 @@ import {
 import { nanoid } from 'nanoid'
 import { marked } from 'marked'
 import { toast } from 'sonner'
+import SimpleContentRenderer from './simple-content-renderer'
 import FileCard from './file-card'
 import { EnhancedDifyClient, DifyStreamMessage } from '@/lib/enhanced-dify-client'
+
+// 打字效果组件
+interface TypewriterEffectProps {
+  content: string
+  speed?: number
+}
+
+const TypewriterEffect: React.FC<TypewriterEffectProps> = ({ content, speed = 30 }) => {
+  const [displayedContent, setDisplayedContent] = useState('')
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const contentRef = useRef('')
+
+  useEffect(() => {
+    // 如果内容变化了（流式更新）
+    if (content !== contentRef.current) {
+      console.log('[TypewriterEffect] 内容更新:', {
+        oldContent: contentRef.current.substring(0, 50) + (contentRef.current.length > 50 ? '...' : ''),
+        newContent: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
+        contentType: typeof content,
+        contentLength: content.length
+      })
+
+      contentRef.current = content
+      // 重置显示状态，从新内容的当前显示长度开始
+      if (content.startsWith(displayedContent)) {
+        // 新内容包含当前显示的内容，继续从当前位置打字
+        setCurrentIndex(displayedContent.length)
+      } else {
+        // 完全新的内容，重新开始
+        setDisplayedContent('')
+        setCurrentIndex(0)
+      }
+    }
+  }, [content, displayedContent.length, currentIndex])
+
+  useEffect(() => {
+    if (currentIndex < content.length) {
+      const timer = setTimeout(() => {
+        setDisplayedContent(content.slice(0, currentIndex + 1))
+        setCurrentIndex(prev => prev + 1)
+      }, speed)
+      return () => clearTimeout(timer)
+    }
+  }, [currentIndex, content, speed])
+
+  return (
+    <SimpleContentRenderer content={displayedContent} />
+  )
+}
 
 // 加载动画组件
 const TypingIndicator = () => (
@@ -111,45 +161,6 @@ const extractFileLinks = (content: string) => {
       downloadUrl: cleanUrl // DIFY的URL可以直接使用
     }
   })
-}
-
-// 打字效果组件
-interface TypewriterEffectProps {
-  content: string
-  speed?: number
-}
-
-const TypewriterEffect: React.FC<TypewriterEffectProps> = ({ content, speed = 30 }) => {
-  const [displayedContent, setDisplayedContent] = useState('')
-  const [currentIndex, setCurrentIndex] = useState(0)
-  const contentRef = useRef('')
-
-  useEffect(() => {
-    if (content !== contentRef.current) {
-      contentRef.current = content
-      if (content.length > displayedContent.length) {
-        setDisplayedContent(content.slice(0, Math.max(displayedContent.length, currentIndex)))
-      }
-      if (content.length < displayedContent.length) {
-        setDisplayedContent('')
-        setCurrentIndex(0)
-      }
-    }
-  }, [content, displayedContent.length, currentIndex])
-
-  useEffect(() => {
-    if (currentIndex < content.length) {
-      const timer = setTimeout(() => {
-        setDisplayedContent(content.slice(0, currentIndex + 1))
-        setCurrentIndex(prev => prev + 1)
-      }, speed)
-      return () => clearTimeout(timer)
-    }
-  }, [currentIndex, content, speed])
-
-  return (
-    <EnhancedMessageContent content={displayedContent} />
-  )
 }
 
 // 增强的消息内容组件，支持代码块复制
@@ -682,13 +693,28 @@ export default function EnhancedChatWithSidebar({
         apiUrl += `&last_id=${historyCacheRef.current.lastId}`
       }
 
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${agentConfig.difyKey}`,
-          'Content-Type': 'application/json'
-        },
-      })
+      console.log('[EnhancedChat] 请求URL:', apiUrl)
+
+      // 创建超时控制
+      const timeoutController = new AbortController()
+      const timeoutId = setTimeout(() => {
+        timeoutController.abort()
+      }, 10000) // 10秒超时
+
+      try {
+        // 调用 Dify API 获取历史对话
+        const response = await fetch(apiUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${agentConfig.difyKey}`,
+            'Content-Type': 'application/json'
+          },
+          signal: timeoutController.signal
+        })
+
+        clearTimeout(timeoutId)
+
+        console.log('[EnhancedChat] API响应状态:', response.status, response.statusText)
 
       if (response.ok) {
         const data = await response.json()
@@ -717,14 +743,47 @@ export default function EnhancedChatWithSidebar({
 
       } else {
         const errorText = await response.text()
+        console.error('[EnhancedChat] 获取历史对话失败:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorText
+        })
+
+        // API 不可用就设置空数组
+        if (!loadMore) {
+          setHistoryConversations([])
+          setHasMoreHistory(false)
+        }
         throw new Error(`获取历史对话失败: ${response.status} ${response.statusText}`)
       }
-    } catch (error) {
-      console.error('获取历史对话异常:', error)
-      setHistoryError(error instanceof Error ? error.message : '获取历史对话失败')
-    } finally {
-      setIsLoadingHistory(false)
+    } catch (fetchError) {
+      clearTimeout(timeoutId)
+      throw fetchError
     }
+  } catch (error) {
+    console.error('[EnhancedChat] 获取历史对话异常:', error)
+
+    // 网络错误或超时
+    if (!loadMore) {
+      setHistoryConversations([])
+      setHasMoreHistory(false)
+    }
+
+    let errorMessage = '获取历史对话失败'
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        errorMessage = '请求超时 - 可能是网络问题或API不可用'
+      } else if (error.name === 'TypeError') {
+        errorMessage = '网络错误 - 请检查API地址是否正确'
+      } else {
+        errorMessage = error.message
+      }
+    }
+    setHistoryError(errorMessage)
+  } finally {
+    setIsLoadingHistory(false)
+    console.log('[EnhancedChat] 历史对话获取完成')
+  }
   }, [agentConfig?.difyUrl, agentConfig?.difyKey, agentConfig?.userId])
 
   // 创建新会话
@@ -753,12 +812,13 @@ export default function EnhancedChatWithSidebar({
     setAttachments([])
   }
 
-  // 加载历史对话的消息
+  // 加载历史对话的消息（支持缓存）
   const loadHistoryConversation = useCallback(async (historyConv: DifyHistoryConversation) => {
     if (!agentConfig?.difyUrl || !agentConfig?.difyKey) return
 
     try {
       setIsLoadingHistory(true)
+      console.log('[EnhancedChat] 加载历史对话:', historyConv.id)
 
       // 检查是否已经加载过这个历史对话
       const existingSession = sessions.find(session =>
@@ -766,6 +826,7 @@ export default function EnhancedChatWithSidebar({
       )
 
       if (existingSession) {
+        console.log('[EnhancedChat] 历史对话已存在，直接切换:', existingSession.id)
         setCurrentSessionId(existingSession.id)
         return
       }
@@ -780,15 +841,27 @@ export default function EnhancedChatWithSidebar({
       if (cacheValid && messageCache.isComplete) {
         convertedMessages = messageCache.messages
       } else {
-        // 获取历史消息 - 使用正确的DIFY API路径
-        const response = await fetch(`${agentConfig.difyUrl}/messages?conversation_id=${historyConv.id}&user=${agentConfig.userId}&limit=100`, {
-          headers: {
-            'Authorization': `Bearer ${agentConfig.difyKey}`,
-            'Content-Type': 'application/json'
-          },
-        })
+        console.log('[EnhancedChat] 从API获取历史消息:', historyConv.id)
 
-        if (response.ok) {
+        // 创建超时控制
+        const timeoutController = new AbortController()
+        const timeoutId = setTimeout(() => {
+          timeoutController.abort()
+        }, 15000) // 15秒超时（历史消息可能较多）
+
+        try {
+          // 获取历史消息 - 使用正确的DIFY API路径
+          const response = await fetch(`${agentConfig.difyUrl}/messages?conversation_id=${historyConv.id}&user=${agentConfig.userId}&limit=100`, {
+            headers: {
+              'Authorization': `Bearer ${agentConfig.difyKey}`,
+              'Content-Type': 'application/json'
+            },
+            signal: timeoutController.signal
+          })
+
+          clearTimeout(timeoutId)
+
+          if (response.ok) {
           const data = await response.json()
           const messages = data.data || []
 
@@ -835,6 +908,12 @@ export default function EnhancedChatWithSidebar({
             lastFetch: now,
             isComplete: messages.length < 100
           }
+        } else {
+          throw new Error(`获取历史消息失败: ${response.status}`)
+        }
+        } catch (fetchError) {
+          clearTimeout(timeoutId)
+          throw fetchError
         }
       }
 
@@ -878,8 +957,17 @@ export default function EnhancedChatWithSidebar({
       setCurrentSessionId(newSession.id)
 
     } catch (error) {
-      console.error('加载历史对话失败:', error)
-      setHistoryError(error instanceof Error ? error.message : '加载历史对话失败')
+      console.error('[EnhancedChat] 加载历史对话异常:', error)
+
+      let errorMessage = '加载历史对话失败'
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = '加载超时 - 历史消息较多，请稍后重试'
+        } else {
+          errorMessage = error.message
+        }
+      }
+      setHistoryError(errorMessage)
     } finally {
       setIsLoadingHistory(false)
     }
@@ -1164,8 +1252,18 @@ export default function EnhancedChatWithSidebar({
 
           switch (message.type) {
             case 'content':
-              // 累积流式内容
-              fullContent += typeof message.content === 'string' ? message.content : String(message.content)
+              // 累积流式内容 - 确保内容是字符串
+              const contentToAdd = message.content
+              if (typeof contentToAdd === 'string' && contentToAdd.length > 0) {
+                fullContent += contentToAdd
+                console.log('[EnhancedChat] 累积内容:', {
+                  newContent: contentToAdd,
+                  fullContentLength: fullContent.length,
+                  fullContentPreview: fullContent.substring(0, 100) + (fullContent.length > 100 ? '...' : '')
+                })
+              } else {
+                console.warn('[EnhancedChat] 收到非字符串内容:', contentToAdd, typeof contentToAdd)
+              }
 
               // 更新会话ID（如果消息中包含）
               if (message.conversationId) {
@@ -1186,13 +1284,21 @@ export default function EnhancedChatWithSidebar({
                           ? {
                               ...msg,
                               content: fullContent,
-                              attachments: detectedAttachments.length > 0 ? detectedAttachments : msg.attachments
+                              attachments: detectedAttachments.length > 0 ? detectedAttachments : msg.attachments,
+                              isStreaming: true // 确保在流式过程中保持流式状态
                             }
                           : msg
                       )
                     }
                   : session
               ))
+
+              console.log('[EnhancedChat] 更新消息内容:', {
+                messageId: assistantMessage.id,
+                contentLength: fullContent.length,
+                contentPreview: fullContent.substring(0, 200) + (fullContent.length > 200 ? '...' : ''),
+                attachmentsCount: detectedAttachments.length
+              })
               break
 
             case 'thinking':
@@ -1319,7 +1425,31 @@ export default function EnhancedChatWithSidebar({
 
             case 'error':
               console.error('[EnhancedChat] 收到错误消息:', message.content)
-              throw new Error(message.content)
+
+              // 优雅处理流式错误，不直接抛出，而是更新消息内容
+              const errorContent = `❌ 处理过程中出现错误：${message.content}\n\n💡 请重新发送消息或联系管理员。`
+
+              setSessions(prev => prev.map(session =>
+                session.id === currentSessionId
+                  ? {
+                      ...session,
+                      messages: session.messages.map(msg =>
+                        msg.id === assistantMessage.id
+                          ? {
+                              ...msg,
+                              content: fullContent + '\n\n' + errorContent,
+                              isStreaming: false,
+                              hasError: true
+                            }
+                          : msg
+                      )
+                    }
+                  : session
+              ))
+
+              // 设置流式状态为完成
+              setIsStreaming(false)
+              break
 
             default:
               console.log('[EnhancedChat] 未处理的消息类型:', message.type, message)
@@ -1340,16 +1470,18 @@ export default function EnhancedChatWithSidebar({
       let errorMessage = '抱歉，发送消息时出现错误';
 
       if (error instanceof Error) {
-        if (error.message.includes('timeout') || error.message.includes('超时')) {
-          errorMessage = '请求超时，Dify服务响应时间较长。如果您在使用工具功能，这是正常现象，请稍后重试';
-        } else if (error.message.includes('network') || error.message.includes('fetch')) {
-          errorMessage = '网络连接错误，请检查网络连接后重试';
-        } else if (error.message.includes('401')) {
-          errorMessage = 'API密钥无效，请联系管理员检查配置';
-        } else if (error.message.includes('429')) {
-          errorMessage = '请求过于频繁，请稍后重试';
+        if (error.message.includes('timeout') || error.message.includes('超时') || error.message.includes('aborted')) {
+          errorMessage = '⏰ 请求超时（5分钟），AI正在处理复杂任务。\n\n💡 提示：\n• 如果AI正在使用工具或进行复杂分析，响应时间可能较长\n• 您可以重新发送消息继续对话\n• 或者尝试简化问题后重新提问';
+        } else if (error.message.includes('network') || error.message.includes('fetch') || error.message.includes('Failed to fetch')) {
+          errorMessage = '🌐 网络连接错误，请检查网络连接后重试。\n\n💡 提示：可能是网络不稳定或服务暂时不可用。';
+        } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+          errorMessage = '🔑 API密钥无效，请联系管理员检查配置。';
+        } else if (error.message.includes('429') || error.message.includes('Too Many Requests')) {
+          errorMessage = '⚡ 请求过于频繁，请稍后重试。';
+        } else if (error.message.includes('500') || error.message.includes('Internal Server Error')) {
+          errorMessage = '🔧 服务器内部错误，请稍后重试或联系管理员。';
         } else {
-          errorMessage = `发送失败：${error.message}`;
+          errorMessage = `❌ 发送失败：${error.message}\n\n💡 如果问题持续，请联系管理员。`;
         }
       }
 
@@ -2041,12 +2173,12 @@ export default function EnhancedChatWithSidebar({
                     }`} style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                       {message.isStreaming ? (
                         message.content ? (
-                          <TypewriterEffect content={message.content} speed={20} />
+                          <TypewriterEffect content={String(message.content)} speed={20} />
                         ) : (
                           <TypingIndicator />
                         )
                       ) : (
-                        <EnhancedMessageContent content={message.content} />
+                        <EnhancedMessageContent content={String(message.content || '')} />
                       )}
 
                       {message.attachments && message.attachments.length > 0 && (
@@ -2090,8 +2222,35 @@ export default function EnhancedChatWithSidebar({
                             size="sm"
                             variant="outline"
                             className="text-red-600 border-red-300 hover:bg-red-50"
+                            onClick={() => {
+                              // 找到用户的原始消息并重新发送
+                              const userMessage = currentSession.messages.find(msg =>
+                                msg.timestamp < message.timestamp && msg.role === 'user'
+                              )
+                              if (userMessage) {
+                                // 重置错误消息状态
+                                setSessions(prev => prev.map(session =>
+                                  session.id === currentSessionId
+                                    ? {
+                                        ...session,
+                                        messages: session.messages.map(msg =>
+                                          msg.id === message.id
+                                            ? { ...msg, hasError: false, content: '正在重新处理...' }
+                                            : msg
+                                        )
+                                      }
+                                    : session
+                                ))
+                                // 重新发送消息
+                                setInput(userMessage.content)
+                                setAttachments(userMessage.attachments || [])
+                                // 延迟一下让状态更新，然后发送
+                                setTimeout(() => sendMessage(), 100)
+                              }
+                            }}
+                            disabled={isLoading || isStreaming}
                           >
-                            重试发送
+                            {isLoading || isStreaming ? '处理中...' : '重试发送'}
                           </Button>
                         </div>
                       )}

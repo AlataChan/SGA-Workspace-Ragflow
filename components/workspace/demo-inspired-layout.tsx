@@ -102,6 +102,7 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
   const [isAdmin, setIsAdmin] = useState(user.role === 'ADMIN')
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   // 聊天状态管理
   const [showChat, setShowChat] = useState(false)
@@ -376,10 +377,36 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
              style={{ animation: 'pulseGlow 15s infinite alternate ease-in-out', animationDelay: '-5s' }} />
       </div>
 
-      {/* 主布局容器 */}
-      <div className="relative z-10 flex h-screen">
-        {/* 左侧导航栏 - 重新设计 */}
-        <nav className="w-[280px] bg-[#1f1f1f] border-r border-[#2d2d2d] flex-shrink-0 flex flex-col">
+      {/* 移动端顶部导航栏 */}
+      <div className="md:hidden bg-[#1f1f1f] border-b border-[#2d2d2d] p-4 relative z-20">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            {company?.logoUrl && (
+              <img
+                src={company.logoUrl}
+                alt={company.name}
+                className="w-8 h-8 rounded-lg object-cover"
+              />
+            )}
+            <h2 className="text-lg font-semibold text-white">
+              {company?.name || 'SGA Team'}
+            </h2>
+          </div>
+          <button
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="p-2 rounded-lg bg-[#2d2d2d] text-[#e0e0e0] hover:bg-[#3c4043]"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* 主布局容器 - 响应式设计 */}
+      <div className="relative z-10 flex h-screen md:h-screen">
+        {/* 左侧导航栏 - 响应式宽度 */}
+        <nav className="w-[280px] lg:w-[320px] xl:w-[360px] bg-[#1f1f1f] border-r border-[#2d2d2d] flex-shrink-0 flex flex-col hidden md:flex">
           {/* 公司信息区域 */}
           <div className="p-6 border-b border-[#2d2d2d]">
             <div className="flex items-center space-x-3">
@@ -467,21 +494,21 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
           </div>
         </nav>
 
-        {/* 主内容区域 - 重新布局 */}
-        <main className="flex-1 flex">
-          {/* 中央展示区域 */}
-          <div className="flex-1 flex flex-col">
+        {/* 主内容区域 - 响应式布局 */}
+        <main className="flex-1 flex flex-col md:flex-row">
+          {/* 中央展示区域 - 响应式 */}
+          <div className="flex-1 flex flex-col min-h-0">
 
 
-            {/* Agent展示区域 - 精致小巧的布局 */}
-            <div className="flex-1 flex justify-center items-center relative overflow-hidden pt-16 pb-16" style={{ perspective: '1000px' }}>
+            {/* Agent展示区域 - 响应式精致布局 */}
+            <div className="flex-1 flex justify-center items-center relative overflow-hidden py-8 md:py-16" style={{ perspective: '1000px' }}>
               {/* 背景效果 */}
               <div className="absolute bottom-20 w-[450px] h-[110px] bg-gradient-to-r from-transparent via-[#6a5acd]/15 to-transparent rounded-full blur-2xl animate-pulse" />
               <div className="absolute bottom-16 w-[320px] h-[80px] bg-gradient-to-r from-[#00e0ff]/8 via-[#6a5acd]/25 to-[#ff6b9d]/8 rounded-full blur-xl animate-pulse" style={{ animationDelay: '1s' }} />
 
-              {/* 3D旋转容器 - 更小巧精致的尺寸 */}
+              {/* 3D旋转容器 - 响应式尺寸 */}
               <div
-                className="relative w-[260px] h-[400px] transition-transform duration-[800ms] ease-[cubic-bezier(0.77,0,0.175,1)]"
+                className="relative w-[200px] h-[300px] sm:w-[240px] sm:h-[360px] md:w-[260px] md:h-[400px] lg:w-[280px] lg:h-[420px] transition-transform duration-[800ms] ease-[cubic-bezier(0.77,0,0.175,1)]"
                 style={{
                   transformStyle: 'preserve-3d',
                   transform: `rotateY(${currentRotation}deg)`
@@ -525,26 +552,26 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
                 })}
               </div>
 
-              {/* 旋转控制按钮 */}
-              <div className="absolute top-1/2 left-5 right-5 flex justify-between transform -translate-y-1/2 pointer-events-none">
+              {/* 旋转控制按钮 - 响应式 */}
+              <div className="absolute top-1/2 left-2 right-2 sm:left-5 sm:right-5 flex justify-between transform -translate-y-1/2 pointer-events-none">
                 <Button
                   onClick={prevAgent}
-                  className="pointer-events-auto w-[60px] h-[60px] rounded-full border-2 border-[#6a5acd] bg-[#1e1e1e] text-[#6a5acd] hover:bg-[#6a5acd] hover:text-white transition-all duration-300"
+                  className="pointer-events-auto w-[50px] h-[50px] sm:w-[60px] sm:h-[60px] rounded-full border-2 border-[#6a5acd] bg-[#1e1e1e] text-[#6a5acd] hover:bg-[#6a5acd] hover:text-white transition-all duration-300"
                 >
-                  <ChevronLeft className="w-6 h-6" />
+                  <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
                 </Button>
                 <Button
                   onClick={nextAgent}
-                  className="pointer-events-auto w-[60px] h-[60px] rounded-full border-2 border-[#6a5acd] bg-[#1e1e1e] text-[#6a5acd] hover:bg-[#6a5acd] hover:text-white transition-all duration-300"
+                  className="pointer-events-auto w-[50px] h-[50px] sm:w-[60px] sm:h-[60px] rounded-full border-2 border-[#6a5acd] bg-[#1e1e1e] text-[#6a5acd] hover:bg-[#6a5acd] hover:text-white transition-all duration-300"
                 >
-                  <ChevronRight className="w-6 h-6" />
+                  <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
                 </Button>
               </div>
 
-              {/* 空白处的简化介绍 */}
+              {/* 空白处的简化介绍 - 响应式 */}
               {realAgents[selectedIndex] && (
-                <div className="absolute bottom-8 left-8 max-w-[320px] p-4 bg-[rgba(30,30,30,0.95)] backdrop-blur-sm rounded-lg border border-[#3c4043] shadow-lg">
-                  <h3 className="text-lg font-semibold text-white mb-2">{realAgents[selectedIndex].chineseName}</h3>
+                <div className="absolute bottom-4 left-4 right-4 sm:bottom-8 sm:left-8 sm:right-auto sm:max-w-[320px] p-3 sm:p-4 bg-[rgba(30,30,30,0.95)] backdrop-blur-sm rounded-lg border border-[#3c4043] shadow-lg">
+                  <h3 className="text-base sm:text-lg font-semibold text-white mb-2">{realAgents[selectedIndex].chineseName}</h3>
                   <p className="text-sm text-[#9aa0a6] mb-3">{realAgents[selectedIndex].position}</p>
                   <p className="text-xs text-[#b0b0b0] leading-relaxed line-clamp-3">
                     {realAgents[selectedIndex].description}
@@ -554,8 +581,8 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
             </div>
           </div>
 
-          {/* 右侧详细信息面板 */}
-          <div className="w-[320px] bg-[#1f1f1f] border-l border-[#2d2d2d] flex flex-col">
+          {/* 右侧详细信息面板 - 响应式 */}
+          <div className="w-full md:w-[320px] lg:w-[360px] xl:w-[400px] bg-[#1f1f1f] border-l border-[#2d2d2d] flex flex-col">
             {/* 用户设置区域 - 移到顶部，确保始终显示 */}
             {user && (
               <div className="p-4 border-b border-[#2d2d2d]">

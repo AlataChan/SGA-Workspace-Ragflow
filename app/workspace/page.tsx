@@ -121,7 +121,28 @@ export default function WorkspacePage() {
           console.log('获取到的Agent数据:', data.data)
 
           // 设置Agent和部门数据
-          setAgents(data.data.agents || [])
+          const agentList = data.data.agents || []
+          setAgents(agentList)
+
+          // 检查是否有可用的Agent，如果没有且用户是管理员，跳转到管理后台
+          if (agentList.length === 0) {
+            // 获取当前用户信息
+            const token = localStorage.getItem('auth-token')
+            const userData = localStorage.getItem('user')
+            let currentUser = null
+
+            if (userData) {
+              currentUser = JSON.parse(userData)
+            }
+
+            if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'ADMIN')) {
+              console.log('没有可用的Agent，管理员用户跳转到管理后台')
+              setTimeout(() => {
+                router.push('/admin/agents?message=请先创建AI智能体')
+              }, 1000)
+              return
+            }
+          }
 
           // 设置演示会话数据（暂时保留）
           const demoSessions = [

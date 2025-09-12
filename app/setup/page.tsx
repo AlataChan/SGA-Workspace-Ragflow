@@ -14,11 +14,13 @@ export default function SystemSetupPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [formData, setFormData] = useState({
-    username: 'LinLi',
-    email: 'linli@company.com',
-    password: 'kk.kk.11',
-    confirmPassword: 'kk.kk.11',
-    displayName: '林理',
+    username: 'admin',
+    userId: 'admin',
+    phone: '13800000000',
+    email: 'admin@example.com',
+    password: 'Admin123456',
+    confirmPassword: 'Admin123456',
+    displayName: '系统管理员',
     position: 'CEO'
   })
 
@@ -48,6 +50,8 @@ export default function SystemSetupPage() {
         },
         body: JSON.stringify({
           username: formData.username,
+          userId: formData.userId,
+          phone: formData.phone,
           email: formData.email,
           password: formData.password,
           displayName: formData.displayName,
@@ -124,7 +128,43 @@ export default function SystemSetupPage() {
                   type="text"
                   value={formData.username}
                   onChange={handleInputChange}
-                  placeholder="输入用户名"
+                  placeholder="输入用户名（用于登录）"
+                  required
+                  disabled={isLoading}
+                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="userId" className="flex items-center gap-2 text-blue-200">
+                  <User className="w-4 h-4" />
+                  用户ID
+                </Label>
+                <Input
+                  id="userId"
+                  name="userId"
+                  type="text"
+                  value={formData.userId}
+                  onChange={handleInputChange}
+                  placeholder="输入用户ID（系统标识）"
+                  required
+                  disabled={isLoading}
+                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone" className="flex items-center gap-2 text-blue-200">
+                  <User className="w-4 h-4" />
+                  手机号
+                </Label>
+                <Input
+                  id="phone"
+                  name="phone"
+                  type="tel"
+                  value={formData.phone}
+                  onChange={handleInputChange}
+                  placeholder="输入手机号"
                   required
                   disabled={isLoading}
                   className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"

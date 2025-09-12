@@ -82,6 +82,19 @@ export const PUT = withAdminAuth(async (request, context) => {
       )
     }
 
+    // 保护超级管理员账号
+    if (targetUser.id === '00000000-0000-0000-0000-000000000001') {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'PROTECTED_USER',
+            message: '系统超级管理员账号不能被修改'
+          }
+        },
+        { status: 403, headers: corsHeaders }
+      )
+    }
+
     // 检查用户名和用户ID是否已被其他用户使用
     if (userData.username || userData.userId) {
       const existingUser = await prisma.user.findFirst({
@@ -218,6 +231,19 @@ export const DELETE = withAdminAuth(async (request, context) => {
           }
         },
         { status: 404, headers: corsHeaders }
+      )
+    }
+
+    // 保护超级管理员账号
+    if (targetUser.id === '00000000-0000-0000-0000-000000000001') {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'PROTECTED_USER',
+            message: '系统超级管理员账号不能被删除'
+          }
+        },
+        { status: 403, headers: corsHeaders }
       )
     }
 
