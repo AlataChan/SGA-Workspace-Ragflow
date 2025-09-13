@@ -55,12 +55,13 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // 创建默认公司
+      // 创建默认公司 - 确保使用正确的CUID格式
       let company = await prisma.company.findFirst({
         where: { name: 'Solo Genius Agent' }
       })
 
       if (!company) {
+        // 直接创建新公司，Prisma会自动生成正确的CUID
         company = await prisma.company.create({
           data: {
             name: 'Solo Genius Agent',
@@ -69,29 +70,41 @@ export async function POST(request: NextRequest) {
         })
         console.log('创建新公司:', company.id)
       } else {
-        // 检查现有公司ID格式是否正确
+        // 检查现有公司ID格式是否为正确的CUID格式
         const isCuidFormat = /^c[a-z0-9]{24}$/.test(company.id)
         if (!isCuidFormat) {
-          console.log('发现格式不正确的公司ID:', company.id)
+          console.log('发现格式不正确的公司ID:', company.id, '需要重新创建')
 
-          // 检查是否有关联数据
-          const userCount = await prisma.user.count({ where: { companyId: company.id } })
-          const deptCount = await prisma.department.count({ where: { companyId: company.id } })
-          const agentCount = await prisma.agent.count({ where: { companyId: company.id } })
+          try {
+            // 检查是否有关联数据
+            const userCount = await prisma.user.count({ where: { companyId: company.id } })
+            const deptCount = await prisma.department.count({ where: { companyId: company.id } })
+            const agentCount = await prisma.agent.count({ where: { companyId: company.id } })
 
-          if (userCount === 0 && deptCount === 0 && agentCount === 0) {
-            // 如果没有关联数据，删除旧记录并创建新的
-            console.log('删除格式不正确的公司记录并重新创建')
-            await prisma.company.delete({ where: { id: company.id } })
-            company = await prisma.company.create({
-              data: {
-                name: 'Solo Genius Agent',
-                logoUrl: '/logo.png'
-              }
-            })
-            console.log('重新创建公司:', company.id)
-          } else {
-            console.log('公司有关联数据，保持现有记录')
+            if (userCount === 0 && deptCount === 0 && agentCount === 0) {
+              // 如果没有关联数据，删除旧记录并创建新的
+              console.log('删除格式不正确的公司记录并重新创建')
+              await prisma.company.delete({ where: { id: company.id } })
+              company = await prisma.company.create({
+                data: {
+                  name: 'Solo Genius Agent',
+                  logoUrl: '/logo.png'
+                }
+              })
+              console.log('重新创建公司，新ID:', company.id)
+            } else {
+              console.log('公司有关联数据，无法删除。请手动清理数据库。')
+              return NextResponse.json(
+                { success: false, error: '数据库中存在格式错误的记录，请联系管理员清理数据库' },
+                { status: 500 }
+              )
+            }
+          } catch (error) {
+            console.error('处理格式错误的公司记录时出错:', error)
+            return NextResponse.json(
+              { success: false, error: '数据库记录格式错误，请清理数据库后重试' },
+              { status: 500 }
+            )
           }
         }
       }

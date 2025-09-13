@@ -174,6 +174,23 @@ docker compose logs app
 docker compose build --no-cache app
 ```
 
+**4. 初始化用户创建失败（UUID错误）**
+```bash
+# 重置数据库并重新同步schema
+docker compose down -v
+docker compose up -d postgres redis
+sleep 30
+docker compose up -d app
+docker compose exec app npx prisma db push --force-reset
+```
+
+**5. 数据库格式错误**
+```bash
+# 如果遇到UUID格式错误，完全重置数据库
+curl -X POST http://localhost:8100/api/system/reset-db
+# 然后重新初始化
+```
+
 ### 完全重置
 ```bash
 # 停止所有服务并删除数据

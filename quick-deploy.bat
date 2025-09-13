@@ -88,7 +88,14 @@ if errorlevel 1 (
 )
 
 echo ⏳ 等待应用就绪...
-timeout /t 30 /nobreak >nul
+timeout /t 20 /nobreak >nul
+
+echo 🔄 同步数据库schema...
+docker compose exec app npx prisma generate
+docker compose exec app npx prisma db push --force-reset
+
+echo ⏳ 等待数据库同步完成...
+timeout /t 10 /nobreak >nul
 
 echo 🌐 启动网关服务...
 docker compose up -d nginx

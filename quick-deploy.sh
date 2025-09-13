@@ -97,7 +97,14 @@ echo "🚀 启动应用服务..."
 docker compose up -d app
 
 echo "⏳ 等待应用就绪..."
-sleep 30
+sleep 20
+
+echo "🔄 同步数据库schema..."
+docker compose exec app npx prisma generate
+docker compose exec app npx prisma db push --force-reset
+
+echo "⏳ 等待数据库同步完成..."
+sleep 10
 
 echo "🌐 启动网关服务..."
 docker compose up -d nginx
