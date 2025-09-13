@@ -81,8 +81,8 @@ cd sga-workspace
 
 2. **Configure environment**
 ```bash
-cp .env.production .env
-# Edit .env with your configuration if needed
+cp .env.example .env
+# Edit .env and modify all "change-this" values
 ```
 
 3. **Start with Docker**
@@ -92,11 +92,13 @@ docker compose up -d
 
 4. **Access the application**
 - Main Application: http://localhost:8100
-- Default Login: admin@example.com / Admin123456
+- First-time Setup: Follow the initialization wizard to create admin account
 
 ### 🔧 Troubleshooting
 
-If you encounter network issues, see [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for detailed solutions.
+For detailed deployment instructions and troubleshooting, see:
+- [SETUP.md](./SETUP.md) - Quick deployment guide
+- [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) - Comprehensive deployment documentation
 
 ### Development Setup
 

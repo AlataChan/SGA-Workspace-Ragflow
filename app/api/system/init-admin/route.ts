@@ -96,6 +96,27 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // 创建默认的"管理层"部门
+      let managementDept = await prisma.department.findFirst({
+        where: {
+          companyId: company.id,
+          name: '管理层'
+        }
+      })
+
+      if (!managementDept) {
+        managementDept = await prisma.department.create({
+          data: {
+            companyId: company.id,
+            name: '管理层',
+            description: '公司管理层部门',
+            icon: 'Crown',
+            sortOrder: 1
+          }
+        })
+        console.log('创建默认管理层部门:', managementDept.id)
+      }
+
       // 创建密码哈希 - 使用与登录验证一致的轮数
       const passwordHash = await bcrypt.hash(password, 10)
 
@@ -110,6 +131,8 @@ export async function POST(request: NextRequest) {
           chineseName: displayName,
           englishName: displayName,
           email,
+          departmentId: managementDept.id, // 分配到管理层部门
+          position,
           role: 'ADMIN',
           isActive: true,
         }

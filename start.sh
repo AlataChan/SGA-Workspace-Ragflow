@@ -62,11 +62,11 @@ setup_env() {
     echo -e "${BLUE}⚙️  配置环境变量...${NC}"
     
     if [ ! -f .env ]; then
-        if [ -f .env.lightweight ]; then
-            cp .env.lightweight .env
+        if [ -f .env.example ]; then
+            cp .env.example .env
             echo -e "${GREEN}✅ 已复制环境变量模板${NC}"
         else
-            echo -e "${RED}❌ 未找到环境变量模板文件${NC}"
+            echo -e "${RED}❌ 未找到环境变量模板文件 .env.example${NC}"
             exit 1
         fi
     else
@@ -74,7 +74,7 @@ setup_env() {
     fi
     
     # 检查关键配置
-    if grep -q "your-.*-change-this" .env; then
+    if grep -q "change-this" .env; then
         echo -e "${YELLOW}⚠️  检测到默认密钥配置，强烈建议修改以下配置:${NC}"
         echo "   - JWT_SECRET"
         echo "   - ENCRYPTION_KEY" 

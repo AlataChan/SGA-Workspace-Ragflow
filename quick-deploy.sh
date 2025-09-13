@@ -28,9 +28,16 @@ mkdir -p docker/nginx/ssl
 
 # 复制环境变量文件
 if [ ! -f .env ]; then
-    echo "📝 创建环境变量文件..."
-    cp .env.production .env
-    echo "✅ 已创建 .env 文件，请根据需要修改配置"
+    if [ -f .env.example ]; then
+        echo "📝 创建环境变量文件..."
+        cp .env.example .env
+        echo "✅ 已创建 .env 文件"
+        echo "⚠️  请编辑 .env 文件，修改所有包含 'change-this' 的配置"
+        echo "   特别是数据库密码、JWT密钥等安全配置"
+    else
+        echo "❌ 未找到 .env.example 模板文件"
+        exit 1
+    fi
 else
     echo "✅ .env 文件已存在"
 fi
