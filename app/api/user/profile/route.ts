@@ -43,7 +43,10 @@ export const GET = withAuth(async (request) => {
     // 获取用户详细信息
     const userProfile = await prisma.user.findUnique({
       where: {
-        userId: user.userId, // 使用userId而不是id
+        unique_user_id: {
+          companyId: user.companyId,
+          userId: user.userId
+        }
       },
       select: {
         id: true,

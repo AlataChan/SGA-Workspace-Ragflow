@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import DemoInspiredLayout from "@/components/workspace/demo-inspired-layout"
+import MainWorkspaceLayout from "@/components/workspace/main-workspace-layout"
 import { Loader2 } from "lucide-react"
 
 interface UserProfile {
@@ -187,5 +187,5 @@ export default function WorkspacePage() {
     return null
   }
 
-  return <DemoInspiredLayout user={user} agents={agents} sessions={sessions} company={company} />
+  return <MainWorkspaceLayout user={user} agents={agents} sessions={sessions} company={company} />
 }

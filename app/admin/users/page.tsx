@@ -40,7 +40,9 @@ import {
   Check,
   Trash2,
   MoreVertical,
-  Camera
+  Camera,
+  Network,
+  Minus
 } from "lucide-react"
 import NewAdminLayout from "@/components/admin/new-admin-layout"
 
@@ -145,6 +147,12 @@ export default function UsersPage() {
   const [availableAgents, setAvailableAgents] = useState<any[]>([])
   const [isManagingPermissions, setIsManagingPermissions] = useState(false)
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(false)
+
+  // 知识图谱权限管理状态
+  const [userKnowledgeGraphs, setUserKnowledgeGraphs] = useState<any[]>([])
+  const [availableKnowledgeGraphs, setAvailableKnowledgeGraphs] = useState<any[]>([])
+  const [isManagingKGPermissions, setIsManagingKGPermissions] = useState(false)
+  const [isLoadingKGPermissions, setIsLoadingKGPermissions] = useState(false)
 
   // 获取数据
   useEffect(() => {
@@ -339,6 +347,79 @@ export default function UsersPage() {
     } catch (error) {
       console.error('移除Agent权限失败:', error)
       setMessage({ type: 'error', text: error.message || '移除Agent权限失败' })
+      setTimeout(() => setMessage(null), 3000)
+    }
+  }
+
+  // 获取用户知识图谱权限
+  const fetchUserKnowledgeGraphPermissions = async (userId: string) => {
+    if (!userId) return
+
+    setIsLoadingKGPermissions(true)
+    try {
+      const response = await fetch(`/api/admin/users/${userId}/knowledge-graphs`)
+      if (response.ok) {
+        const data = await response.json()
+        setUserKnowledgeGraphs(data.data.permissions || [])
+        setAvailableKnowledgeGraphs(data.data.availableKnowledgeGraphs || [])
+      }
+    } catch (error) {
+      console.error('获取用户知识图谱权限失败:', error)
+    } finally {
+      setIsLoadingKGPermissions(false)
+    }
+  }
+
+  // 添加知识图谱权限
+  const handleAddKnowledgeGraphPermission = async (knowledgeGraphId: string) => {
+    if (!selectedUser) return
+
+    try {
+      const response = await fetch(`/api/admin/users/${selectedUser.id}/knowledge-graphs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ knowledgeGraphId }),
+      })
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: '知识图谱权限添加成功' })
+        setTimeout(() => setMessage(null), 3000)
+        // 重新获取权限列表
+        await fetchUserKnowledgeGraphPermissions(selectedUser.id)
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error?.message || '添加权限失败')
+      }
+    } catch (error) {
+      console.error('添加知识图谱权限失败:', error)
+      setMessage({ type: 'error', text: error.message || '添加知识图谱权限失败' })
+      setTimeout(() => setMessage(null), 3000)
+    }
+  }
+
+  // 移除知识图谱权限
+  const handleRemoveKnowledgeGraphPermission = async (permissionId: string) => {
+    if (!selectedUser) return
+
+    try {
+      const response = await fetch(`/api/admin/users/${selectedUser.id}/knowledge-graphs/${permissionId}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: '知识图谱权限移除成功' })
+        setTimeout(() => setMessage(null), 3000)
+        // 重新获取权限列表
+        await fetchUserKnowledgeGraphPermissions(selectedUser.id)
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error?.message || '移除权限失败')
+      }
+    } catch (error) {
+      console.error('移除知识图谱权限失败:', error)
+      setMessage({ type: 'error', text: error.message || '移除知识图谱权限失败' })
       setTimeout(() => setMessage(null), 3000)
     }
   }
@@ -672,6 +753,7 @@ export default function UsersPage() {
                             onClick={() => {
                               setSelectedUser(user)
                               fetchUserAgentPermissions(user.id)
+                              fetchUserKnowledgeGraphPermissions(user.id)
                             }}
                           >
                             <Avatar className="w-10 h-10">
@@ -938,6 +1020,141 @@ export default function UsersPage() {
                                       size="sm"
                                       variant="outline"
                                       onClick={() => handleAddAgentPermission(agent.id)}
+                                      className="border-green-500/30 text-green-400 hover:bg-green-500/10"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 知识图谱权限管理 */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-white flex items-center">
+                        <Network className="w-4 h-4 mr-2" />
+                        知识图谱权限
+                      </h4>
+                      <div className="flex items-center space-x-2">
+                        <Badge variant="outline" className="text-gray-300">
+                          {userKnowledgeGraphs.length} 个
+                        </Badge>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setIsManagingKGPermissions(!isManagingKGPermissions)}
+                          className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
+                        >
+                          {isManagingKGPermissions ? (
+                            <>
+                              <X className="w-3 h-3 mr-1" />
+                              取消
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="w-3 h-3 mr-1" />
+                              管理
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {selectedUser && (
+                      <div className="bg-[#2a2a2a] rounded-lg p-4">
+                        {isLoadingKGPermissions ? (
+                          <div className="flex items-center justify-center py-4">
+                            <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+                            <span className="ml-2 text-sm text-gray-400">加载中...</span>
+                          </div>
+                        ) : (
+                          <>
+                            {selectedUser.role === 'ADMIN' ? (
+                              <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
+                                <div className="flex items-center space-x-2 text-orange-400">
+                                  <Shield className="w-4 h-4" />
+                                  <span className="text-sm">管理员拥有所有知识图谱的访问权限</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                {/* 当前知识图谱权限列表 */}
+                                {userKnowledgeGraphs.length > 0 ? (
+                                  <div className="space-y-2">
+                                    {userKnowledgeGraphs.map((permission) => (
+                                      <div
+                                        key={permission.id}
+                                        className="flex items-center justify-between p-3 rounded-lg border border-[#3c4043] bg-[#1f1f1f]"
+                                      >
+                                        <div className="flex items-center space-x-3">
+                                          <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                                            <Network className="w-4 h-4 text-white" />
+                                          </div>
+                                          <div>
+                                            <div className="text-sm font-medium text-white">
+                                              {permission.knowledgeGraph.name}
+                                            </div>
+                                            <div className="text-xs text-gray-400">
+                                              {permission.knowledgeGraph.nodeCount} 节点 • {permission.knowledgeGraph.edgeCount} 边
+                                            </div>
+                                          </div>
+                                        </div>
+                                        {isManagingKGPermissions && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => handleRemoveKnowledgeGraphPermission(permission.id)}
+                                            className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+                                          >
+                                            <Minus className="w-3 h-3" />
+                                          </Button>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-center py-4 text-gray-400">
+                                    <Network className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                                    <p className="text-sm">暂无知识图谱权限</p>
+                                  </div>
+                                )}
+                              </>
+                            )}
+
+                            {/* 添加知识图谱权限 */}
+                            {isManagingKGPermissions && availableKnowledgeGraphs.length > 0 && (
+                              <div className="space-y-2">
+                                <div className="text-sm font-medium text-gray-300 border-t border-[#3c4043] pt-3">
+                                  可添加的知识图谱
+                                </div>
+                                {availableKnowledgeGraphs.map((kg) => (
+                                  <div
+                                    key={kg.id}
+                                    className="flex items-center justify-between p-3 rounded-lg border border-[#3c4043] hover:bg-[#2a2a2a] transition-colors"
+                                  >
+                                    <div className="flex items-center space-x-3">
+                                      <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                                        <Network className="w-4 h-4 text-white" />
+                                      </div>
+                                      <div>
+                                        <div className="text-sm font-medium text-white">
+                                          {kg.name}
+                                        </div>
+                                        <div className="text-xs text-gray-400">
+                                          {kg.nodeCount} 节点 • {kg.edgeCount} 边
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleAddKnowledgeGraphPermission(kg.id)}
                                       className="border-green-500/30 text-green-400 hover:bg-green-500/10"
                                     >
                                       <Plus className="w-3 h-3" />

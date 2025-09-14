@@ -21,7 +21,8 @@ import {
   LogOut,
   User,
   ChevronDown,
-  Home
+  Home,
+  Network
 } from "lucide-react"
 
 interface AdminLayoutProps {
@@ -66,6 +67,12 @@ export default function NewAdminLayout({ children }: AdminLayoutProps) {
       label: "Agent管理",
       icon: Bot,
       description: "智能体管理"
+    },
+    {
+      href: "/admin/knowledge-graphs",
+      label: "知识图谱",
+      icon: Network,
+      description: "知识图谱管理"
     },
     {
       href: "/admin/users",

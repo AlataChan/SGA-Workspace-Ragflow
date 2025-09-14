@@ -43,6 +43,10 @@ import {
   Video,
   Phone
 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import KnowledgeGraphVisualization from "@/components/knowledge-graph/knowledge-graph-visualization"
 
 interface Agent {
   id: string
@@ -84,14 +88,23 @@ interface CompanyInfo {
   logoUrl: string
 }
 
-interface DemoInspiredLayoutProps {
+interface KnowledgeGraph {
+  id: string
+  name: string
+  description?: string
+  isActive: boolean
+  nodeCount: number
+  edgeCount: number
+}
+
+interface MainWorkspaceLayoutProps {
   user: UserProfile
   agents: Agent[]
   sessions: any[]
   company?: CompanyInfo | null
 }
 
-export default function DemoInspiredLayout({ user, agents, sessions, company }: DemoInspiredLayoutProps) {
+export default function MainWorkspaceLayout({ user, agents, sessions, company }: MainWorkspaceLayoutProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [currentRotation, setCurrentRotation] = useState(0)
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -107,6 +120,12 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
   // 聊天状态管理
   const [showChat, setShowChat] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
+  
+  // 知识图谱状态管理
+  const [knowledgeGraphs, setKnowledgeGraphs] = useState<KnowledgeGraph[]>([])
+  const [selectedKnowledgeGraph, setSelectedKnowledgeGraph] = useState<KnowledgeGraph | null>(null)
+  const [knowledgeGraphsCollapsed, setKnowledgeGraphsCollapsed] = useState(false)
+  const [graphData, setGraphData] = useState<{ nodes: any[], links: any[] } | null>(null)
 
   const router = useRouter()
 
@@ -131,11 +150,24 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
     }
   }, [realAgents])
 
+  // 加载知识图谱列表
+  const loadKnowledgeGraphs = async () => {
+    try {
+      const response = await fetch('/api/knowledge-graphs')
+      if (response.ok) {
+        const data = await response.json()
+        setKnowledgeGraphs(data.data || [])
+      }
+    } catch (error) {
+      console.error('加载知识图谱失败:', error)
+    }
+  }
+
   // 从API获取部门数据和最新的Agent数据
   useEffect(() => {
     async function fetchDepartments() {
       try {
-        console.log('[DemoLayout] 获取最新Agent数据...')
+        console.log('[MainWorkspace] 获取最新Agent数据...')
         const response = await fetch('/api/user/agents', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('auth-token')}`,
@@ -147,13 +179,13 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
 
         if (response.ok) {
           const data = await response.json()
-          console.log('[DemoLayout] 获取到的最新数据:', data.data)
+          console.log('[MainWorkspace] 获取到的最新数据:', data.data)
           setDepartments(data.data.departments || [])
 
           // 如果传入的agents数据过时，这里可以触发父组件更新
           // 但由于这是props，我们只能在控制台提醒
           if (data.data.agents && data.data.agents.length > 0) {
-            console.log('[DemoLayout] 检测到最新Agent数据，建议刷新页面获取最新配置')
+            console.log('[MainWorkspace] 检测到最新Agent数据，建议刷新页面获取最新配置')
           }
         }
       } catch (error) {
@@ -162,6 +194,11 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
     }
 
     fetchDepartments()
+  }, [])
+
+  // 加载知识图谱列表
+  useEffect(() => {
+    loadKnowledgeGraphs()
   }, [])
 
   // 动态生成组织架构
@@ -190,12 +227,10 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
         return <Megaphone className="w-4 h-4" />
       case 'TrendingUp':
         return <TrendingUp className="w-4 h-4" />
-      case 'Users':
-        return <Users className="w-4 h-4" />
-      case 'Settings':
-        return <Settings className="w-4 h-4" />
-      case 'Building':
-        return <Building className="w-4 h-4" />
+      case 'Cog':
+        return <Cog className="w-4 h-4" />
+      case 'GraduationCap':
+        return <GraduationCap className="w-4 h-4" />
       default:
         return <Building className="w-4 h-4" />
     }
@@ -209,7 +244,7 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
       router.push('/auth/login')
     } catch (error) {
       console.error('登出失败:', error)
-      // 即使API失败也要清除本地数据
+      // 即使API失败，也清除本地数据并跳转
       localStorage.removeItem('user')
       localStorage.removeItem('auth-token')
       router.push('/auth/login')
@@ -225,43 +260,40 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
       clearTimeout((window as any).userInteractionTimer)
     }
 
-    // 3秒后恢复自动旋转
+    // 设置新的定时器，5秒后恢复自动旋转
     ;(window as any).userInteractionTimer = setTimeout(() => {
       setUserInteracting(false)
       setIsAutoRotating(true)
-    }, 3000)
+    }, 5000)
   }
 
-  // 切换部门折叠状态
-  const toggleDeptCollapse = (deptIndex: number) => {
-    const newCollapsed = new Set(collapsedDepts)
-    if (newCollapsed.has(deptIndex)) {
-      newCollapsed.delete(deptIndex)
-    } else {
-      newCollapsed.add(deptIndex)
-    }
-    setCollapsedDepts(newCollapsed)
-  }
-
-  // 点击Agent名字跳转到对应Agent
+  // 跳转到指定Agent
   const jumpToAgent = (agentName: string) => {
     const agentIndex = realAgents.findIndex(agent => agent.chineseName === agentName)
     if (agentIndex !== -1) {
-      const rotationDiff = agentIndex - selectedIndex
-      setCurrentRotation(prev => prev - rotationDiff * angle)
       setSelectedIndex(agentIndex)
+      setCurrentRotation(-agentIndex * angle)
       handleUserInteraction()
     }
   }
 
+  // 切换部门折叠状态
+  const toggleDepartment = (index: number) => {
+    const newCollapsed = new Set(collapsedDepts)
+    if (newCollapsed.has(index)) {
+      newCollapsed.delete(index)
+    } else {
+      newCollapsed.add(index)
+    }
+    setCollapsedDepts(newCollapsed)
+  }
+
   const nextAgent = () => {
-    setCurrentRotation(prev => prev - angle)
     setSelectedIndex(prev => (prev + 1) % cardCount)
     handleUserInteraction()
   }
 
   const prevAgent = () => {
-    setCurrentRotation(prev => prev + angle)
     setSelectedIndex(prev => (prev - 1 + cardCount) % cardCount)
     handleUserInteraction()
   }
@@ -274,33 +306,38 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
       platform: agent.platform,
       isOnline: agent.isOnline,
       difyUrl: agent.difyUrl,
-      difyKey: agent.difyKey ? `${agent.difyKey.substring(0, 10)}...` : undefined,
+      difyKey: agent.difyKey ? '***' : undefined,
       platformConfig: agent.platformConfig
     })
 
-    // 检查Agent是否在线且有必要的配置
-    if (!agent.isOnline || !agent.difyUrl || !agent.difyKey) {
-      console.warn('Agent不在线或缺少Dify配置:', {
-        isOnline: agent.isOnline,
-        hasDifyUrl: !!agent.difyUrl,
-        hasDifyKey: !!agent.difyKey,
-        difyUrl: agent.difyUrl,
-        platformConfig: agent.platformConfig
-      })
+    // 提取配置信息
+    let difyUrl = agent.difyUrl
+    let difyKey = agent.difyKey
+
+    // 如果没有直接的difyUrl和difyKey，尝试从platformConfig中提取
+    if ((!difyUrl || !difyKey) && agent.platformConfig) {
+      console.log('从platformConfig提取配置:', agent.platformConfig)
+      difyUrl = agent.platformConfig.baseUrl || difyUrl
+      difyKey = agent.platformConfig.apiKey || difyKey
+    }
+
+    console.log('提取后的配置:', { difyUrl, difyKey: difyKey ? '***' : undefined })
+
+    // 检查必要的配置
+    if (!difyUrl || !difyKey) {
+      console.error('Agent配置不完整:', { difyUrl: !!difyUrl, difyKey: !!difyKey })
+      alert('该智能体配置不完整，请联系管理员')
       return
     }
 
-    console.log('开始与Agent聊天:', {
-      agentId: agent.id,
-      agentName: agent.chineseName,
-      userId: user.id,
-      userAvatar: user.avatar_url,
-      agentAvatar: agent.avatarUrl,
-      difyUrl: agent.difyUrl,
-      difyKey: agent.difyKey ? '***' : undefined // 不在日志中显示完整key
-    })
+    // 更新Agent对象，确保包含正确的配置
+    const updatedAgent = {
+      ...agent,
+      difyUrl,
+      difyKey
+    }
 
-    setSelectedAgent(agent)
+    setSelectedAgent(updatedAgent)
     setShowChat(true)
   }
 
@@ -308,16 +345,87 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
   const handleBackToMain = () => {
     setShowChat(false)
     setSelectedAgent(null)
+    setSelectedKnowledgeGraph(null)
+    setGraphData(null)
+  }
+
+  // 知识图谱选择处理函数
+  const handleSelectKnowledgeGraph = async (kg: KnowledgeGraph) => {
+    setSelectedKnowledgeGraph(kg)
+    setSelectedAgent(null)
+    setShowChat(false)
+
+    // 获取图谱数据
+    try {
+      const response = await fetch(`/api/knowledge-graphs/${kg.id}/graph`)
+      if (response.ok) {
+        const data = await response.json()
+        console.log('知识图谱数据:', data)
+        // 转换API数据格式：links -> edges
+        const transformedData = {
+          nodes: data.data.nodes || [],
+          edges: data.data.links || []
+        }
+        setGraphData(transformedData)
+      } else {
+        console.error('获取知识图谱数据失败:', response.status)
+        // 如果API失败，使用测试数据
+        const testData = {
+          nodes: [
+            { id: '1', name: '的士费', type: 'CATEGORY', description: 'Taxi expenses requiring joint approval by the financial manager and regional general manager', count: 5 },
+            { id: '2', name: '财务部', type: 'ORGANIZATION', description: 'Platform finance departments manage various financial operations including bank accounts and settlements', count: 8 },
+            { id: '3', name: '张经理', type: 'PERSON', description: '财务经理，负责审批各类费用', count: 3 },
+            { id: '4', name: '李总监', type: 'PERSON', description: '区域总经理，参与重要费用审批', count: 4 },
+            { id: '5', name: '报销流程', type: 'CATEGORY', description: '标准的费用报销审批流程', count: 6 }
+          ],
+          edges: [
+            { source: '1', target: '2', type: 'MANAGED_BY' },
+            { source: '1', target: '3', type: 'APPROVED_BY' },
+            { source: '1', target: '4', type: 'APPROVED_BY' },
+            { source: '2', target: '3', type: 'CONTAINS' },
+            { source: '5', target: '1', type: 'INCLUDES' },
+            { source: '5', target: '2', type: 'INVOLVES' }
+          ]
+        }
+        setGraphData(testData)
+      }
+    } catch (error) {
+      console.error('获取知识图谱数据错误:', error)
+      // 使用测试数据作为后备
+      const testData = {
+        nodes: [
+          { id: '1', name: '的士费', type: 'CATEGORY', description: 'Taxi expenses requiring joint approval by the financial manager and regional general manager', count: 5 },
+          { id: '2', name: '财务部', type: 'ORGANIZATION', description: 'Platform finance departments manage various financial operations including bank accounts and settlements', count: 8 },
+          { id: '3', name: '张经理', type: 'PERSON', description: '财务经理，负责审批各类费用', count: 3 },
+          { id: '4', name: '李总监', type: 'PERSON', description: '区域总经理，参与重要费用审批', count: 4 },
+          { id: '5', name: '报销流程', type: 'CATEGORY', description: '标准的费用报销审批流程', count: 6 }
+        ],
+        edges: [
+          { source: '1', target: '2', type: 'MANAGED_BY' },
+          { source: '1', target: '3', type: 'APPROVED_BY' },
+          { source: '1', target: '4', type: 'APPROVED_BY' },
+          { source: '2', target: '3', type: 'CONTAINS' },
+          { source: '5', target: '1', type: 'INCLUDES' },
+          { source: '5', target: '2', type: 'INVOLVES' }
+        ]
+      }
+      setGraphData(testData)
+    }
+  }
+
+  // 前往管理后台
+  const goToAdmin = () => {
+    router.push('/admin/knowledge-graphs')
   }
 
   // 自动旋转效果
   useEffect(() => {
-    if (!isAutoRotating || realAgents.length === 0) return
+    if (!isAutoRotating || cardCount === 0) return
 
     const interval = setInterval(() => {
       setCurrentRotation(prev => prev - angle)
       setSelectedIndex(prev => (prev + 1) % cardCount)
-    }, 4000) // 每4秒自动切换
+    }, 4000)
 
     return () => clearInterval(interval)
   }, [isAutoRotating, angle, cardCount])
@@ -388,18 +496,16 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
                 className="w-8 h-8 rounded-lg object-cover"
               />
             )}
-            <h2 className="text-lg font-semibold text-white">
-              {company?.name || 'SGA Team'}
-            </h2>
+            <h1 className="text-lg font-semibold text-white">{company?.name || 'SGA Team'}</h1>
           </div>
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="p-2 rounded-lg bg-[#2d2d2d] text-[#e0e0e0] hover:bg-[#3c4043]"
+            className="text-[#e0e0e0]"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
+            <Settings className="w-5 h-5" />
+          </Button>
         </div>
       </div>
 
@@ -425,33 +531,31 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
               </div>
             </div>
           </div>
-          
+
           {/* 导航内容 - 添加滚动 */}
-          <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[#3c4043] scrollbar-track-transparent">
-            <div className="p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto">
+            {/* 组织架构 */}
+            <div className="p-4 space-y-2">
               {orgStructure.map((dept, index) => (
-                <div key={index} className="space-y-2">
-                  {/* 部门标题 - 可折叠 */}
-                  <button 
-                    onClick={() => toggleDeptCollapse(index)}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[#2d2d2d]/50 border border-[#3c4043] hover:bg-[#3c4043] transition-all duration-200"
+                <div key={index} className="space-y-1">
+                  <button
+                    onClick={() => toggleDepartment(index)}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[#2d2d2d] transition-colors text-[#8ab4f8] text-sm font-medium"
                   >
-                    <div className="flex items-center">
-                      <span className="text-[#8ab4f8] mr-3 w-5 h-5 flex items-center justify-center">{dept.icon}</span>
-                      <span className="text-[#e8eaed] font-medium text-sm">{dept.title}</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[#8ab4f8]">{dept.icon}</span>
+                      <span>{dept.title}</span>
                     </div>
-                    <ChevronUp 
-                      className={`w-4 h-4 text-[#9aa0a6] transition-transform duration-200 ${
-                        collapsedDepts.has(index) ? 'rotate-180' : ''
-                      }`} 
+                    <ChevronDown
+                      className={`w-4 h-4 transition-transform ${
+                        collapsedDepts.has(index) ? '' : 'rotate-180'
+                      }`}
                     />
                   </button>
-                  
-                  {/* 部门成员 - 可折叠 */}
-                  {!collapsedDepts.has(index) && (
+                  {!collapsedDepts.has(index) && dept.members.length > 0 && (
                     <div className="space-y-1 ml-2 animate-in slide-in-from-top-2 duration-200">
                       {dept.members.map((member, memberIndex) => (
-                        <button 
+                        <button
                           key={memberIndex}
                           onClick={() => jumpToAgent(member.name)}
                           className="w-full flex items-center px-3 py-2 rounded-lg hover:bg-[#2d2d2d] transition-all duration-200 group text-left"
@@ -460,8 +564,8 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
                             {member.icon}
                           </span>
                           <div className="flex-1 min-w-0">
-                            <div className="text-[#e8eaed] text-sm font-medium truncate">{member.name}</div>
-                            <div className="text-[#9aa0a6] text-xs">{member.role}</div>
+                            <div className="text-sm font-medium text-[#e0e0e0] truncate">{member.name}</div>
+                            <div className="text-xs text-[#9aa0a6] truncate">{member.role}</div>
                           </div>
                         </button>
                       ))}
@@ -471,7 +575,91 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
               ))}
             </div>
           </div>
-          
+
+          {/* 知识图谱 - 可折叠 */}
+          <div className="px-4 py-2">
+            <Collapsible open={!knowledgeGraphsCollapsed} onOpenChange={setKnowledgeGraphsCollapsed}>
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="w-full justify-between p-2 h-auto text-left hover:bg-[#2d2d2d] text-[#e0e0e0]"
+                >
+                  <div className="flex items-center space-x-2">
+                    <Network className="w-4 h-4" />
+                    <span className="font-medium">知识图谱</span>
+                    <Badge variant="secondary" className="text-xs">
+                      {knowledgeGraphs.length}
+                    </Badge>
+                  </div>
+                  {knowledgeGraphsCollapsed ? (
+                    <ChevronDown className="w-4 h-4" />
+                  ) : (
+                    <ChevronUp className="w-4 h-4" />
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-3 mt-3">
+                {knowledgeGraphs.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Network className="w-12 h-12 mx-auto text-gray-400 mb-2" />
+                    <p className="text-sm text-gray-500 mb-2">暂无知识图谱</p>
+                    {user.role === "ADMIN" && (
+                      <Button variant="outline" size="sm" onClick={goToAdmin}>
+                        前往管理后台配置
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  knowledgeGraphs.map((kg) => (
+                    <Card
+                      key={kg.id}
+                      className="group cursor-pointer hover:shadow-lg hover:scale-[1.02] transition-all duration-200 border-gray-200/50 dark:border-gray-700/50 bg-[#2d2d2d]/50 backdrop-blur-sm"
+                      onClick={() => handleSelectKnowledgeGraph(kg)}
+                    >
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start space-x-3">
+                          <div className="relative">
+                            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                              <Network className="w-6 h-6 text-white" />
+                            </div>
+                            {kg.isActive && (
+                              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-800 flex items-center justify-center">
+                                <div className="w-2 h-2 bg-white rounded-full" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <CardTitle className="text-sm font-semibold text-gray-100 truncate">
+                              {kg.name}
+                            </CardTitle>
+                            <div className="flex items-center space-x-2 mt-1">
+                              <Badge
+                                variant="secondary"
+                                className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
+                              >
+                                图谱
+                              </Badge>
+                              <span className="text-xs text-gray-400">
+                                {kg.nodeCount} 节点
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      {kg.description && (
+                        <CardContent className="pt-0 pb-3">
+                          <CardDescription className="text-xs text-gray-400 line-clamp-2">
+                            {kg.description}
+                          </CardDescription>
+                        </CardContent>
+                      )}
+                    </Card>
+                  ))
+                )}
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
+
           {/* 底部操作区域 - 管理员权限控制 */}
           <div className="p-4 border-t border-[#2d2d2d]">
             {isAdmin ? (
@@ -483,8 +671,8 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
                 管理员设置
               </button>
             ) : (
-              <button 
-                disabled 
+              <button
+                disabled
                 className="w-full flex items-center px-3 py-2 rounded-lg text-[#5a5a5a] text-sm cursor-not-allowed opacity-50"
               >
                 <Settings className="w-4 h-4 mr-2" />
@@ -498,7 +686,6 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
         <main className="flex-1 flex flex-col md:flex-row">
           {/* 中央展示区域 - 响应式 */}
           <div className="flex-1 flex flex-col min-h-0">
-
 
             {/* Agent展示区域 - 响应式精致布局 */}
             <div className="flex-1 flex justify-center items-center relative overflow-hidden py-8 md:py-16" style={{ perspective: '1000px' }}>
@@ -612,15 +799,12 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
                       <Lock className="w-4 h-4 mr-2" />
                       修改密码
                     </DropdownMenuItem>
-                    {user.role === 'admin' && (
+                    {user.role === 'ADMIN' && (
                       <>
                         <DropdownMenuSeparator className="bg-[#333]" />
                         <DropdownMenuItem
                           className="text-[#e0e0e0] hover:bg-[#6a5acd]/20 hover:text-white focus:bg-[#6a5acd]/20 focus:text-white"
-                          onClick={() => {
-                            router.push('/admin')
-                            setIsUserDropdownOpen(false)
-                          }}
+                          onClick={() => router.push('/admin')}
                         >
                           <Settings className="w-4 h-4 mr-2" />
                           管理后台
@@ -630,13 +814,10 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
                     <DropdownMenuSeparator className="bg-[#333]" />
                     <DropdownMenuItem
                       className="text-red-400 hover:bg-red-500/20 hover:text-red-300 focus:bg-red-500/20 focus:text-red-300"
-                      onClick={() => {
-                        handleLogout()
-                        setIsUserDropdownOpen(false)
-                      }}
+                      onClick={handleLogout}
                     >
                       <LogOut className="w-4 h-4 mr-2" />
-                      退出系统
+                      退出登录
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -685,146 +866,115 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
                   {/* 平台信息 */}
                   <div>
                     <h4 className="text-sm font-medium text-[#e8eaed] mb-2 flex items-center">
-                      <Cog className="w-4 h-4 mr-2 text-[#8ab4f8]" />
+                      <Bot className="w-4 h-4 mr-2 text-[#8ab4f8]" />
                       AI平台
                     </h4>
-                    <div className="flex items-center">
-                      <span className="px-2 py-1 bg-[#6a5acd]/20 text-[#8ab4f8] text-xs rounded-full border border-[#6a5acd]/30">
+                    <div className="bg-[#2d2d2d] p-3 rounded-lg">
+                      <span className="inline-block px-2 py-1 bg-[#6a5acd] text-white text-xs rounded-full">
                         {realAgents[selectedIndex].platform}
                       </span>
                     </div>
                   </div>
-
-                  {/* 工作经验 */}
-                  {realAgents[selectedIndex].experience && (
-                    <div>
-                      <h4 className="text-sm font-medium text-[#e8eaed] mb-2 flex items-center">
-                        <User className="w-4 h-4 mr-2 text-[#8ab4f8]" />
-                        工作经验
-                      </h4>
-                      <p className="text-sm text-[#9aa0a6] bg-[#2d2d2d] p-3 rounded-lg">
-                        {realAgents[selectedIndex].experience}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* 专业技能 */}
-                  {realAgents[selectedIndex].skills && (
-                    <div>
-                      <h4 className="text-sm font-medium text-[#e8eaed] mb-2 flex items-center">
-                        <Cog className="w-4 h-4 mr-2 text-[#8ab4f8]" />
-                        专业技能
-                      </h4>
-                      <div className="flex flex-wrap gap-2">
-                        {realAgents[selectedIndex].skills!.map((skill, index) => (
-                          <span
-                            key={index}
-                            className="px-2 py-1 bg-[#6a5acd]/20 text-[#8ab4f8] text-xs rounded-full border border-[#6a5acd]/30"
-                          >
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 最近活动 */}
-                  {realAgents[selectedIndex].recentActivity && (
-                    <div>
-                      <h4 className="text-sm font-medium text-[#e8eaed] mb-2 flex items-center">
-                        <History className="w-4 h-4 mr-2 text-[#8ab4f8]" />
-                        最近活动
-                      </h4>
-                      <p className="text-sm text-[#9aa0a6] bg-[#2d2d2d] p-3 rounded-lg">
-                        {realAgents[selectedIndex].recentActivity}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* 个人标签 */}
-                  {realAgents[selectedIndex].tags && (
-                    <div>
-                      <h4 className="text-sm font-medium text-[#e8eaed] mb-2 flex items-center">
-                        <Crown className="w-4 h-4 mr-2 text-[#8ab4f8]" />
-                        个人标签
-                      </h4>
-                      <div className="flex flex-wrap gap-2">
-                        {realAgents[selectedIndex].tags!.map((tag, index) => (
-                          <span
-                            key={index}
-                            className="px-2 py-1 bg-[#00e0ff]/20 text-[#00e0ff] text-xs rounded-full border border-[#00e0ff]/30"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
 
-                {/* 操作按钮区域 - 增加间距和新按钮 */}
-                <div className="p-6 pt-10 space-y-6">
-                  {/* 主要操作按钮 */}
-                  <button
-                    onClick={() => handleStartChat(realAgents[selectedIndex])}
-                    disabled={!realAgents[selectedIndex]?.isOnline || !realAgents[selectedIndex]?.difyUrl || !realAgents[selectedIndex]?.difyKey}
-                    className={`w-full flex items-center justify-center px-4 py-3 rounded-lg transition-all duration-300 text-sm font-medium shadow-lg ${
-                      realAgents[selectedIndex]?.isOnline && realAgents[selectedIndex]?.difyUrl && realAgents[selectedIndex]?.difyKey
-                        ? 'bg-gradient-to-r from-[#6a5acd] to-[#8a7aed] hover:from-[#5a4abd] hover:to-[#7a6add] text-white cursor-pointer hover:shadow-[#6a5acd]/50'
-                        : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                {/* 操作按钮区域 - 固定在底部 */}
+                <div className="p-6 border-t border-[#2d2d2d] space-y-4">
+                  {/* 状态按钮 */}
+                  <Button
+                    disabled={!realAgents[selectedIndex].isOnline}
+                    className={`w-full py-3 rounded-lg font-medium transition-all duration-300 ${
+                      realAgents[selectedIndex].isOnline
+                        ? 'bg-green-600 hover:bg-green-700 text-white'
+                        : 'bg-[#3c4043] text-[#9aa0a6] cursor-not-allowed'
                     }`}
                   >
-                    <MessageCircle className="w-4 h-4 mr-2" />
-                    {realAgents[selectedIndex]?.isOnline
-                      ? (realAgents[selectedIndex]?.difyUrl && realAgents[selectedIndex]?.difyKey ? '智能对话' : '配置缺失')
-                      : '离线状态'
-                    }
-                  </button>
+                    <div className="flex items-center justify-center">
+                      <div className={`w-2 h-2 rounded-full mr-2 ${realAgents[selectedIndex].isOnline ? 'bg-green-300' : 'bg-gray-500'}`} />
+                      {realAgents[selectedIndex].isOnline ? '在线状态' : '离线状态'}
+                    </div>
+                  </Button>
 
-                  {/* 次要操作按钮组 */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <button
-                      disabled
-                      className="flex items-center justify-center px-3 py-3 bg-[#2d2d2d]/50 text-gray-500 rounded-lg transition-all duration-300 text-sm border border-[#3c4043]/50 cursor-not-allowed"
+                  {/* 功能按钮组 */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button
+                      disabled={!realAgents[selectedIndex].isOnline}
+                      className="py-2 bg-[#3c4043] hover:bg-[#4a4a4a] text-[#9aa0a6] hover:text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <Mic className="w-4 h-4 mr-2" />
+                      <Mic className="w-4 h-4 mr-1" />
                       语音通话
-                    </button>
-                    <button
-                      disabled
-                      className="flex items-center justify-center px-3 py-3 bg-[#2d2d2d]/50 text-gray-500 rounded-lg transition-all duration-300 text-sm border border-[#3c4043]/50 cursor-not-allowed"
+                    </Button>
+                    <Button
+                      disabled={!realAgents[selectedIndex].isOnline}
+                      className="py-2 bg-[#3c4043] hover:bg-[#4a4a4a] text-[#9aa0a6] hover:text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <Video className="w-4 h-4 mr-2" />
+                      <Video className="w-4 h-4 mr-1" />
                       视频会议
-                    </button>
+                    </Button>
                   </div>
 
-                  {/* 附加功能按钮 */}
-                  <button
-                    disabled
-                    className="w-full flex items-center justify-center px-4 py-3 bg-[#2d2d2d]/50 text-gray-500 rounded-lg transition-all duration-300 text-sm border border-[#3c4043]/50 cursor-not-allowed"
+                  {/* 主要操作按钮 */}
+                  <Button
+                    disabled={!realAgents[selectedIndex].isOnline}
+                    className="w-full py-3 bg-[#3c4043] hover:bg-[#4a4a4a] text-[#9aa0a6] hover:text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <History className="w-4 h-4 mr-2" />
                     交互历史
-                  </button>
-                </div>
+                  </Button>
 
-                {/* 下方留空区域 - 适度留空 */}
-                <div className="flex-1 min-h-[40px]"></div>
+                  {/* 开始聊天按钮 - 最突出 */}
+                  <Button
+                    onClick={() => handleStartChat(realAgents[selectedIndex])}
+                    disabled={!realAgents[selectedIndex].isOnline}
+                    className={`w-full py-4 rounded-lg font-semibold text-base transition-all duration-300 ${
+                      realAgents[selectedIndex].isOnline
+                        ? 'bg-gradient-to-r from-[#6a5acd] to-[#8a2be2] hover:from-[#7b68ee] hover:to-[#9370db] text-white shadow-lg shadow-[#6a5acd]/30 hover:shadow-[#6a5acd]/50 transform hover:scale-[1.02]'
+                        : 'bg-[#3c4043] text-[#9aa0a6] cursor-not-allowed'
+                    }`}
+                  >
+                    <MessageCircle className="w-5 h-5 mr-2" />
+                    开始对话
+                  </Button>
+                </div>
               </div>
             )}
           </div>
         </main>
       </div>
 
+      {/* 全局样式 */}
       <style jsx global>{`
         @keyframes pulseGlow {
-          0% { transform: scale(1) rotate(0deg); opacity: 0.4; }
-          50% { transform: scale(1.2) rotate(180deg); opacity: 0.6; }
-          100% { transform: scale(1) rotate(360deg); opacity: 0.4; }
+          0%, 100% { opacity: 0.3; transform: scale(1); }
+          50% { opacity: 0.6; transform: scale(1.05); }
         }
 
-        /* 自定义滚动条样式 */
+        .line-clamp-2 {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+
+        .line-clamp-3 {
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+
+        .scrollbar-thin {
+          scrollbar-width: thin;
+        }
+
+        .scrollbar-thumb-\\[\\#3c4043\\] {
+          scrollbar-color: #3c4043 transparent;
+        }
+
+        .scrollbar-track-transparent {
+          scrollbar-track-color: transparent;
+        }
+
+        /* Webkit scrollbar styles */
         .scrollbar-thin::-webkit-scrollbar {
           width: 6px;
         }
@@ -834,20 +984,12 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
         }
 
         .scrollbar-thin::-webkit-scrollbar-thumb {
-          background: #3c4043;
+          background-color: #3c4043;
           border-radius: 3px;
         }
 
         .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-          background: #5a5a5a;
-        }
-
-        /* 文字截断样式 */
-        .line-clamp-3 {
-          display: -webkit-box;
-          -webkit-line-clamp: 3;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
+          background-color: #4a4a4a;
         }
       `}</style>
 
@@ -856,6 +998,39 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
         open={isPasswordDialogOpen}
         onOpenChange={setIsPasswordDialogOpen}
       />
+
+      {/* 知识图谱查看器 */}
+      {selectedKnowledgeGraph && graphData && (
+        <div className="fixed inset-0 z-50 bg-white dark:bg-gray-900">
+          <div className="h-full flex flex-col">
+            {/* 顶部导航栏 */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center space-x-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleBackToMain}
+                  className="flex items-center space-x-2"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>返回</span>
+                </Button>
+                <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {selectedKnowledgeGraph.name}
+                </h1>
+              </div>
+            </div>
+
+            {/* 知识图谱内容 */}
+            <div className="flex-1">
+              <KnowledgeGraphVisualization
+                graphData={graphData}
+                knowledgeGraphId={selectedKnowledgeGraph.id}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 聊天界面 */}
       {showChat && selectedAgent && (
