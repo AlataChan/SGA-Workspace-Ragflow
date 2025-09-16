@@ -30,8 +30,10 @@ services:
   app:
     build:
       context: .
-      dockerfile: docker/app/Dockerfile.prod
+      dockerfile: Dockerfile
     # ports: 不暴露到主机，只在内部网络访问
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # 允许访问宿主机服务
     environment:
       # 应用配置
       - NODE_ENV=development

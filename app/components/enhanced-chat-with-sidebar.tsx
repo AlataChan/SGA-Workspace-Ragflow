@@ -31,6 +31,7 @@ import { toast } from 'sonner'
 import SimpleContentRenderer from './simple-content-renderer'
 import FileCard from './file-card'
 import { EnhancedDifyClient, DifyStreamMessage } from '@/lib/enhanced-dify-client'
+import { RAGFlowBlockingClient, RAGFlowMessage } from '@/lib/ragflow-blocking-client'
 
 // 打字效果组件
 interface TypewriterEffectProps {
@@ -53,18 +54,16 @@ const TypewriterEffect: React.FC<TypewriterEffectProps> = ({ content, speed = 30
         contentLength: content.length
       })
 
+      const oldContent = contentRef.current
       contentRef.current = content
-      // 重置显示状态，从新内容的当前显示长度开始
-      if (content.startsWith(displayedContent)) {
-        // 新内容包含当前显示的内容，继续从当前位置打字
-        setCurrentIndex(displayedContent.length)
-      } else {
-        // 完全新的内容，重新开始
+
+      // 对于RAGFlow的全量更新，直接重新开始
+      if (content !== oldContent) {
         setDisplayedContent('')
         setCurrentIndex(0)
       }
     }
-  }, [content, displayedContent.length, currentIndex])
+  }, [content]) // 移除了 displayedContent.length 和 currentIndex 依赖
 
   useEffect(() => {
     if (currentIndex < content.length) {
@@ -426,6 +425,7 @@ interface Message {
   isStreaming?: boolean
   attachments?: FileAttachment[]
   hasError?: boolean
+  reference?: any  // RAGFlow 知识库引用
 }
 
 interface ChatSession {
@@ -463,11 +463,20 @@ interface MessageCache {
 }
 
 interface AgentConfig {
-  difyUrl: string
-  difyKey: string
+  // 通用配置
+  platform?: 'DIFY' | 'RAGFLOW'
   userId: string
   userAvatar?: string
   agentAvatar?: string
+
+  // DIFY 配置
+  difyUrl?: string
+  difyKey?: string
+
+  // RAGFlow 配置
+  baseUrl?: string
+  apiKey?: string
+  agentId?: string
 }
 
 interface EnhancedChatWithSidebarProps {
@@ -533,6 +542,7 @@ export default function EnhancedChatWithSidebar({
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const difyClientRef = useRef<EnhancedDifyClient | null>(null)
+  const ragflowClientRef = useRef<RAGFlowBlockingClient | null>(null)
 
   const currentSession = sessions.find(s => s.id === currentSessionId)
   const actualAgentAvatar = agentConfig?.agentAvatar || agentAvatar
@@ -1125,42 +1135,70 @@ export default function EnhancedChatWithSidebar({
     return attachments
   }
 
-  // 初始化 Dify 客户端
+  // 初始化客户端（支持多平台）
   useEffect(() => {
     console.log('[EnhancedChat] Agent配置检查:', {
-      hasDifyUrl: !!agentConfig?.difyUrl,
-      hasDifyKey: !!agentConfig?.difyKey,
+      platform: agentConfig?.platform,
       hasUserId: !!agentConfig?.userId,
-      difyUrl: agentConfig?.difyUrl,
       agentConfig
     })
 
-    if (agentConfig?.difyUrl && agentConfig?.difyKey && agentConfig?.userId) {
-      console.log('[EnhancedChat] 初始化 Dify 客户端')
-      difyClientRef.current = new EnhancedDifyClient({
-        baseURL: agentConfig.difyUrl,
-        apiKey: agentConfig.difyKey,
-        userId: agentConfig.userId,
-        autoGenerateName: true
-      })
-    } else {
-      console.warn('[EnhancedChat] Agent配置不完整，无法初始化 Dify 客户端')
+    // 清理之前的客户端
+    difyClientRef.current = null
+    ragflowClientRef.current = null
+
+    if (!agentConfig?.platform || !agentConfig?.userId) {
+      console.warn('[EnhancedChat] Agent配置不完整，缺少平台或用户ID')
+      return
     }
-  }, [agentConfig?.difyUrl, agentConfig?.difyKey, agentConfig?.userId])
+
+    if (agentConfig.platform === 'DIFY') {
+      if (agentConfig.difyUrl && agentConfig.difyKey) {
+        console.log('[EnhancedChat] 初始化 DIFY 客户端')
+        difyClientRef.current = new EnhancedDifyClient({
+          baseURL: agentConfig.difyUrl,
+          apiKey: agentConfig.difyKey,
+          userId: agentConfig.userId,
+          autoGenerateName: true
+        })
+      } else {
+        console.warn('[EnhancedChat] DIFY 配置不完整')
+      }
+    } else if (agentConfig.platform === 'RAGFLOW') {
+      if (agentConfig.baseUrl && agentConfig.apiKey && agentConfig.agentId) {
+        console.log('[EnhancedChat] 初始化 RAGFlow 客户端')
+        ragflowClientRef.current = new RAGFlowBlockingClient({
+          baseUrl: agentConfig.baseUrl,
+          apiKey: agentConfig.apiKey,
+          agentId: agentConfig.agentId,
+          userId: agentConfig.userId
+        })
+      } else {
+        console.warn('[EnhancedChat] RAGFlow 配置不完整')
+      }
+    }
+  }, [agentConfig?.platform, agentConfig?.difyUrl, agentConfig?.difyKey, agentConfig?.baseUrl, agentConfig?.apiKey, agentConfig?.agentId, agentConfig?.userId])
 
   // 发送消息
   const sendMessage = async () => {
     if ((!input.trim() && attachments.length === 0) || isLoading || isStreaming || !currentSession) return
 
-    if (!difyClientRef.current) {
-      console.error('[EnhancedChat] Dify 客户端未初始化')
-      toast.error('聊天服务未初始化，请检查Agent配置')
-      return
-    }
-
-    if (!agentConfig?.difyUrl || !agentConfig?.difyKey) {
-      console.error('[EnhancedChat] Agent配置缺失')
-      toast.error('Agent配置不完整，无法发送消息')
+    // 检查客户端是否初始化
+    if (agentConfig?.platform === 'DIFY') {
+      if (!difyClientRef.current) {
+        console.error('[EnhancedChat] DIFY 客户端未初始化')
+        toast.error('DIFY 聊天服务未初始化，请检查Agent配置')
+        return
+      }
+    } else if (agentConfig?.platform === 'RAGFLOW') {
+      if (!ragflowClientRef.current) {
+        console.error('[EnhancedChat] RAGFlow 客户端未初始化')
+        toast.error('RAGFlow 聊天服务未初始化，请检查Agent配置')
+        return
+      }
+    } else {
+      console.error('[EnhancedChat] 未知的平台类型:', agentConfig?.platform)
+      toast.error('不支持的Agent平台类型')
       return
     }
 
@@ -1202,9 +1240,43 @@ export default function EnhancedChatWithSidebar({
       let fullContent = ''
       let conversationId = currentSession.conversationId || currentSession.difyConversationId
 
-      if (conversationId) {
-        difyClientRef.current.setConversationId(conversationId)
+      // 根据平台发送消息
+      if (agentConfig?.platform === 'DIFY') {
+        await sendDifyMessage(messageContent, conversationId || '', assistantMessage, fullContent)
+      } else if (agentConfig?.platform === 'RAGFLOW') {
+        await sendRAGFlowMessage(messageContent, conversationId || '', assistantMessage, fullContent)
       }
+    } catch (error) {
+      console.error('发送消息失败:', error)
+      // 错误处理逻辑...
+      setSessions(prev => prev.map(session =>
+        session.id === currentSessionId
+          ? {
+              ...session,
+              messages: session.messages.map(msg =>
+                msg.id === assistantMessage.id
+                  ? {
+                      ...msg,
+                      content: '发送失败，请重试',
+                      isStreaming: false,
+                      hasError: true
+                    }
+                  : msg
+              )
+            }
+          : session
+      ))
+    } finally {
+      setIsLoading(false)
+      setIsStreaming(false)
+    }
+  }
+
+  // DIFY 消息发送
+  const sendDifyMessage = async (messageContent: string, conversationId: string, assistantMessage: Message, fullContent: string) => {
+    if (conversationId && difyClientRef.current) {
+      difyClientRef.current.setConversationId(conversationId)
+    }
 
       // 准备文件附件（DIFY格式）
       const difyFiles = attachments.map(attachment => {
@@ -1245,7 +1317,7 @@ export default function EnhancedChatWithSidebar({
         return null
       }).filter(Boolean)
 
-      await difyClientRef.current.sendMessage(
+      await difyClientRef.current!.sendMessage(
         messageContent,
         (message: DifyStreamMessage) => {
           console.log('[EnhancedChat] 收到流式消息:', message)
@@ -1461,8 +1533,146 @@ export default function EnhancedChatWithSidebar({
         },
         undefined, // onComplete
         difyFiles // 传递文件参数
-      )
+      );
+  }
 
+  // RAGFlow 消息发送
+  const sendRAGFlowMessage = async (messageContent: string, conversationId: string, assistantMessage: Message, initialFullContent: string) => {
+    if (!ragflowClientRef.current) {
+      throw new Error('RAGFlow 客户端未初始化')
+    }
+
+    let fullContent = initialFullContent // 使用本地变量
+
+    try {
+      // RAGFlow 不需要文件附件处理，直接发送消息
+      await ragflowClientRef.current.sendMessage(
+        messageContent,
+        (message: RAGFlowMessage) => {
+          console.log('[EnhancedChat] 收到RAGFlow流式消息:', {
+            type: message.type,
+            content: message.content,
+            contentType: typeof message.content,
+            contentLength: message.content ? String(message.content).length : 0,
+            hasReference: !!message.reference,
+            conversationId: message.conversationId,
+            messageId: message.messageId
+          })
+
+          switch (message.type) {
+            case 'content':
+              // 累积流式内容 - 确保内容是字符串
+              let contentToAdd = ''
+              if (typeof message.content === 'string') {
+                contentToAdd = message.content
+              } else if (message.content) {
+                // 如果不是字符串，尝试转换
+                contentToAdd = String(message.content)
+              }
+
+              console.log('[EnhancedChat] 处理后的内容:', contentToAdd)
+
+              if (contentToAdd && contentToAdd.length > 0) {
+                fullContent = contentToAdd  // RAGFlow 返回完整内容，不需要累积
+              }
+
+              console.log('[EnhancedChat] 更新消息内容:', fullContent)
+
+              // 实时更新消息内容，清除thinking状态
+              setSessions(prev => prev.map(session =>
+                session.id === currentSessionId
+                  ? {
+                      ...session,
+                      messages: session.messages.map(msg =>
+                        msg.id === assistantMessage.id
+                          ? {
+                              ...msg,
+                              content: fullContent,
+                              isStreaming: true,
+                              isThinking: false, // 清除thinking状态
+                              reference: message.reference
+                            }
+                          : msg
+                      )
+                    }
+                  : session
+              ));
+              break;
+
+            case 'thinking':
+              // 显示思考状态 - 设置为空内容以显示动画
+              setSessions(prev => prev.map(session =>
+                session.id === currentSessionId
+                  ? {
+                      ...session,
+                      messages: session.messages.map(msg =>
+                        msg.id === assistantMessage.id
+                          ? { ...msg, content: '', isStreaming: true, isThinking: true }
+                          : msg
+                      )
+                    }
+                  : session
+              ));
+              break;
+
+            // 移除 reference case，因为新的 blocking 模式不单独发送 reference
+
+            case 'complete':
+              // 消息完成 - 确保内容是字符串
+              const finalContent = message.content
+                ? (typeof message.content === 'string' ? message.content : String(message.content))
+                : fullContent
+
+              setSessions(prev => prev.map(session =>
+                session.id === currentSessionId
+                  ? {
+                      ...session,
+                      messages: session.messages.map(msg =>
+                        msg.id === assistantMessage.id
+                          ? {
+                              ...msg,
+                              content: finalContent,
+                              isStreaming: false,
+                              reference: message.reference
+                            }
+                          : msg
+                      )
+                    }
+                  : session
+              ));
+              setIsStreaming(false);
+              break;
+
+            case 'error':
+              const errorContent = typeof message.content === 'string'
+                ? message.content
+                : (message.content ? String(message.content) : 'RAGFlow 处理错误')
+              throw new Error(errorContent);
+
+            default:
+              console.log('[EnhancedChat] 未处理的RAGFlow消息类型:', message.type, message);
+          }
+        },
+        () => {
+          console.log('[EnhancedChat] RAGFlow 消息处理完成')
+        },
+        (error: string) => {
+          console.error('RAGFlow 客户端错误:', error)
+          // 显示错误消息
+          setSessions(prev => prev.map(session =>
+            session.id === currentSessionId
+              ? {
+                  ...session,
+                  messages: session.messages.map(msg =>
+                    msg.id === assistantMessage.id
+                      ? { ...msg, content: `错误: ${error}`, isStreaming: false }
+                      : msg
+                  )
+                }
+              : session
+          ))
+        }
+      );
     } catch (error) {
       console.error('发送消息失败:', error)
 
@@ -2134,11 +2344,11 @@ export default function EnhancedChatWithSidebar({
             <Avatar className="w-12 h-12 ring-2 ring-blue-500/30">
               <AvatarImage src={actualAgentAvatar} />
               <AvatarFallback className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-lg font-semibold">
-                {agentName[0]}
+                {agentName?.[0] || 'A'}
               </AvatarFallback>
             </Avatar>
             <div>
-              <h3 className="font-semibold text-white">{agentName}</h3>
+              <h3 className="font-semibold text-white">{agentName || 'AI助手'}</h3>
               <p className="text-sm text-blue-200/70">
                 {currentSession?.title || '新对话'}
               </p>
@@ -2172,10 +2382,18 @@ export default function EnhancedChatWithSidebar({
                         : 'bg-white/95 text-gray-800 border border-gray-200 shadow-sm'
                     }`} style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                       {message.isStreaming ? (
-                        message.content ? (
-                          <TypewriterEffect content={String(message.content)} speed={20} />
-                        ) : (
+                        (message as any).isThinking || !message.content ? (
                           <TypingIndicator />
+                        ) : (
+                          <>
+                            {console.log('[Render] 渲染流式消息:', {
+                              messageId: message.id,
+                              contentType: typeof message.content,
+                              content: message.content,
+                              stringContent: String(message.content)
+                            })}
+                            <TypewriterEffect content={String(message.content)} speed={20} />
+                          </>
                         )
                       ) : (
                         <EnhancedMessageContent content={String(message.content || '')} />

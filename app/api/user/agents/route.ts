@@ -197,17 +197,17 @@ export const GET = withAuth(async (request) => {
     }, { headers: corsHeaders })
 
   } catch (error) {
-    console.error('获取用户Agent列表失败:', error)
+    const err = error as any
+    console.error('获取用户Agent列表失败:', err?.message || err, err?.stack)
     return NextResponse.json(
       {
         error: {
           code: 'INTERNAL_ERROR',
-          message: '获取Agent列表失败'
+          message: '获取Agent列表失败',
+          detail: err?.message || String(err)
         }
       },
       { status: 500, headers: corsHeaders }
     )
-  } finally {
-    await prisma.$disconnect()
   }
 })

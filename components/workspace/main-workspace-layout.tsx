@@ -187,6 +187,18 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
           if (data.data.agents && data.data.agents.length > 0) {
             console.log('[MainWorkspace] 检测到最新Agent数据，建议刷新页面获取最新配置')
           }
+        } else {
+          let detail: any = null
+          try {
+            detail = await response.json()
+          } catch {
+            detail = await response.text()
+          }
+          console.error('[MainWorkspace] 获取 /api/user/agents 失败', {
+            status: response.status,
+            statusText: response.statusText,
+            detail
+          })
         }
       } catch (error) {
         console.error('获取部门数据失败:', error)
@@ -289,12 +301,16 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
   }
 
   const nextAgent = () => {
-    setSelectedIndex(prev => (prev + 1) % cardCount)
+    const newIndex = (selectedIndex + 1) % cardCount
+    setSelectedIndex(newIndex)
+    setCurrentRotation(-newIndex * angle)
     handleUserInteraction()
   }
 
   const prevAgent = () => {
-    setSelectedIndex(prev => (prev - 1 + cardCount) % cardCount)
+    const newIndex = (selectedIndex - 1 + cardCount) % cardCount
+    setSelectedIndex(newIndex)
+    setCurrentRotation(-newIndex * angle)
     handleUserInteraction()
   }
 
@@ -310,31 +326,60 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
       platformConfig: agent.platformConfig
     })
 
-    // 提取配置信息
-    let difyUrl = agent.difyUrl
-    let difyKey = agent.difyKey
+    // 根据平台提取配置信息
+    let agentConfig: any = {}
 
-    // 如果没有直接的difyUrl和difyKey，尝试从platformConfig中提取
-    if ((!difyUrl || !difyKey) && agent.platformConfig) {
-      console.log('从platformConfig提取配置:', agent.platformConfig)
-      difyUrl = agent.platformConfig.baseUrl || difyUrl
-      difyKey = agent.platformConfig.apiKey || difyKey
-    }
+    if (agent.platform === 'DIFY') {
+      // DIFY 平台配置
+      let difyUrl = agent.difyUrl
+      let difyKey = agent.difyKey
 
-    console.log('提取后的配置:', { difyUrl, difyKey: difyKey ? '***' : undefined })
+      // 如果没有直接的difyUrl和difyKey，尝试从platformConfig中提取
+      if ((!difyUrl || !difyKey) && agent.platformConfig) {
+        console.log('从platformConfig提取DIFY配置:', agent.platformConfig)
+        difyUrl = agent.platformConfig.baseUrl || difyUrl
+        difyKey = agent.platformConfig.apiKey || difyKey
+      }
 
-    // 检查必要的配置
-    if (!difyUrl || !difyKey) {
-      console.error('Agent配置不完整:', { difyUrl: !!difyUrl, difyKey: !!difyKey })
-      alert('该智能体配置不完整，请联系管理员')
+      if (!difyUrl || !difyKey) {
+        console.error('DIFY Agent配置不完整:', { difyUrl: !!difyUrl, difyKey: !!difyKey })
+        alert('该DIFY智能体配置不完整，请联系管理员')
+        return
+      }
+
+      agentConfig = {
+        platform: 'DIFY',
+        difyUrl,
+        difyKey,
+        userId: user.user_id || user.id || 'user-123'
+      }
+    } else if (agent.platform === 'RAGFLOW') {
+      // RAGFlow 平台配置
+      if (!agent.platformConfig?.baseUrl || !agent.platformConfig?.apiKey || !agent.platformConfig?.agentId) {
+        console.error('RAGFlow Agent配置不完整:', agent.platformConfig)
+        alert('该RAGFlow智能体配置不完整，请联系管理员')
+        return
+      }
+
+      agentConfig = {
+        platform: 'RAGFLOW',
+        baseUrl: agent.platformConfig.baseUrl,
+        apiKey: agent.platformConfig.apiKey,
+        agentId: agent.platformConfig.agentId,
+        userId: user.user_id || user.id || 'user-123'
+      }
+    } else {
+      console.error('不支持的平台类型:', agent.platform)
+      alert('不支持的智能体平台类型')
       return
     }
+
+    console.log('提取后的配置:', { platform: agent.platform, config: agentConfig })
 
     // 更新Agent对象，确保包含正确的配置
     const updatedAgent = {
       ...agent,
-      difyUrl,
-      difyKey
+      agentConfig
     }
 
     setSelectedAgent(updatedAgent)
@@ -695,7 +740,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
 
               {/* 3D旋转容器 - 响应式尺寸 */}
               <div
-                className="relative w-[200px] h-[300px] sm:w-[240px] sm:h-[360px] md:w-[260px] md:h-[400px] lg:w-[280px] lg:h-[420px] transition-transform duration-[800ms] ease-[cubic-bezier(0.77,0,0.175,1)]"
+                className="relative w-[200px] h-[300px] sm:w-[240px] sm:h-[360px] md:w-[260px] md:h-[400px] lg:w-[280px] lg:h-[420px] transition-transform duration-[600ms] ease-[cubic-bezier(0.25,0.46,0.45,0.94)]"
                 style={{
                   transformStyle: 'preserve-3d',
                   transform: `rotateY(${currentRotation}deg)`
@@ -879,18 +924,19 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
 
                 {/* 操作按钮区域 - 固定在底部 */}
                 <div className="p-6 border-t border-[#2d2d2d] space-y-4">
-                  {/* 状态按钮 */}
+                  {/* 进入聊天按钮 */}
                   <Button
+                    onClick={() => handleStartChat(realAgents[selectedIndex])}
                     disabled={!realAgents[selectedIndex].isOnline}
                     className={`w-full py-3 rounded-lg font-medium transition-all duration-300 ${
                       realAgents[selectedIndex].isOnline
-                        ? 'bg-green-600 hover:bg-green-700 text-white'
+                        ? 'bg-gradient-to-r from-[#6a5acd] to-[#8a2be2] hover:from-[#7b68ee] hover:to-[#9370db] text-white shadow-lg shadow-[#6a5acd]/30 hover:shadow-[#6a5acd]/50 transform hover:scale-[1.02]'
                         : 'bg-[#3c4043] text-[#9aa0a6] cursor-not-allowed'
                     }`}
                   >
                     <div className="flex items-center justify-center">
-                      <div className={`w-2 h-2 rounded-full mr-2 ${realAgents[selectedIndex].isOnline ? 'bg-green-300' : 'bg-gray-500'}`} />
-                      {realAgents[selectedIndex].isOnline ? '在线状态' : '离线状态'}
+                      <MessageCircle className="w-4 h-4 mr-2" />
+                      {realAgents[selectedIndex].isOnline ? '进入聊天' : '离线状态'}
                     </div>
                   </Button>
 
@@ -919,20 +965,6 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                   >
                     <History className="w-4 h-4 mr-2" />
                     交互历史
-                  </Button>
-
-                  {/* 开始聊天按钮 - 最突出 */}
-                  <Button
-                    onClick={() => handleStartChat(realAgents[selectedIndex])}
-                    disabled={!realAgents[selectedIndex].isOnline}
-                    className={`w-full py-4 rounded-lg font-semibold text-base transition-all duration-300 ${
-                      realAgents[selectedIndex].isOnline
-                        ? 'bg-gradient-to-r from-[#6a5acd] to-[#8a2be2] hover:from-[#7b68ee] hover:to-[#9370db] text-white shadow-lg shadow-[#6a5acd]/30 hover:shadow-[#6a5acd]/50 transform hover:scale-[1.02]'
-                        : 'bg-[#3c4043] text-[#9aa0a6] cursor-not-allowed'
-                    }`}
-                  >
-                    <MessageCircle className="w-5 h-5 mr-2" />
-                    开始对话
                   </Button>
                 </div>
               </div>
@@ -1036,17 +1068,11 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
       {showChat && selectedAgent && (
         <div className="fixed inset-0 z-50 bg-black">
           <EnhancedChatWithSidebar
-            agentName={selectedAgent.chineseName}
+            agentConfig={selectedAgent.agentConfig}
+            agentName={selectedAgent.chineseName || selectedAgent.englishName}
             agentAvatar={selectedAgent.avatarUrl}
+            userAvatar={user.avatar_url}
             onBack={handleBackToMain}
-            sessionTitle={`与${selectedAgent.chineseName}的对话`}
-            agentConfig={{
-              difyUrl: selectedAgent.difyUrl,
-              difyKey: selectedAgent.difyKey,
-              userId: user.id,
-              userAvatar: user.avatar_url,  // 传递用户头像
-              agentAvatar: selectedAgent.avatarUrl  // 传递Agent头像
-            }}
           />
         </div>
       )}

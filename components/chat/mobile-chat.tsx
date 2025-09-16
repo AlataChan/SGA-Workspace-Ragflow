@@ -24,6 +24,7 @@ import {
 import { cn } from "@/lib/utils"
 import { formatDistanceToNow } from "date-fns"
 import { zhCN } from "date-fns/locale"
+import RAGFlowMessageRenderer from "./ragflow-message-renderer"
 
 interface Message {
   id: string
@@ -244,9 +245,26 @@ export default function MobileChat({
                       : "bg-white dark:bg-gray-800 border shadow-sm"
                   )}
                 >
-                  <p className="text-sm whitespace-pre-wrap break-words">
-                    {message.content}
-                  </p>
+                  {/* 根据 agent 平台类型选择渲染器 */}
+                  {message.role === "assistant" && agent.platform === "RAGFLOW" ? (
+                    <RAGFlowMessageRenderer
+                      message={{
+                        content: message.content,
+                        reference: (message as any).reference,
+                        prompt: (message as any).prompt,
+                        created_at: (message as any).created_at,
+                        id: message.id,
+                        session_id: (message as any).session_id
+                      }}
+                      isStreaming={message.status === "sending"}
+                      hasError={message.status === "error"}
+                      className="text-sm"
+                    />
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap break-words">
+                      {message.content}
+                    </p>
+                  )}
                   
                   <div className={cn(
                     "flex items-center justify-between mt-1 text-xs",

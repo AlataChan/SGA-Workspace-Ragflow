@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+
 import {
   Select,
   SelectContent,
@@ -134,7 +135,11 @@ const platformOptions = [
 // 默认平台配置
 const defaultPlatformConfigs = {
   DIFY: { baseUrl: 'https://api.dify.ai/v1', apiKey: '', timeout: 30000 },
-  RAGFLOW: { baseUrl: 'https://api.ragflow.io/v1', apiKey: '', knowledgeBaseId: '' },
+  RAGFLOW: {
+    baseUrl: 'https://api.ragflow.io/v1',
+    apiKey: '',
+    agentId: '',
+  },
   HIAGENT: { baseUrl: 'https://api.hiagent.com/v1', apiKey: '', agentId: '' },
   OPENAI: { apiKey: '', model: 'gpt-3.5-turbo', baseUrl: 'https://api.openai.com/v1' },
   CLAUDE: { apiKey: '', model: 'claude-3-sonnet-20240229' },
@@ -1181,6 +1186,53 @@ export default function AgentsPage() {
                   </div>
                 )}
 
+                {formData.platform === 'RAGFLOW' && (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label className="text-white">RAGFlow 服务地址</Label>
+                      <Input
+                        placeholder="http://your-ragflow-server:port"
+                        value={formData.platformConfig.baseUrl || ''}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          platformConfig: { ...prev.platformConfig, baseUrl: e.target.value }
+                        }))}
+                        className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-white">API Key</Label>
+                      <Input
+                        type="password"
+                        placeholder="ragflow-xxxxxxxxxxxxxxxx"
+                        value={formData.platformConfig.apiKey || ''}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          platformConfig: { ...prev.platformConfig, apiKey: e.target.value }
+                        }))}
+                        className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-white">Agent ID 或 Chat ID</Label>
+                      <Input
+                        placeholder="请输入 RAGFlow 中的 Agent ID 或 Chat ID"
+                        value={formData.platformConfig.agentId || ''}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          platformConfig: { ...prev.platformConfig, agentId: e.target.value }
+                        }))}
+                        className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+                      />
+                    </div>
+                    <ConnectionTest
+                      platform={formData.platform}
+                      config={formData.platformConfig}
+                      onTestResult={handleConnectionTestResult}
+                    />
+                  </div>
+                )}
+
                 {formData.platform === 'OPENAI' && (
                   <div className="space-y-3">
                     <div className="space-y-2">
@@ -1471,6 +1523,53 @@ export default function AgentsPage() {
                           onChange={(e) => setFormData(prev => ({
                             ...prev,
                             platformConfig: { ...prev.platformConfig, apiKey: e.target.value }
+                          }))}
+                          className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+                        />
+                      </div>
+                      <ConnectionTest
+                        platform={formData.platform}
+                        config={formData.platformConfig}
+                        onTestResult={handleConnectionTestResult}
+                      />
+                    </div>
+                  )}
+
+                  {formData.platform === 'RAGFLOW' && (
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label className="text-white">RAGFlow 服务地址</Label>
+                        <Input
+                          placeholder="http://your-ragflow-server:port"
+                          value={formData.platformConfig.baseUrl || ''}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            platformConfig: { ...prev.platformConfig, baseUrl: e.target.value }
+                          }))}
+                          className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-white">API Key</Label>
+                        <Input
+                          type="password"
+                          placeholder="ragflow-xxxxxxxxxxxxxxxx"
+                          value={formData.platformConfig.apiKey || ''}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            platformConfig: { ...prev.platformConfig, apiKey: e.target.value }
+                          }))}
+                          className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-white">Agent ID 或 Chat ID</Label>
+                        <Input
+                          placeholder="请输入 RAGFlow 中的 Agent ID 或 Chat ID"
+                          value={formData.platformConfig.agentId || ''}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            platformConfig: { ...prev.platformConfig, agentId: e.target.value }
                           }))}
                           className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                         />

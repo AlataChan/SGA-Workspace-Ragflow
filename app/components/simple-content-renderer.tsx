@@ -105,11 +105,20 @@ export default function SimpleContentRenderer({
     marked.setOptions({ renderer })
   }, [])
 
-  // 强化打字机效果 - 确保总是有打字效果
+  // 强化打字机效果 - 在内容变化时重新开始且避免闭包导致的无限循环
   useEffect(() => {
-    if (content !== displayedContent) {
-      // 无论是否流式，都启动打字机效果
-      startTypewriterEffect()
+    // 重置并启动
+    if (typewriterTimerRef.current) {
+      clearTimeout(typewriterTimerRef.current)
+    }
+    setDisplayedContent('')
+    // 立即开始打字
+    startTypewriterEffect()
+
+    return () => {
+      if (typewriterTimerRef.current) {
+        clearTimeout(typewriterTimerRef.current)
+      }
     }
   }, [content])
 
@@ -122,29 +131,55 @@ export default function SimpleContentRenderer({
     }
   }, [])
 
+  const indexRef = useRef(0)
+
   const startTypewriterEffect = () => {
     if (typewriterTimerRef.current) {
       clearTimeout(typewriterTimerRef.current)
     }
 
-    if (displayedContent.length < content.length) {
-      const nextChar = content.charAt(displayedContent.length)
-      setDisplayedContent(prev => prev + nextChar)
+    const tick = () => {
+      setDisplayedContent(prev => {
+        // 结束条件：索引达到内容长度
+        if (indexRef.current >= content.length) {
+          onComplete?.()
+          return prev
+        }
 
-      // 根据字符类型调整速度 - 更快的打字效果
-      const delay = nextChar === ' ' ? 5 : nextChar === '\n' ? 15 : 20
+        const nextChar = content.charAt(indexRef.current)
+        indexRef.current += 1
 
-      typewriterTimerRef.current = setTimeout(startTypewriterEffect, delay)
-    } else {
-      onComplete?.()
+        // 计划下一次渲染
+        const delay = nextChar === ' ' ? 5 : nextChar === '\n' ? 15 : 20
+        typewriterTimerRef.current = setTimeout(tick, delay)
+
+        return prev + nextChar
+      })
     }
+
+    // 每次启动都重置索引并从头开始
+    indexRef.current = displayedContent.length
+    tick()
   }
 
   // 渲染内容
   const renderContent = () => {
+    console.log('[SimpleContentRenderer] 渲染内容:', {
+      displayedContent,
+      contentType: typeof displayedContent,
+      contentLength: displayedContent?.length || 0
+    })
+
     try {
-      const htmlContent = marked.parse(displayedContent)
-      return htmlContent
+      // 使用同步版本的 marked（明确指定 async: false，避免返回 Promise 或对象）
+      const htmlContent = marked.parse(displayedContent, { async: false }) as string
+
+      // 确保返回字符串
+      if (typeof htmlContent === 'string') {
+        return htmlContent
+      }
+      // 降级：若仍非字符串，按纯文本处理
+      return displayedContent.replace(/\n/g, '<br>')
     } catch (error) {
       console.error('Markdown渲染失败:', error)
       return displayedContent.replace(/\n/g, '<br>')

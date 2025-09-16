@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     let knowledgeGraphs
 
     // 管理员可以看到所有活跃的知识图谱
-    if (user.role === 'admin') {
+    if (user.role === 'ADMIN') {
       knowledgeGraphs = await prisma.knowledgeGraph.findMany({
         where: {
           companyId: user.companyId,
