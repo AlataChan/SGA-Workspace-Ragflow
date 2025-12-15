@@ -22,7 +22,8 @@ RUN npm ci --only=production && npm cache clean --force
 # 开发依赖安装阶段
 # ===========================================
 FROM base AS dev-deps
-RUN npm ci
+# 使用 --frozen-lockfile 确保使用锁定的版本
+RUN npm ci --frozen-lockfile || npm ci
 
 # ===========================================
 # 构建阶段
@@ -70,15 +71,20 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# 复制Prisma相关文件
+# 复制Prisma相关文件和依赖
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.bin ./node_modules/.bin
+# Prisma CLI 依赖
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/jiti ./node_modules/jiti
 
 # 复制脚本文件
 COPY --chown=nextjs:nodejs scripts/ ./scripts/
 COPY --chown=nextjs:nodejs docker/entrypoint.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh && \
+    dos2unix ./entrypoint.sh 2>/dev/null || sed -i 's/\r$//' ./entrypoint.sh
 
 # 切换到非root用户
 USER nextjs
