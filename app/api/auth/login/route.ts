@@ -14,7 +14,7 @@ import { z } from "zod"
 const loginSchema = z.object({
   identifier: z.string().min(1, "用户标识不能为空").max(50, "用户标识过长"),
   password: z.string().min(1, "密码不能为空").max(100, "密码过长"),
-  type: z.enum(['phone', 'user_id', 'username', 'email'], { required_error: "登录类型必须指定" }),
+  type: z.enum(['username', 'phone'], { required_error: "登录类型必须指定" }),
   rememberMe: z.boolean().default(false),
 })
 
@@ -40,22 +40,16 @@ export async function POST(request: NextRequest) {
 
     const { identifier, password, type, rememberMe } = validationResult.data
 
-    // 根据登录类型查找用户
+    // 查找用户: 支持用户名或手机号
+    // 注意：不再支持使用 userId 登录
     let whereClause
     switch (type) {
       case 'phone':
         whereClause = { phone: identifier }
         break
-      case 'user_id':
-        whereClause = { userId: identifier }
-        break
       case 'username':
-        whereClause = { username: identifier }
-        break
-      case 'email':
-        whereClause = { email: identifier }
-        break
       default:
+        // 如果是 username 类型，查找 username 字段
         whereClause = { username: identifier }
     }
 
@@ -78,9 +72,7 @@ export async function POST(request: NextRequest) {
     if (!user) {
       const errorMessages = {
         phone: '手机号不存在或已被禁用',
-        user_id: '用户ID不存在或已被禁用',
         username: '用户名不存在或已被禁用',
-        email: '邮箱不存在或已被禁用'
       }
 
       return NextResponse.json(

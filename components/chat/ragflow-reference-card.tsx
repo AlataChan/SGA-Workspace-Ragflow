@@ -4,10 +4,10 @@ import React, { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { 
-  FileText, 
-  ExternalLink, 
-  ChevronDown, 
+import {
+  FileText,
+  ExternalLink,
+  ChevronDown,
   ChevronUp,
   Database,
   Target
@@ -25,6 +25,8 @@ interface RAGFlowChunk {
   term_similarity: number
   url?: string
   positions?: number[][]
+  img_id?: string
+  image_id?: string
 }
 
 interface RAGFlowDocAgg {
@@ -42,11 +44,13 @@ interface RAGFlowReference {
 interface RAGFlowReferenceCardProps {
   reference: RAGFlowReference
   className?: string
+  agentId?: string
 }
 
-export default function RAGFlowReferenceCard({ 
-  reference, 
-  className 
+export default function RAGFlowReferenceCard({
+  reference,
+  className,
+  agentId
 }: RAGFlowReferenceCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [expandedChunks, setExpandedChunks] = useState<Set<string>>(new Set())
@@ -117,9 +121,9 @@ export default function RAGFlowReferenceCard({
             </div>
             <div className="flex flex-wrap gap-1">
               {docAggs.map((doc) => (
-                <Badge 
-                  key={doc.doc_id} 
-                  variant="outline" 
+                <Badge
+                  key={doc.doc_id}
+                  variant="outline"
                   className="text-xs"
                 >
                   <FileText className="w-3 h-3 mr-1" />
@@ -134,9 +138,9 @@ export default function RAGFlowReferenceCard({
         <div className="space-y-2">
           {chunks.slice(0, isExpanded ? chunks.length : 2).map((chunk) => {
             const isChunkExpanded = expandedChunks.has(chunk.id)
-            
+
             return (
-              <div 
+              <div
                 key={chunk.id}
                 className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800/50"
               >
@@ -149,7 +153,7 @@ export default function RAGFlowReferenceCard({
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <Target className="w-3 h-3 text-gray-400" />
-                    <div 
+                    <div
                       className={cn(
                         "w-2 h-2 rounded-full",
                         getSimilarityColor(chunk.similarity)
@@ -164,6 +168,20 @@ export default function RAGFlowReferenceCard({
 
                 <div className="text-sm text-gray-700 dark:text-gray-300 mb-2">
                   {isChunkExpanded ? chunk.content : truncateContent(chunk.content)}
+
+                  {/* 显示引用截图 */}
+                  {(chunk.img_id || chunk.image_id) && agentId && isChunkExpanded && (
+                    <div className="mt-2">
+                      <img
+                        src={`/api/ragflow/image/${chunk.img_id || chunk.image_id}?agent_id=${agentId}`}
+                        alt="Reference Screenshot"
+                        className="max-w-full h-auto rounded border border-gray-200 dark:border-gray-700"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -171,9 +189,9 @@ export default function RAGFlowReferenceCard({
                     <span>向量: {(chunk.vector_similarity * 100).toFixed(1)}%</span>
                     <span>词汇: {(chunk.term_similarity * 100).toFixed(1)}%</span>
                   </div>
-                  
+
                   <div className="flex items-center gap-1">
-                    {chunk.content.length > 150 && (
+                    {(chunk.content.length > 150 || chunk.img_id || chunk.image_id) && (
                       <Button
                         variant="ghost"
                         size="sm"

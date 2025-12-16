@@ -37,6 +37,7 @@ interface RAGFlowMessageRendererProps {
   hasError?: boolean
   onRetry?: () => void
   className?: string
+  agentId?: string
 }
 
 export default function RAGFlowMessageRenderer({
@@ -44,7 +45,8 @@ export default function RAGFlowMessageRenderer({
   isStreaming = false,
   hasError = false,
   onRetry,
-  className
+  className,
+  agentId
 }: RAGFlowMessageRendererProps) {
   const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({})
 
@@ -122,8 +124,8 @@ export default function RAGFlowMessageRenderer({
   )
 
   // 检查是否包含知识库引用标记
-  const hasKnowledgeReference = message.reference && 
-    message.reference.chunks && 
+  const hasKnowledgeReference = message.reference &&
+    message.reference.chunks &&
     Object.keys(message.reference.chunks).length > 0
 
   return (
@@ -208,7 +210,7 @@ export default function RAGFlowMessageRenderer({
 
       {/* 知识库引用卡片 */}
       {hasKnowledgeReference && (
-        <RAGFlowReferenceCard reference={message.reference} />
+        <RAGFlowReferenceCard reference={message.reference} agentId={agentId} />
       )}
 
       {/* 调试信息 (开发环境) */}

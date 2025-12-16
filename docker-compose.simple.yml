@@ -1,0 +1,101 @@
+# 🐳 简化版 Docker Compose - 自动网络分配
+# 如果遇到网络冲突，使用此配置文件
+
+services:
+  # Nginx 网关
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8100:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - ./public/uploads:/var/www/uploads:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  # Next.js 应用
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - NODE_ENV=development
+      - NEXT_TELEMETRY_DISABLED=1
+      - NEXT_PUBLIC_APP_URL=http://localhost:8100
+      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-change-this}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-your-encryption-key-32chars}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-sga_user}:${POSTGRES_PASSWORD:-sga_password}@postgres:5432/${POSTGRES_DB:-sga_workspace}
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
+      - ./public/uploads:/app/public/uploads
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-sga_workspace}
+      - POSTGRES_USER=${POSTGRES_USER:-sga_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-sga_password}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sga_user} -d ${POSTGRES_DB:-sga_workspace}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    command: >
+      sh -c "
+        if [ -n \"${REDIS_PASSWORD}\" ]; then
+          redis-server --requirepass ${REDIS_PASSWORD}
+        else
+          redis-server
+        fi
+      "
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: >
+        sh -c "
+        if [ -n \"${REDIS_PASSWORD}\" ]; then
+          redis-cli -a ${REDIS_PASSWORD} ping | grep PONG
+        else
+          redis-cli ping | grep PONG
+        fi
+        "
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# 使用默认网络，让 Docker 自动分配 IP
+# 不指定 networks，Docker 会自动创建并避免冲突
+

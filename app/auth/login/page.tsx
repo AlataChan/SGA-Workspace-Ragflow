@@ -13,18 +13,18 @@ import { Loader2, AlertCircle, Eye, EyeOff } from "lucide-react"
 import { logger } from "@/lib/utils/simple-logger"
 
 interface LoginFormData {
-  identifier: string  // 手机号或UserID
+  identifier: string  // 用户名或手机号
   password: string
-  type: 'phone' | 'user_id'
+  type: 'username' | 'phone' // Removed user_id
   rememberMe: boolean
 }
 
 // 内部组件，使用 useSearchParams
 function LoginForm() {
   const [formData, setFormData] = useState<LoginFormData>({
-    identifier: "admin", // 预填充管理员账号
+    identifier: "admin", // 预填充管理员账号(用户名)
     password: "",
-    type: 'user_id',
+    type: 'username',
     rememberMe: false
   })
   const [isLoading, setIsLoading] = useState(false)
@@ -45,9 +45,9 @@ function LoginForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (isLoading) return
-    
+
     setIsLoading(true)
     setError(null)
 
@@ -104,7 +104,17 @@ function LoginForm() {
   }
 
   const handleInputChange = (field: keyof LoginFormData, value: string | boolean) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
+    setFormData(prev => {
+      const updates: any = { [field]: value }
+
+      // 自动检测手机号格式
+      if (field === 'identifier' && typeof value === 'string') {
+        const isPhone = /^1[3-9]\d{9}$/.test(value)
+        updates.type = isPhone ? 'phone' : 'username'
+      }
+
+      return { ...prev, ...updates }
+    })
     if (error) setError(null) // 清除错误信息
   }
 
@@ -144,7 +154,7 @@ function LoginForm() {
             登录您的账户以开始使用
           </CardDescription>
         </CardHeader>
-        
+
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* 成功消息 */}
@@ -162,48 +172,18 @@ function LoginForm() {
               </Alert>
             )}
 
-            {/* 登录类型切换 */}
-            <div className="space-y-3">
-              <Label className="text-blue-200">登录方式</Label>
-              <div className="flex space-x-2">
-                <Button
-                  type="button"
-                  variant={formData.type === 'user_id' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => handleInputChange('type', 'user_id')}
-                  disabled={isLoading}
-                  className={formData.type === 'user_id'
-                    ? 'bg-blue-600 hover:bg-blue-500 text-white'
-                    : 'border-blue-500/30 text-blue-200 hover:bg-blue-500/10'
-                  }
-                >
-                  用户ID
-                </Button>
-                <Button
-                  type="button"
-                  variant={formData.type === 'phone' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => handleInputChange('type', 'phone')}
-                  disabled={isLoading}
-                  className={formData.type === 'phone'
-                    ? 'bg-blue-600 hover:bg-blue-500 text-white'
-                    : 'border-blue-500/30 text-blue-200 hover:bg-blue-500/10'
-                  }
-                >
-                  手机号
-                </Button>
-              </div>
-            </div>
+            {/* 登录类型 - 简化为默认用户名/手机号混用，或者只保留用户名 */}
+            {/* 以前的切换按钮已移除，现在默认支持用户名登录 */}
 
             {/* 用户标识输入 */}
             <div className="space-y-2">
               <Label htmlFor="identifier" className="text-blue-200">
-                {formData.type === 'phone' ? '手机号' : '用户ID'}
+                用户名 / 手机号
               </Label>
               <Input
                 id="identifier"
-                type={formData.type === 'phone' ? 'tel' : 'text'}
-                placeholder={formData.type === 'phone' ? '请输入手机号' : '请输入用户ID'}
+                type="text"
+                placeholder="请输入用户名或手机号"
                 value={formData.identifier}
                 onChange={(e) => handleInputChange("identifier", e.target.value)}
                 disabled={isLoading}

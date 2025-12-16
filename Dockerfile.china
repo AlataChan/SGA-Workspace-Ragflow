@@ -1,0 +1,97 @@
+# ===========================================
+# 🐳 企业AI工作空间 - 多阶段Docker构建（国内优化版）
+# ===========================================
+
+# 基础镜像 - 使用阿里云镜像
+FROM registry.cn-hangzhou.aliyuncs.com/google_containers/node:20-alpine AS base
+
+# 配置 Alpine 国内镜像源
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+
+# 安装系统依赖
+RUN apk add --no-cache libc6-compat curl
+WORKDIR /app
+
+# 复制package文件
+COPY package.json package-lock.json* ./
+
+# ===========================================
+# 依赖安装阶段
+# ===========================================
+FROM base AS deps
+
+# 配置 npm 国内镜像
+RUN npm config set registry https://registry.npmmirror.com
+
+RUN npm ci --only=production && npm cache clean --force
+
+# ===========================================
+# 开发依赖安装阶段
+# ===========================================
+FROM base AS dev-deps
+
+# 配置 npm 国内镜像
+RUN npm config set registry https://registry.npmmirror.com
+
+# 使用 --frozen-lockfile 确保使用锁定的版本
+RUN npm ci --frozen-lockfile || npm ci
+
+# ===========================================
+# 构建阶段
+# ===========================================
+FROM base AS builder
+
+# 复制依赖
+COPY --from=dev-deps /app/node_modules ./node_modules
+COPY . .
+
+# 设置环境变量
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+
+# 生成 Prisma Client
+RUN npx prisma generate
+
+# 构建应用
+RUN npm run build
+
+# ===========================================
+# 生产运行阶段
+# ===========================================
+FROM base AS runner
+
+# 设置工作目录
+WORKDIR /app
+
+# 设置环境变量
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# 创建非root用户
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# 复制必要文件
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/prisma ./prisma
+
+# 创建上传目录
+RUN mkdir -p /app/uploads /app/public/uploads /app/logs
+RUN chown -R nextjs:nodejs /app
+
+# 切换到非root用户
+USER nextjs
+
+# 暴露端口
+EXPOSE 3000
+
+# 设置环境变量
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+# 启动应用
+CMD ["node", "server.js"]
+

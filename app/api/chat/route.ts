@@ -100,6 +100,66 @@ export async function POST(request: NextRequest) {
           conversationId,
           userIdentifier
         )
+      } else if (agent.platform === "ragflow") {
+        // RAGFlow 专用处理逻辑
+        const conversationId = session.conversation_id
+
+        // 动态导入以避免循环依赖或按需加载
+        const { RAGFlowClient } = await import("@/lib/ragflow-client")
+
+        // 尝试从配置获取 RAGFlow Agent ID，如果没设置则使用本地 Agent ID
+        // 注意：这里是一个假设，如果 RAGFlow 需要的 ID 与本地 ID 不一致，必须在 modelConfig 中配置
+        const ragflowAgentId = agent.model_config?.agent_id || agent.id
+
+        const client = new RAGFlowClient({
+          baseUrl: agent.api_url,
+          apiKey: agent.api_key,
+          agentId: ragflowAgentId,
+          userId: userIdentifier
+        })
+
+        // 使用 Promise 包装回调式的 sendMessage
+        response = await new Promise<any>((resolve, reject) => {
+          let answer = ''
+          let ref = null
+          let finalConvId = conversationId
+          let finalMsgId = ''
+
+          client.setConversationId(conversationId)
+
+          client.sendMessage(
+            message,
+            (msg) => {
+              if (msg.type === 'content') {
+                answer = msg.content || ''
+                if (msg.reference) ref = msg.reference
+                if (msg.conversationId) finalConvId = msg.conversationId
+                if (msg.messageId) finalMsgId = msg.messageId
+              } else if (msg.type === 'complete') {
+                // 完成时返回
+                resolve({
+                  answer: msg.content || answer,
+                  conversation_id: msg.conversationId || finalConvId,
+                  message_id: finalMsgId, // RAGFlow 可能不返回 msgId，暂空
+                  reference: msg.reference || ref // 传递引用信息
+                })
+              } else if (msg.type === 'error') {
+                reject(new Error(msg.content))
+              }
+            },
+            (err) => reject(err),
+            () => {
+              // completion callback (redundant with 'complete' message type usually)
+            },
+            true // quote = true
+          ).catch(reject)
+        })
+
+        // 将引用信息附加到 metadata 或 answer 中？
+        // 为了前端展示，我们可以选择将引用作为 extra data 返回
+        // 下面的 return NextResponse.json 会包含 response 对象的所有属性吗？
+        // 查看 174 行： response: response.answer
+        // 我需要修改返回值结构来包含 reference
       } else {
         response = await sendToCustomAPI(
           agent.api_url,
@@ -174,6 +234,8 @@ export async function POST(request: NextRequest) {
       response: response.answer,
       conversationId: response.conversation_id,
       messageId: response.message_id,
+      // @ts-ignore
+      reference: response.reference, // 传递引用信息
       metadata: {
         agentName: agent.name,
         platform: agent.platform

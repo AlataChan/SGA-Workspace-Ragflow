@@ -76,7 +76,7 @@ export default function MobileChat({
 
     onSendMessage(inputValue.trim())
     setInputValue("")
-    
+
     // 重新聚焦输入框
     setTimeout(() => {
       inputRef.current?.focus()
@@ -120,14 +120,14 @@ export default function MobileChat({
                 <ArrowLeft className="w-5 h-5" />
               </Button>
             )}
-            
+
             <Avatar className="w-10 h-10">
               <AvatarImage src={agent.avatar_url || ""} />
               <AvatarFallback>
                 <Bot className="w-5 h-5" />
               </AvatarFallback>
             </Avatar>
-            
+
             <div className="flex-1 min-w-0">
               <h2 className="font-semibold text-gray-900 dark:text-gray-100 truncate">
                 {agent.name}
@@ -246,7 +246,7 @@ export default function MobileChat({
                   )}
                 >
                   {/* 根据 agent 平台类型选择渲染器 */}
-                  {message.role === "assistant" && agent.platform === "RAGFLOW" ? (
+                  {message.role === "assistant" && agent.platform.toUpperCase() === "RAGFLOW" ? (
                     <RAGFlowMessageRenderer
                       message={{
                         content: message.content,
@@ -259,24 +259,25 @@ export default function MobileChat({
                       isStreaming={message.status === "sending"}
                       hasError={message.status === "error"}
                       className="text-sm"
+                      agentId={agent.id}
                     />
                   ) : (
                     <p className="text-sm whitespace-pre-wrap break-words">
                       {message.content}
                     </p>
                   )}
-                  
+
                   <div className={cn(
                     "flex items-center justify-between mt-1 text-xs",
                     message.role === "user" ? "text-blue-100" : "text-gray-500"
                   )}>
                     <span>
-                      {formatDistanceToNow(message.timestamp, { 
-                        addSuffix: true, 
-                        locale: zhCN 
+                      {formatDistanceToNow(message.timestamp, {
+                        addSuffix: true,
+                        locale: zhCN
                       })}
                     </span>
-                    
+
                     {message.status === "sending" && (
                       <div className="flex items-center space-x-1">
                         <div className="w-1 h-1 bg-current rounded-full animate-bounce"></div>
@@ -302,7 +303,7 @@ export default function MobileChat({
                         </TooltipTrigger>
                         <TooltipContent>复制</TooltipContent>
                       </Tooltip>
-                      
+
                       {message.role === "assistant" && (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -332,7 +333,7 @@ export default function MobileChat({
               </div>
             ))
           )}
-          
+
           {/* 加载指示器 */}
           {isLoading && (
             <div className="flex space-x-3">
@@ -351,7 +352,7 @@ export default function MobileChat({
               </div>
             </div>
           )}
-          
+
           <div ref={messagesEndRef} />
         </div>
 
@@ -361,7 +362,7 @@ export default function MobileChat({
             <Button variant="ghost" size="sm" className="flex-shrink-0">
               <Paperclip className="w-5 h-5" />
             </Button>
-            
+
             <div className="flex-1">
               <Input
                 ref={inputRef}
@@ -373,7 +374,7 @@ export default function MobileChat({
                 className="resize-none border-0 bg-gray-100 dark:bg-gray-700 focus-visible:ring-1"
               />
             </div>
-            
+
             <Button
               onClick={handleSend}
               disabled={!inputValue.trim() || isLoading}

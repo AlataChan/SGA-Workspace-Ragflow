@@ -32,6 +32,7 @@ import SimpleContentRenderer from './simple-content-renderer'
 import FileCard from './file-card'
 import { EnhancedDifyClient, DifyStreamMessage } from '@/lib/enhanced-dify-client'
 import { RAGFlowBlockingClient, RAGFlowMessage } from '@/lib/ragflow-blocking-client'
+import RAGFlowReferenceCard from '@/components/chat/ragflow-reference-card'
 
 // 打字效果组件
 interface TypewriterEffectProps {
@@ -168,7 +169,7 @@ interface EnhancedMessageContentProps {
 }
 
 const EnhancedMessageContent: React.FC<EnhancedMessageContentProps> = ({ content }) => {
-  const [copiedStates, setCopiedStates] = useState<{[key: string]: boolean}>({})
+  const [copiedStates, setCopiedStates] = useState<{ [key: string]: boolean }>({})
   const contentRef = useRef<HTMLDivElement>(null)
 
   // 复制代码到剪贴板
@@ -217,7 +218,7 @@ const EnhancedMessageContent: React.FC<EnhancedMessageContentProps> = ({ content
 
   useEffect(() => {
     // 将复制函数暴露到全局，供按钮调用
-    ;(window as any).copyCode = copyToClipboard
+    ; (window as any).copyCode = copyToClipboard
   }, [])
 
   const htmlContent = content ? marked.parse(content, { async: false }) as string : ''
@@ -257,9 +258,9 @@ interface AttachmentRendererProps {
   isStreamingComplete?: boolean
 }
 
-const AttachmentRenderer: React.FC<AttachmentRendererProps> = ({ 
-  attachment, 
-  isStreamingComplete = true 
+const AttachmentRenderer: React.FC<AttachmentRendererProps> = ({
+  attachment,
+  isStreamingComplete = true
 }) => {
   const isImage = attachment.type.startsWith('image/')
   const isDocument = [
@@ -291,11 +292,11 @@ const AttachmentRenderer: React.FC<AttachmentRendererProps> = ({
       } else if (attachment.url) {
         // 检查是否需要代理（内网地址或特定域名）
         if (attachment.url.includes('192.144.232.60') ||
-            attachment.url.includes('localhost') ||
-            attachment.url.includes('127.0.0.1') ||
-            attachment.url.includes('10.') ||
-            attachment.url.includes('172.') ||
-            attachment.url.includes('192.168.')) {
+          attachment.url.includes('localhost') ||
+          attachment.url.includes('127.0.0.1') ||
+          attachment.url.includes('10.') ||
+          attachment.url.includes('172.') ||
+          attachment.url.includes('192.168.')) {
           imageSrc = `/api/proxy-image?url=${encodeURIComponent(attachment.url)}`;
         } else {
           imageSrc = attachment.url;
@@ -479,6 +480,13 @@ interface AgentConfig {
   agentId?: string
 }
 
+interface DifyFile {
+  type: string
+  transfer_method: string
+  url?: string
+  upload_file_id?: string
+}
+
 interface EnhancedChatWithSidebarProps {
   agentName: string
   agentAvatar?: string
@@ -508,7 +516,7 @@ export default function EnhancedChatWithSidebar({
     }],
     lastUpdate: new Date()
   }])
-  
+
   const [currentSessionId, setCurrentSessionId] = useState('default')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [input, setInput] = useState('')
@@ -677,6 +685,72 @@ export default function EnhancedChatWithSidebar({
 
   // 获取历史对话列表
   const fetchHistoryConversations = useCallback(async (forceRefresh = false, loadMore = false) => {
+    // RAGFlow 处理逻辑
+    if (agentConfig?.platform === 'RAGFLOW' && agentConfig.agentId) {
+      if (isLoadingHistory) return
+
+      // 检查缓存
+      const now = Date.now()
+      const cacheValid = (now - historyCacheRef.current.lastFetch) < 5 * 60 * 1000
+
+      if (!forceRefresh && !loadMore && cacheValid && historyCacheRef.current.conversations.length > 0) {
+        setHistoryConversations(historyCacheRef.current.conversations)
+        setHasMoreHistory(historyCacheRef.current.hasMore)
+        return
+      }
+
+      try {
+        setIsLoadingHistory(true)
+        setHistoryError(null)
+
+        const page = loadMore ? Math.ceil(historyCacheRef.current.conversations.length / 20) + 1 : 1
+        const response = await fetch(`/api/ragflow/conversations?agent_id=${agentConfig.agentId}&page=${page}&page_size=20`)
+
+        if (response.ok) {
+          const data = await response.json()
+          const sessions = data.data || []
+          // 映射 RAGFlow 会话到通用格式
+          const newConversations: DifyHistoryConversation[] = sessions.map((s: any) => ({
+            id: s.id,
+            name: s.name || '未命名会话',
+            created_at: s.create_date,
+            inputs: {}
+          }))
+
+          const hasMore = data.has_more || false
+
+          let allConversations: DifyHistoryConversation[]
+          if (loadMore) {
+            allConversations = [...historyCacheRef.current.conversations, ...newConversations]
+          } else {
+            allConversations = newConversations
+          }
+
+          historyCacheRef.current = {
+            conversations: allConversations,
+            lastFetch: now,
+            hasMore,
+            lastId: undefined // RAGFlow 使用分页
+          }
+
+          setHistoryConversations(allConversations)
+          setHasMoreHistory(hasMore)
+        } else {
+          throw new Error('Failed to fetch RAGFlow conversations')
+        }
+      } catch (error) {
+        console.error('获取RAGFlow历史失败:', error)
+        if (!loadMore) {
+          setHistoryConversations([])
+          setHasMoreHistory(false)
+        }
+        setHistoryError('获取历史记录失败')
+      } finally {
+        setIsLoadingHistory(false)
+      }
+      return
+    }
+
     if (!agentConfig?.difyUrl || !agentConfig?.difyKey || isLoadingHistory) {
       return
     }
@@ -726,75 +800,75 @@ export default function EnhancedChatWithSidebar({
 
         console.log('[EnhancedChat] API响应状态:', response.status, response.statusText)
 
-      if (response.ok) {
-        const data = await response.json()
-        const newConversations = data.data || []
-        const hasMore = data.has_more || false
+        if (response.ok) {
+          const data = await response.json()
+          const newConversations = data.data || []
+          const hasMore = data.has_more || false
 
-        let allConversations: DifyHistoryConversation[]
-        if (loadMore) {
-          // 加载更多：追加到现有列表
-          allConversations = [...historyCacheRef.current.conversations, ...newConversations]
+          let allConversations: DifyHistoryConversation[]
+          if (loadMore) {
+            // 加载更多：追加到现有列表
+            allConversations = [...historyCacheRef.current.conversations, ...newConversations]
+          } else {
+            // 首次加载或刷新：替换列表
+            allConversations = newConversations
+          }
+
+          // 更新缓存
+          historyCacheRef.current = {
+            conversations: allConversations,
+            lastFetch: now,
+            hasMore,
+            lastId: newConversations.length > 0 ? newConversations[newConversations.length - 1].id : undefined
+          }
+
+          setHistoryConversations(allConversations)
+          setHasMoreHistory(hasMore)
+
         } else {
-          // 首次加载或刷新：替换列表
-          allConversations = newConversations
+          const errorText = await response.text()
+          console.error('[EnhancedChat] 获取历史对话失败:', {
+            status: response.status,
+            statusText: response.statusText,
+            errorText
+          })
+
+          // API 不可用就设置空数组
+          if (!loadMore) {
+            setHistoryConversations([])
+            setHasMoreHistory(false)
+          }
+          throw new Error(`获取历史对话失败: ${response.status} ${response.statusText}`)
         }
-
-        // 更新缓存
-        historyCacheRef.current = {
-          conversations: allConversations,
-          lastFetch: now,
-          hasMore,
-          lastId: newConversations.length > 0 ? newConversations[newConversations.length - 1].id : undefined
-        }
-
-        setHistoryConversations(allConversations)
-        setHasMoreHistory(hasMore)
-
-      } else {
-        const errorText = await response.text()
-        console.error('[EnhancedChat] 获取历史对话失败:', {
-          status: response.status,
-          statusText: response.statusText,
-          errorText
-        })
-
-        // API 不可用就设置空数组
-        if (!loadMore) {
-          setHistoryConversations([])
-          setHasMoreHistory(false)
-        }
-        throw new Error(`获取历史对话失败: ${response.status} ${response.statusText}`)
+      } catch (fetchError) {
+        clearTimeout(timeoutId)
+        throw fetchError
       }
-    } catch (fetchError) {
-      clearTimeout(timeoutId)
-      throw fetchError
-    }
-  } catch (error) {
-    console.error('[EnhancedChat] 获取历史对话异常:', error)
+    } catch (error) {
+      console.error('[EnhancedChat] 获取历史对话异常:', error)
 
-    // 网络错误或超时
-    if (!loadMore) {
-      setHistoryConversations([])
-      setHasMoreHistory(false)
-    }
-
-    let errorMessage = '获取历史对话失败'
-    if (error instanceof Error) {
-      if (error.name === 'AbortError') {
-        errorMessage = '请求超时 - 可能是网络问题或API不可用'
-      } else if (error.name === 'TypeError') {
-        errorMessage = '网络错误 - 请检查API地址是否正确'
-      } else {
-        errorMessage = error.message
+      // 网络错误或超时
+      if (!loadMore) {
+        setHistoryConversations([])
+        setHasMoreHistory(false)
       }
+
+      let errorMessage = '获取历史对话失败'
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = '请求超时 - 可能是网络问题或API不可用'
+        } else if (error.name === 'TypeError') {
+          errorMessage = '网络错误 - 请检查API地址是否正确'
+        } else {
+          errorMessage = error.message
+        }
+      }
+      setHistoryError(errorMessage)
+    } finally {
+      setIsLoadingHistory(false)
+      console.log('[EnhancedChat] 历史对话获取完成')
     }
-    setHistoryError(errorMessage)
-  } finally {
-    setIsLoadingHistory(false)
-    console.log('[EnhancedChat] 历史对话获取完成')
-  }
-  }, [agentConfig?.difyUrl, agentConfig?.difyKey, agentConfig?.userId])
+  }, [agentConfig?.difyUrl, agentConfig?.difyKey, agentConfig?.userId, agentConfig?.platform, agentConfig?.agentId])
 
   // 创建新会话
   const createNewSession = () => {
@@ -824,7 +898,7 @@ export default function EnhancedChatWithSidebar({
 
   // 加载历史对话的消息（支持缓存）
   const loadHistoryConversation = useCallback(async (historyConv: DifyHistoryConversation) => {
-    if (!agentConfig?.difyUrl || !agentConfig?.difyKey) return
+    if (!agentConfig?.difyUrl && !agentConfig?.baseUrl) return // 确保至少有一个平台配置
 
     try {
       setIsLoadingHistory(true)
@@ -832,12 +906,15 @@ export default function EnhancedChatWithSidebar({
 
       // 检查是否已经加载过这个历史对话
       const existingSession = sessions.find(session =>
-        session.difyConversationId === historyConv.id
+        session.difyConversationId === historyConv.id || session.id === historyConv.id // RAGFlow直接用id
       )
 
       if (existingSession) {
         console.log('[EnhancedChat] 历史对话已存在，直接切换:', existingSession.id)
         setCurrentSessionId(existingSession.id)
+        if (window.innerWidth < 768) {
+          setSidebarCollapsed(true)
+        }
         return
       }
 
@@ -860,67 +937,87 @@ export default function EnhancedChatWithSidebar({
         }, 15000) // 15秒超时（历史消息可能较多）
 
         try {
-          // 获取历史消息 - 使用正确的DIFY API路径
-          const response = await fetch(`${agentConfig.difyUrl}/messages?conversation_id=${historyConv.id}&user=${agentConfig.userId}&limit=100`, {
-            headers: {
-              'Authorization': `Bearer ${agentConfig.difyKey}`,
-              'Content-Type': 'application/json'
-            },
-            signal: timeoutController.signal
-          })
+          if (agentConfig?.platform === 'RAGFLOW' && agentConfig.agentId) {
+            // RAGFlow 历史消息逻辑
+            const response = await fetch(`/api/ragflow/history?agent_id=${agentConfig.agentId}&conversation_id=${historyConv.id}`)
+            clearTimeout(timeoutId)
 
-          clearTimeout(timeoutId)
-
-          if (response.ok) {
-          const data = await response.json()
-          const messages = data.data || []
-
-          // 转换 Dify 消息格式到本地格式
-          // DIFY的每条消息包含query(用户)和answer(助手)，需要拆分成两条消息
-          convertedMessages = []
-          // 不需要reverse，保持原始顺序（最新消息在底部）
-          messages.forEach((msg: any) => {
-            const timestamp = msg.created_at ? (msg.created_at * 1000) : Date.now()
-
-            // 用户消息
-            if (msg.query) {
-              convertedMessages.push({
-                id: `${msg.id}_user` || nanoid(),
-                role: 'user' as const,
-                content: msg.query,
-                timestamp: timestamp,
-                attachments: []
-              })
+            if (response.ok) {
+              const data = await response.json()
+              convertedMessages = data.messages.map((msg: any) => ({
+                id: msg.id || nanoid(),
+                role: msg.role || (msg.type === 'human' ? 'user' : 'assistant'),
+                content: msg.content,
+                timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
+                reference: msg.reference
+              }))
+            } else {
+              throw new Error(`获取RAGFlow历史消息失败: ${response.status}`)
             }
+          } else if (agentConfig?.platform === 'DIFY' && agentConfig.difyUrl && agentConfig.difyKey) {
+            // Dify 历史消息逻辑
+            const response = await fetch(`${agentConfig.difyUrl}/messages?conversation_id=${historyConv.id}&user=${agentConfig.userId}&limit=100`, {
+              headers: {
+                'Authorization': `Bearer ${agentConfig.difyKey}`,
+                'Content-Type': 'application/json'
+              },
+              signal: timeoutController.signal
+            })
 
-            // 助手消息
-            if (msg.answer) {
-              convertedMessages.push({
-                id: `${msg.id}_assistant` || nanoid(),
-                role: 'assistant' as const,
-                content: msg.answer,
-                timestamp: timestamp + 1, // 稍微延后，确保顺序正确
-                attachments: msg.message_files?.map((file: any) => ({
-                  id: file.id || nanoid(),
-                  name: file.name || 'file',
-                  type: file.type === 'image' ? 'image/png' : (file.type || 'application/octet-stream'),
-                  size: file.size || 0,
-                  url: file.url,
-                  source: 'agent' as const
-                })) || []
+            clearTimeout(timeoutId)
+
+            if (response.ok) {
+              const data = await response.json()
+              const messages = data.data || []
+
+              // 转换 Dify 消息格式到本地格式
+              convertedMessages = []
+              messages.forEach((msg: any) => {
+                const timestamp = msg.created_at ? (msg.created_at * 1000) : Date.now()
+
+                // 用户消息
+                if (msg.query) {
+                  convertedMessages.push({
+                    id: `${msg.id}_user` || nanoid(),
+                    role: 'user' as const,
+                    content: msg.query,
+                    timestamp: timestamp,
+                    attachments: []
+                  })
+                }
+
+                // 助手消息
+                if (msg.answer) {
+                  convertedMessages.push({
+                    id: `${msg.id}_assistant` || nanoid(),
+                    role: 'assistant' as const,
+                    content: msg.answer,
+                    timestamp: timestamp + 1, // 稍微延后，确保顺序正确
+                    attachments: msg.message_files?.map((file: any) => ({
+                      id: file.id || nanoid(),
+                      name: file.name || 'file',
+                      type: file.type === 'image' ? 'image/png' : (file.type || 'application/octet-stream'),
+                      size: file.size || 0,
+                      url: file.url,
+                      source: 'agent' as const
+                    })) || []
+                  })
+                }
               })
+
+            } else {
+              throw new Error(`获取Dify历史消息失败: ${response.status}`)
             }
-          })
+          } else {
+            throw new Error('未知的平台类型或配置不完整，无法加载历史消息')
+          }
 
           // 更新消息缓存
           messageCacheRef.current[historyConv.id] = {
             messages: convertedMessages,
             lastFetch: now,
-            isComplete: messages.length < 100
+            isComplete: convertedMessages.length < 100 // 假设如果返回少于100条就是全部
           }
-        } else {
-          throw new Error(`获取历史消息失败: ${response.status}`)
-        }
         } catch (fetchError) {
           clearTimeout(timeoutId)
           throw fetchError
@@ -929,7 +1026,7 @@ export default function EnhancedChatWithSidebar({
 
       // 创建新的会话
       const newSession: ChatSession = {
-        id: nanoid(),
+        id: historyConv.id, // 使用历史会话的ID作为session ID
         title: historyConv.name || '历史对话',
         messages: convertedMessages,
         lastUpdate: (() => {
@@ -956,15 +1053,26 @@ export default function EnhancedChatWithSidebar({
             return new Date()
           }
         })(),
-        difyConversationId: historyConv.id,
+        difyConversationId: historyConv.id, // 兼容Dify
         isHistory: true,
         agentName: agentName,
         agentAvatar: actualAgentAvatar
       }
 
       // 添加到会话列表并切换到该会话
-      setSessions(prev => [newSession, ...prev])
+      setSessions(prev => {
+        const existing = prev.find(s => s.id === newSession.id)
+        if (existing) {
+          // 如果已存在，则更新
+          return prev.map(s => s.id === newSession.id ? newSession : s)
+        }
+        // 否则添加
+        return [newSession, ...prev]
+      })
       setCurrentSessionId(newSession.id)
+      if (window.innerWidth < 768) {
+        setSidebarCollapsed(true)
+      }
 
     } catch (error) {
       console.error('[EnhancedChat] 加载历史对话异常:', error)
@@ -978,6 +1086,7 @@ export default function EnhancedChatWithSidebar({
         }
       }
       setHistoryError(errorMessage)
+      toast.error(errorMessage)
     } finally {
       setIsLoadingHistory(false)
     }
@@ -985,77 +1094,166 @@ export default function EnhancedChatWithSidebar({
 
   // 初始化时获取历史对话
   useEffect(() => {
-    if (agentConfig?.difyUrl && agentConfig?.difyKey) {
+    if ((agentConfig?.difyUrl && agentConfig?.difyKey) || (agentConfig?.baseUrl && agentConfig?.apiKey && agentConfig?.agentId)) {
       fetchHistoryConversations()
     }
-  }, [agentConfig?.difyUrl, agentConfig?.difyKey, fetchHistoryConversations])
+  }, [agentConfig?.difyUrl, agentConfig?.difyKey, agentConfig?.baseUrl, agentConfig?.apiKey, agentConfig?.agentId, fetchHistoryConversations])
 
   // 删除历史对话
   const deleteHistoryConversation = async (conversationId: string) => {
-    if (!difyClientRef.current) return
-
-    try {
-      await difyClientRef.current.deleteConversation(conversationId)
-
-      // 从历史列表中移除
-      setHistoryConversations(prev => prev.filter(conv => conv.id !== conversationId))
-
-      // 更新缓存
-      historyCacheRef.current.conversations = historyCacheRef.current.conversations.filter(
-        conv => conv.id !== conversationId
-      )
-
-      // 如果当前会话是被删除的历史会话，切换到默认会话
-      const currentSession = sessions.find(s => s.id === currentSessionId)
-      if (currentSession?.difyConversationId === conversationId) {
-        const defaultSession = sessions.find(s => !s.difyConversationId)
-        if (defaultSession) {
-          setCurrentSessionId(defaultSession.id)
-        }
+    if (agentConfig?.platform === 'DIFY' && difyClientRef.current) {
+      try {
+        await difyClientRef.current.deleteConversation(conversationId)
+        toast.success('历史对话已删除')
+      } catch (error) {
+        console.error('删除Dify历史对话失败:', error)
+        toast.error('删除历史对话失败')
+        return
       }
-
-      // 从会话列表中移除对应的会话
-      setSessions(prev => prev.filter(session => session.difyConversationId !== conversationId))
-
-      toast.success('历史对话已删除')
-    } catch (error) {
-      console.error('删除历史对话失败:', error)
-      toast.error('删除历史对话失败')
+    } else if (agentConfig?.platform === 'RAGFLOW' && ragflowClientRef.current) {
+      try {
+        // RAGFlow 删除历史对话的API
+        const response = await fetch(`/api/ragflow/conversations/${conversationId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${agentConfig.apiKey}`,
+            'Content-Type': 'application/json'
+          }
+        })
+        if (!response.ok) {
+          throw new Error(`RAGFlow 删除失败: ${response.status}`)
+        }
+        toast.success('历史对话已删除')
+      } catch (error) {
+        console.error('删除RAGFlow历史对话失败:', error)
+        toast.error('删除历史对话失败')
+        return
+      }
+    } else {
+      toast.error('无法删除历史对话：客户端未初始化或平台不支持')
+      return
     }
+
+    // 从历史列表中移除
+    setHistoryConversations(prev => prev.filter(conv => conv.id !== conversationId))
+
+    // 更新缓存
+    historyCacheRef.current.conversations = historyCacheRef.current.conversations.filter(
+      conv => conv.id !== conversationId
+    )
+
+    // 如果当前会话是被删除的历史会话，切换到默认会话
+    const currentSession = sessions.find(s => s.id === currentSessionId)
+    if (currentSession?.difyConversationId === conversationId || currentSession?.id === conversationId) { // 兼容RAGFlow
+      const defaultSession = sessions.find(s => !s.isHistory) // 找到非历史会话
+      if (defaultSession) {
+        setCurrentSessionId(defaultSession.id)
+      } else {
+        // 如果没有非历史会话，创建一个新的
+        createNewSession()
+      }
+    }
+
+    // 从会话列表中移除对应的会话
+    setSessions(prev => prev.filter(session => session.difyConversationId !== conversationId && session.id !== conversationId))
   }
 
   // 重命名历史对话
   const renameHistoryConversation = async (conversationId: string, newName: string) => {
-    if (!difyClientRef.current) return
+    if (agentConfig?.platform === 'DIFY' && difyClientRef.current) {
+      try {
+        const result = await difyClientRef.current.renameConversation(conversationId, newName)
 
-    try {
-      const result = await difyClientRef.current.renameConversation(conversationId, newName)
+        // 更新历史列表
+        setHistoryConversations(prev => prev.map(conv =>
+          conv.id === conversationId ?
+            {
+              ...conv,
+              name: result.name
+            } :
+            conv
+        ))
 
-      // 更新历史列表
-      setHistoryConversations(prev => prev.map(conv =>
-        conv.id === conversationId
-          ? { ...conv, name: result.name }
-          : conv
-      ))
+        // 更新缓存
+        historyCacheRef.current.conversations = historyCacheRef.current.conversations.map(conv =>
+          conv.id === conversationId ?
+            {
+              ...conv,
+              name: result.name
+            } :
+            conv
+        )
 
-      // 更新缓存
-      historyCacheRef.current.conversations = historyCacheRef.current.conversations.map(conv =>
-        conv.id === conversationId
-          ? { ...conv, name: result.name }
-          : conv
-      )
+        // 更新会话列表中对应的会话
+        setSessions(prev => prev.map(session =>
+          session.difyConversationId === conversationId ?
+            {
+              ...session,
+              title: result.name
+            } :
+            session
+        ))
 
-      // 更新会话列表中对应的会话
-      setSessions(prev => prev.map(session =>
-        session.difyConversationId === conversationId
-          ? { ...session, title: result.name }
-          : session
-      ))
+        toast.success('对话重命名成功')
+      } catch (error) {
+        console.error('重命名Dify历史对话失败:', error)
+        toast.error('重命名历史对话失败')
+      }
+    } else if (agentConfig?.platform === 'RAGFLOW' && ragflowClientRef.current) {
+      try {
+        // RAGFlow 重命名历史对话的API
+        const response = await fetch(`/api/ragflow/conversations/${conversationId}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${agentConfig.apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: newName
+          })
+        })
+        if (!response.ok) {
+          throw new Error(`RAGFlow 重命名失败: ${response.status}`)
+        }
+        const result = await response.json()
 
-      toast.success('对话重命名成功')
-    } catch (error) {
-      console.error('重命名历史对话失败:', error)
-      toast.error('重命名历史对话失败')
+        // 更新历史列表
+        setHistoryConversations(prev => prev.map(conv =>
+          conv.id === conversationId ?
+            {
+              ...conv,
+              name: result.name || newName
+            } :
+            conv
+        ))
+
+        // 更新缓存
+        historyCacheRef.current.conversations = historyCacheRef.current.conversations.map(conv =>
+          conv.id === conversationId ?
+            {
+              ...conv,
+              name: result.name || newName
+            } :
+            conv
+        )
+
+        // 更新会话列表中对应的会话
+        setSessions(prev => prev.map(session =>
+          session.id === conversationId ?
+            {
+              ...session,
+              title: result.name || newName
+            } :
+            session
+        ))
+
+        toast.success('对话重命名成功')
+      } catch (error) {
+        console.error('重命名RAGFlow历史对话失败:', error)
+        toast.error('重命名历史对话失败')
+      }
+    } else {
+      toast.error('无法重命名历史对话：客户端未初始化或平台不支持')
     }
   }
 
@@ -1068,9 +1266,12 @@ export default function EnhancedChatWithSidebar({
   const saveRename = () => {
     if (editingSessionId && editingTitle.trim()) {
       setSessions(prev => prev.map(session =>
-        session.id === editingSessionId
-          ? { ...session, title: editingTitle.trim() }
-          : session
+        session.id === editingSessionId ?
+          {
+            ...session,
+            title: editingTitle.trim()
+          } :
+          session
       ))
     }
     setEditingSessionId(null)
@@ -1084,7 +1285,9 @@ export default function EnhancedChatWithSidebar({
 
   // 基础函数
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    messagesEndRef.current?.scrollIntoView({
+      behavior: 'smooth'
+    })
   }
 
   useEffect(() => {
@@ -1106,19 +1309,37 @@ export default function EnhancedChatWithSidebar({
       let fileType = 'application/octet-stream'
       if (fileExtension) {
         switch (fileExtension) {
-          case 'pdf': fileType = 'application/pdf'; break
+          case 'pdf':
+            fileType = 'application/pdf';
+            break
           case 'doc':
-          case 'docx': fileType = 'application/msword'; break
+          case 'docx':
+            fileType = 'application/msword';
+            break
           case 'xls':
-          case 'xlsx': fileType = 'application/vnd.ms-excel'; break
+          case 'xlsx':
+            fileType = 'application/vnd.ms-excel';
+            break
           case 'ppt':
-          case 'pptx': fileType = 'application/vnd.ms-powerpoint'; break
-          case 'txt': fileType = 'text/plain'; break
+          case 'pptx':
+            fileType = 'application/vnd.ms-powerpoint';
+            break
+          case 'txt':
+            fileType = 'text/plain';
+            break
           case 'jpg':
-          case 'jpeg': fileType = 'image/jpeg'; break
-          case 'png': fileType = 'image/png'; break
-          case 'gif': fileType = 'image/gif'; break
-          case 'webp': fileType = 'image/webp'; break
+          case 'jpeg':
+            fileType = 'image/jpeg';
+            break
+          case 'png':
+            fileType = 'image/png';
+            break
+          case 'gif':
+            fileType = 'image/gif';
+            break
+          case 'webp':
+            fileType = 'image/webp';
+            break
         }
       }
 
@@ -1220,14 +1441,14 @@ export default function EnhancedChatWithSidebar({
 
     // 更新会话
     setSessions(prev => prev.map(session =>
-      session.id === currentSessionId
-        ? {
-            ...session,
-            messages: [...session.messages, userMessage, assistantMessage],
-            lastUpdate: new Date(),
-            title: session.messages.length === 0 ? input.slice(0, 20) + '...' : session.title
-          }
-        : session
+      session.id === currentSessionId ?
+        {
+          ...session,
+          messages: [...session.messages, userMessage, assistantMessage],
+          lastUpdate: new Date(),
+          title: session.messages.length === 0 ? input.slice(0, 20) + '...' : session.title
+        } :
+        session
     ))
 
     const messageContent = input.trim()
@@ -1250,21 +1471,21 @@ export default function EnhancedChatWithSidebar({
       console.error('发送消息失败:', error)
       // 错误处理逻辑...
       setSessions(prev => prev.map(session =>
-        session.id === currentSessionId
-          ? {
-              ...session,
-              messages: session.messages.map(msg =>
-                msg.id === assistantMessage.id
-                  ? {
-                      ...msg,
-                      content: '发送失败，请重试',
-                      isStreaming: false,
-                      hasError: true
-                    }
-                  : msg
-              )
-            }
-          : session
+        session.id === currentSessionId ?
+          {
+            ...session,
+            messages: session.messages.map(msg =>
+              msg.id === assistantMessage.id ?
+                {
+                  ...msg,
+                  content: '发送失败，请重试',
+                  isStreaming: false,
+                  hasError: true
+                } :
+                msg
+            )
+          } :
+          session
       ))
     } finally {
       setIsLoading(false)
@@ -1278,262 +1499,265 @@ export default function EnhancedChatWithSidebar({
       difyClientRef.current.setConversationId(conversationId)
     }
 
-      // 准备文件附件（DIFY格式）
-      const difyFiles = attachments.map(attachment => {
-        // 根据MIME类型确定DIFY文件类型
-        let difyType = 'custom'
-        if (attachment.type.startsWith('image/')) {
-          difyType = 'image'
-        } else if (attachment.type.startsWith('audio/')) {
-          difyType = 'audio'
-        } else if (attachment.type.startsWith('video/')) {
-          difyType = 'video'
-        } else if ([
-          'application/pdf', 'text/plain', 'text/markdown', 'text/html',
-          'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'text/csv', 'application/vnd.ms-powerpoint',
-          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-          'application/xml', 'application/epub+zip'
-        ].includes(attachment.type)) {
-          difyType = 'document'
+    // 准备文件附件（DIFY格式）
+    const difyFiles = attachments.map(attachment => {
+      // 根据MIME类型确定DIFY文件类型
+      let difyType: DifyFile['type'] = 'custom'
+      if (attachment.type.startsWith('image/')) {
+        difyType = 'image'
+      } else if (attachment.type.startsWith('audio/')) {
+        difyType = 'audio'
+      } else if (attachment.type.startsWith('video/')) {
+        difyType = 'video'
+      } else if ([
+        'application/pdf', 'text/plain', 'text/markdown', 'text/html',
+        'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/csv', 'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/xml', 'application/epub+zip'
+      ].includes(attachment.type)) {
+        difyType = 'document'
+      }
+
+      if (attachment.uploadFileId) {
+        // 已上传的文件
+        return {
+          type: difyType,
+          transfer_method: 'local_file',
+          upload_file_id: attachment.uploadFileId
         }
-
-        if (attachment.uploadFileId) {
-          // 已上传的文件
-          return {
-            type: difyType,
-            transfer_method: 'local_file',
-            upload_file_id: attachment.uploadFileId
-          }
-        } else if (attachment.url) {
-          // 远程URL文件
-          return {
-            type: difyType,
-            transfer_method: 'remote_url',
-            url: attachment.url
-          }
+      } else if (attachment.url) {
+        // 远程URL文件
+        return {
+          type: difyType,
+          transfer_method: 'remote_url',
+          url: attachment.url
         }
-        return null
-      }).filter(Boolean)
+      }
+      return null
+    }).filter(Boolean) as DifyFile[]
 
-      await difyClientRef.current!.sendMessage(
-        messageContent,
-        (message: DifyStreamMessage) => {
-          console.log('[EnhancedChat] 收到流式消息:', message)
+    await difyClientRef.current!.sendMessage(
+      messageContent,
+      (message: DifyStreamMessage) => {
+        console.log('[EnhancedChat] 收到流式消息:', message)
 
-          switch (message.type) {
-            case 'content':
-              // 累积流式内容 - 确保内容是字符串
-              const contentToAdd = message.content
-              if (typeof contentToAdd === 'string' && contentToAdd.length > 0) {
-                fullContent += contentToAdd
-                console.log('[EnhancedChat] 累积内容:', {
-                  newContent: contentToAdd,
-                  fullContentLength: fullContent.length,
-                  fullContentPreview: fullContent.substring(0, 100) + (fullContent.length > 100 ? '...' : '')
-                })
-              } else {
-                console.warn('[EnhancedChat] 收到非字符串内容:', contentToAdd, typeof contentToAdd)
-              }
-
-              // 更新会话ID（如果消息中包含）
-              if (message.conversationId) {
-                conversationId = message.conversationId
-                console.log('[EnhancedChat] 从流式消息更新会话ID:', conversationId)
-              }
-
-              // 检测下载链接并生成文件附件
-              const detectedAttachments = detectDownloadLinks(fullContent)
-
-              // 实时更新消息内容和附件
-              setSessions(prev => prev.map(session =>
-                session.id === currentSessionId
-                  ? {
-                      ...session,
-                      messages: session.messages.map(msg =>
-                        msg.id === assistantMessage.id
-                          ? {
-                              ...msg,
-                              content: fullContent,
-                              attachments: detectedAttachments.length > 0 ? detectedAttachments : msg.attachments,
-                              isStreaming: true // 确保在流式过程中保持流式状态
-                            }
-                          : msg
-                      )
-                    }
-                  : session
-              ))
-
-              console.log('[EnhancedChat] 更新消息内容:', {
-                messageId: assistantMessage.id,
-                contentLength: fullContent.length,
-                contentPreview: fullContent.substring(0, 200) + (fullContent.length > 200 ? '...' : ''),
-                attachmentsCount: detectedAttachments.length
+        switch (message.type) {
+          case 'content':
+            // 累积流式内容 - 确保内容是字符串
+            const contentToAdd = message.content
+            if (typeof contentToAdd === 'string' && contentToAdd.length > 0) {
+              fullContent += contentToAdd
+              console.log('[EnhancedChat] 累积内容:', {
+                newContent: contentToAdd,
+                fullContentLength: fullContent.length,
+                fullContentPreview: fullContent.substring(0, 100) + (fullContent.length > 100 ? '...' : '')
               })
-              break
+            } else {
+              console.warn('[EnhancedChat] 收到非字符串内容:', contentToAdd, typeof contentToAdd)
+            }
 
-            case 'thinking':
-              // 处理思考过程 - 不累积到最终内容，单独处理
-              const thinkingContent = typeof message.content === 'string' ? message.content : String(message.content)
-              // 思考过程不累积到 fullContent，避免重复
-              setSessions(prev => prev.map(session =>
-                session.id === currentSessionId
-                  ? {
-                      ...session,
-                      messages: session.messages.map(msg =>
-                        msg.id === assistantMessage.id
-                          ? { ...msg, content: fullContent }
-                          : msg
-                      )
-                    }
-                  : session
-              ))
-              break
+            // 更新会话ID（如果消息中包含）
+            if (message.conversationId) {
+              conversationId = message.conversationId
+              console.log('[EnhancedChat] 从流式消息更新会话ID:', conversationId)
+            }
 
-            case 'file':
-              // 处理文件消息
-              console.log('[EnhancedChat] 收到文件:', message.content, 'fileType:', message.fileType)
+            // 检测下载链接并生成文件附件
+            const detectedAttachments = detectDownloadLinks(fullContent)
 
-              // 从URL中提取文件名
-              const fileUrl = message.content
-              const fileName = fileUrl.split('/').pop()?.split('?')[0] || `文件_${Date.now()}`
+            // 实时更新消息内容和附件
+            setSessions((prev: ChatSession[]) => prev.map((session: ChatSession) =>
+              session.id === currentSessionId ?
+                {
+                  ...session,
+                  messages: session.messages.map((msg: Message) =>
+                    msg.id === assistantMessage.id ?
+                      {
+                        ...msg,
+                        content: fullContent,
+                        attachments: detectedAttachments.length > 0 ? detectedAttachments : msg.attachments,
+                        isStreaming: true // 确保在流式过程中保持流式状态
+                      } :
+                      msg
+                  )
+                } :
+                session
+            ))
 
-              // 根据fileType确定MIME类型
-              let mimeType = 'application/octet-stream'
-              if (message.fileType === 'image') {
-                mimeType = 'image/png'
-              } else if (message.fileType === 'document') {
-                mimeType = 'application/pdf'
-              } else if (message.fileType === 'audio') {
-                mimeType = 'audio/mpeg'
-              } else if (message.fileType === 'video') {
-                mimeType = 'video/mp4'
-              }
+            console.log('[EnhancedChat] 更新消息内容:', {
+              messageId: assistantMessage.id,
+              contentLength: fullContent.length,
+              contentPreview: fullContent.substring(0, 200) + (fullContent.length > 200 ? '...' : ''),
+              attachmentsCount: detectedAttachments.length
+            })
+            break
 
-              setSessions(prev => prev.map(session =>
-                session.id === currentSessionId
-                  ? {
-                      ...session,
-                      messages: session.messages.map(msg =>
-                        msg.id === assistantMessage.id
-                          ? {
-                              ...msg,
-                              attachments: [...(msg.attachments || []), {
-                                id: nanoid(),
-                                name: fileName,
-                                type: mimeType,
-                                url: fileUrl,
-                                size: 0,
-                                source: 'agent' as const
-                              }]
-                            }
-                          : msg
-                      )
-                    }
-                  : session
-              ))
-              break
+          case 'thinking':
+            // 处理思考过程 - 不累积到最终内容，单独处理
+            const thinkingContent = typeof message.content === 'string' ? message.content : String(message.content)
+            // 思考过程不累积到 fullContent，避免重复
+            setSessions(prev => prev.map(session =>
+              session.id === currentSessionId ?
+                {
+                  ...session,
+                  messages: session.messages.map(msg =>
+                    msg.id === assistantMessage.id ?
+                      {
+                        ...msg,
+                        content: fullContent
+                      } :
+                      msg
+                  )
+                } :
+                session
+            ))
+            break
 
-            case 'complete':
-              // 消息完成
-              if (message.conversationId) {
-                conversationId = message.conversationId
-              }
+          case 'file':
+            // 处理文件消息
+            console.log('[EnhancedChat] 收到文件:', message.content, 'fileType:', message.fileType)
 
-              // 优先使用 complete 消息中的完整内容，如果不存在则使用累积的内容
-              let finalContent = fullContent
-              if (message.content && typeof message.content === 'string' && message.content.length > fullContent.length) {
-                console.log('[EnhancedChat] 使用 complete 消息中的完整内容，长度:', message.content.length, '累积内容长度:', fullContent.length)
-                finalContent = message.content
-              } else if (message.content && typeof message.content === 'string') {
-                console.log('[EnhancedChat] complete 消息内容长度:', message.content.length, '累积内容长度:', fullContent.length)
-              }
+            // 从URL中提取文件名
+            const fileUrl = message.content
+            const fileName = fileUrl.split('/').pop()?.split('?')[0] || `文件_${Date.now()}`
 
-              // 最终检测下载链接
-              const finalDetectedAttachments = detectDownloadLinks(finalContent)
-              console.log('[EnhancedChat] 最终检测到的附件:', finalDetectedAttachments)
+            // 根据fileType确定MIME类型
+            let mimeType = 'application/octet-stream'
+            if (message.fileType === 'image') {
+              mimeType = 'image/png'
+            } else if (message.fileType === 'document') {
+              mimeType = 'application/pdf'
+            } else if (message.fileType === 'audio') {
+              mimeType = 'audio/mpeg'
+            } else if (message.fileType === 'video') {
+              mimeType = 'video/mp4'
+            }
 
-              // 处理附件信息（优先使用API返回的附件，然后是检测到的附件）
-              let finalAttachments = finalDetectedAttachments
-              if (message.metadata?.attachments && Array.isArray(message.metadata.attachments)) {
-                console.log('[EnhancedChat] 处理API返回的附件:', message.metadata.attachments)
+            setSessions(prev => prev.map(session =>
+              session.id === currentSessionId ?
+                {
+                  ...session,
+                  messages: session.messages.map(msg =>
+                    msg.id === assistantMessage.id ?
+                      {
+                        ...msg,
+                        attachments: [...(msg.attachments || []), {
+                          id: nanoid(),
+                          name: fileName,
+                          type: mimeType,
+                          url: fileUrl,
+                          size: 0,
+                          source: 'agent' as const
+                        }]
+                      } :
+                      msg
+                  )
+                } :
+                session
+            ))
+            break
 
-                // 确保API返回的附件也标记为 'agent'
-                const apiAttachments = message.metadata.attachments.map(att => ({
-                  ...att,
-                  source: 'agent' as const
-                }))
+          case 'complete':
+            // 消息完成
+            if (message.conversationId) {
+              conversationId = message.conversationId
+            }
 
-                finalAttachments = [...apiAttachments, ...finalDetectedAttachments]
+            // 优先使用 complete 消息中的完整内容，如果不存在则使用累积的内容
+            let finalContent = fullContent
+            if (message.content && typeof message.content === 'string' && message.content.length > fullContent.length) {
+              console.log('[EnhancedChat] 使用 complete 消息中的完整内容，长度:', message.content.length, '累积内容长度:', fullContent.length)
+              finalContent = message.content
+            } else if (message.content && typeof message.content === 'string') {
+              console.log('[EnhancedChat] complete 消息内容长度:', message.content.length, '累积内容长度:', fullContent.length)
+            }
 
-                // 去重（基于URL）
-                const uniqueAttachments = finalAttachments.filter((attachment, index, self) =>
-                  index === self.findIndex(a => a.url === attachment.url)
-                )
-                finalAttachments = uniqueAttachments
-              }
+            // 最终检测下载链接
+            const finalDetectedAttachments = detectDownloadLinks(finalContent)
+            console.log('[EnhancedChat] 最终检测到的附件:', finalDetectedAttachments)
 
-              setSessions(prev => prev.map(session =>
-                session.id === currentSessionId
-                  ? {
-                      ...session,
-                      messages: session.messages.map(msg =>
-                        msg.id === assistantMessage.id
-                          ? {
-                              ...msg,
-                              content: finalContent,
-                              attachments: finalAttachments.length > 0 ? finalAttachments : msg.attachments,
-                              isStreaming: false
-                            }
-                          : msg
-                      ),
-                      conversationId: conversationId,
-                      difyConversationId: conversationId || session.difyConversationId
-                    }
-                  : session
-              ))
-              break
+            // 处理附件信息（优先使用API返回的附件，然后是检测到的附件）
+            let finalAttachments = finalDetectedAttachments
+            if (message.metadata?.attachments && Array.isArray(message.metadata.attachments)) {
+              console.log('[EnhancedChat] 处理API返回的附件:', message.metadata.attachments)
 
-            case 'error':
-              console.error('[EnhancedChat] 收到错误消息:', message.content)
+              // 确保API返回的附件也标记为 'agent'
+              const apiAttachments = message.metadata.attachments.map(att => ({
+                ...att,
+                source: 'agent' as const
+              }))
 
-              // 优雅处理流式错误，不直接抛出，而是更新消息内容
-              const errorContent = `❌ 处理过程中出现错误：${message.content}\n\n💡 请重新发送消息或联系管理员。`
+              finalAttachments = [...apiAttachments, ...finalDetectedAttachments]
 
-              setSessions(prev => prev.map(session =>
-                session.id === currentSessionId
-                  ? {
-                      ...session,
-                      messages: session.messages.map(msg =>
-                        msg.id === assistantMessage.id
-                          ? {
-                              ...msg,
-                              content: fullContent + '\n\n' + errorContent,
-                              isStreaming: false,
-                              hasError: true
-                            }
-                          : msg
-                      )
-                    }
-                  : session
-              ))
+              // 去重（基于URL）
+              const uniqueAttachments = finalAttachments.filter((attachment, index, self) =>
+                index === self.findIndex(a => a.url === attachment.url)
+              )
+              finalAttachments = uniqueAttachments
+            }
 
-              // 设置流式状态为完成
-              setIsStreaming(false)
-              break
+            setSessions(prev => prev.map(session =>
+              session.id === currentSessionId ?
+                {
+                  ...session,
+                  messages: session.messages.map(msg =>
+                    msg.id === assistantMessage.id ?
+                      {
+                        ...msg,
+                        content: finalContent,
+                        attachments: finalAttachments.length > 0 ? finalAttachments : msg.attachments,
+                        isStreaming: false
+                      } :
+                      msg
+                  ),
+                  conversationId: conversationId,
+                  difyConversationId: conversationId || session.difyConversationId
+                } :
+                session
+            ))
+            break
 
-            default:
-              console.log('[EnhancedChat] 未处理的消息类型:', message.type, message)
-          }
-        },
-        (error: Error) => {
-          console.error('Dify 客户端错误:', error)
-          throw error
-        },
-        undefined, // onComplete
-        difyFiles // 传递文件参数
-      );
+          case 'error':
+            console.error('[EnhancedChat] 收到错误消息:', message.content)
+
+            // 优雅处理流式错误，不直接抛出，而是更新消息内容
+            const errorContent = `❌ 处理过程中出现错误：${message.content}\n\n💡 请重新发送消息或联系管理员。`
+
+            setSessions(prev => prev.map(session =>
+              session.id === currentSessionId ?
+                {
+                  ...session,
+                  messages: session.messages.map(msg =>
+                    msg.id === assistantMessage.id ?
+                      {
+                        ...msg,
+                        content: fullContent + '\n\n' + errorContent,
+                        isStreaming: false,
+                        hasError: true
+                      } :
+                      msg
+                  )
+                } :
+                session
+            ))
+
+            // 设置流式状态为完成
+            setIsStreaming(false)
+            break
+
+          default:
+            console.log('[EnhancedChat] 未处理的消息类型:', message.type, message)
+        }
+      },
+      (error: Error) => {
+        console.error('Dify 客户端错误:', error)
+        throw error
+      },
+      undefined, // onComplete
+      difyFiles // 传递文件参数
+    );
   }
 
   // RAGFlow 消息发送
@@ -1573,45 +1797,50 @@ export default function EnhancedChatWithSidebar({
               console.log('[EnhancedChat] 处理后的内容:', contentToAdd)
 
               if (contentToAdd && contentToAdd.length > 0) {
-                fullContent = contentToAdd  // RAGFlow 返回完整内容，不需要累积
+                fullContent = contentToAdd // RAGFlow 返回完整内容，不需要累积
               }
 
               console.log('[EnhancedChat] 更新消息内容:', fullContent)
 
               // 实时更新消息内容，清除thinking状态
               setSessions(prev => prev.map(session =>
-                session.id === currentSessionId
-                  ? {
-                      ...session,
-                      messages: session.messages.map(msg =>
-                        msg.id === assistantMessage.id
-                          ? {
-                              ...msg,
-                              content: fullContent,
-                              isStreaming: true,
-                              isThinking: false, // 清除thinking状态
-                              reference: message.reference
-                            }
-                          : msg
-                      )
-                    }
-                  : session
+                session.id === currentSessionId ?
+                  {
+                    ...session,
+                    messages: session.messages.map(msg =>
+                      msg.id === assistantMessage.id ?
+                        {
+                          ...msg,
+                          content: fullContent,
+                          isStreaming: true,
+                          isThinking: false, // 清除thinking状态
+                          reference: message.reference
+                        } :
+                        msg
+                    )
+                  } :
+                  session
               ));
               break;
 
             case 'thinking':
               // 显示思考状态 - 设置为空内容以显示动画
               setSessions(prev => prev.map(session =>
-                session.id === currentSessionId
-                  ? {
-                      ...session,
-                      messages: session.messages.map(msg =>
-                        msg.id === assistantMessage.id
-                          ? { ...msg, content: '', isStreaming: true, isThinking: true }
-                          : msg
-                      )
-                    }
-                  : session
+                session.id === currentSessionId ?
+                  {
+                    ...session,
+                    messages: session.messages.map(msg =>
+                      msg.id === assistantMessage.id ?
+                        {
+                          ...msg,
+                          content: '',
+                          isStreaming: true,
+                          isThinking: true
+                        } :
+                        msg
+                    )
+                  } :
+                  session
               ));
               break;
 
@@ -1619,34 +1848,34 @@ export default function EnhancedChatWithSidebar({
 
             case 'complete':
               // 消息完成 - 确保内容是字符串
-              const finalContent = message.content
-                ? (typeof message.content === 'string' ? message.content : String(message.content))
-                : fullContent
+              const finalContent = message.content ?
+                (typeof message.content === 'string' ? message.content : String(message.content)) :
+                fullContent
 
               setSessions(prev => prev.map(session =>
-                session.id === currentSessionId
-                  ? {
-                      ...session,
-                      messages: session.messages.map(msg =>
-                        msg.id === assistantMessage.id
-                          ? {
-                              ...msg,
-                              content: finalContent,
-                              isStreaming: false,
-                              reference: message.reference
-                            }
-                          : msg
-                      )
-                    }
-                  : session
+                session.id === currentSessionId ?
+                  {
+                    ...session,
+                    messages: session.messages.map(msg =>
+                      msg.id === assistantMessage.id ?
+                        {
+                          ...msg,
+                          content: finalContent,
+                          isStreaming: false,
+                          reference: message.reference
+                        } :
+                        msg
+                    )
+                  } :
+                  session
               ));
               setIsStreaming(false);
               break;
 
             case 'error':
-              const errorContent = typeof message.content === 'string'
-                ? message.content
-                : (message.content ? String(message.content) : 'RAGFlow 处理错误')
+              const errorContent = typeof message.content === 'string' ?
+                message.content :
+                (message.content ? String(message.content) : 'RAGFlow 处理错误')
               throw new Error(errorContent);
 
             default:
@@ -1660,16 +1889,20 @@ export default function EnhancedChatWithSidebar({
           console.error('RAGFlow 客户端错误:', error)
           // 显示错误消息
           setSessions(prev => prev.map(session =>
-            session.id === currentSessionId
-              ? {
-                  ...session,
-                  messages: session.messages.map(msg =>
-                    msg.id === assistantMessage.id
-                      ? { ...msg, content: `错误: ${error}`, isStreaming: false }
-                      : msg
-                  )
-                }
-              : session
+            session.id === currentSessionId ?
+              {
+                ...session,
+                messages: session.messages.map(msg =>
+                  msg.id === assistantMessage.id ?
+                    {
+                      ...msg,
+                      content: `错误: ${error}`,
+                      isStreaming: false
+                    } :
+                    msg
+                )
+              } :
+              session
           ))
         }
       );
@@ -1696,21 +1929,21 @@ export default function EnhancedChatWithSidebar({
       }
 
       setSessions(prev => prev.map(session =>
-        session.id === currentSessionId
-          ? {
-              ...session,
-              messages: session.messages.map(msg =>
-                msg.id === assistantMessage.id
-                  ? {
-                      ...msg,
-                      content: errorMessage,
-                      isStreaming: false,
-                      hasError: true
-                    }
-                  : msg
-              )
-            }
-          : session
+        session.id === currentSessionId ?
+          {
+            ...session,
+            messages: session.messages.map(msg =>
+              msg.id === assistantMessage.id ?
+                {
+                  ...msg,
+                  content: errorMessage,
+                  isStreaming: false,
+                  hasError: true
+                } :
+                msg
+            )
+          } :
+          session
       ))
     } finally {
       setIsLoading(false)
@@ -1966,103 +2199,218 @@ export default function EnhancedChatWithSidebar({
       <div className="h-full flex bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
         {/* 侧边栏 */}
         <div className={`${sidebarCollapsed ? 'w-16' : 'w-80'} transition-all duration-300 bg-slate-900/50 backdrop-blur-sm border-r border-blue-500/20 flex flex-col`}>
-        {/* 侧边栏头部 */}
-        <div className="p-4 border-b border-blue-500/20">
-          <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onBack}
-              className="text-blue-200 hover:text-white hover:bg-blue-500/10"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              {!sidebarCollapsed && <span className="ml-2">返回</span>}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="text-blue-200 hover:text-white hover:bg-blue-500/10"
-            >
-              <MessageSquare className="w-4 h-4" />
-            </Button>
-          </div>
-          {!sidebarCollapsed && (
-            <div className="mt-4">
+          {/* 侧边栏头部 */}
+          <div className="p-4 border-b border-blue-500/20">
+            <div className="flex items-center justify-between">
               <Button
-                onClick={createNewSession}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                variant="ghost"
+                size="sm"
+                onClick={onBack}
+                className="text-blue-200 hover:text-white hover:bg-blue-500/10"
               >
-                <Plus className="w-4 h-4 mr-2" />
-                新对话
+                <ArrowLeft className="w-4 h-4" />
+                {!sidebarCollapsed && <span className="ml-2">返回</span>}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                className="text-blue-200 hover:text-white hover:bg-blue-500/10"
+              >
+                <MessageSquare className="w-4 h-4" />
               </Button>
             </div>
-          )}
-        </div>
+            {!sidebarCollapsed && (
+              <div className="mt-4">
+                <Button
+                  onClick={createNewSession}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  新对话
+                </Button>
+              </div>
+            )}
+          </div>
 
-        {/* 会话列表 */}
-        {!sidebarCollapsed && (
-          <ScrollArea className="flex-1 p-2">
-            <div className="space-y-4">
-              {/* 当前会话 */}
-              <div>
-                <h3 className="text-xs font-medium text-blue-200/70 mb-2 px-2">当前会话</h3>
-                <div className="space-y-2">
-                  {sessions.filter(session => !session.isHistory).map((session) => (
-                    <div
-                      key={session.id}
-                      className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                        session.id === currentSessionId
+          {/* 会话列表 */}
+          {!sidebarCollapsed && (
+            <ScrollArea className="flex-1 p-2">
+              <div className="space-y-4">
+                {/* 当前会话 */}
+                <div>
+                  <h3 className="text-xs font-medium text-blue-200/70 mb-2 px-2">当前会话</h3>
+                  <div className="space-y-2">
+                    {sessions.filter(session => !session.isHistory).map((session) => (
+                      <div
+                        key={session.id}
+                        className={`p-3 rounded-lg cursor-pointer transition-colors ${session.id === currentSessionId
                           ? 'bg-blue-600/20 border border-blue-500/30'
                           : 'bg-slate-800/30 hover:bg-slate-700/30'
-                      }`}
-                      onClick={() => setCurrentSessionId(session.id)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1 min-w-0">
-                          {editingSessionId === session.id ? (
-                            <div className="flex items-center space-x-2">
-                              <input
-                                type="text"
-                                value={editingTitle}
-                                onChange={(e) => setEditingTitle(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') saveRename()
-                                  if (e.key === 'Escape') cancelRename()
+                          }`}
+                        onClick={() => setCurrentSessionId(session.id)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            {editingSessionId === session.id ? (
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  type="text"
+                                  value={editingTitle}
+                                  onChange={(e) => setEditingTitle(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') saveRename()
+                                    if (e.key === 'Escape') cancelRename()
+                                  }}
+                                  className="flex-1 bg-slate-700 text-white text-sm px-2 py-1 rounded border border-blue-500/30 focus:outline-none focus:border-blue-400"
+                                  autoFocus
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={saveRename}
+                                  className="text-green-400 hover:text-green-300 hover:bg-green-500/10 p-1"
+                                >
+                                  <Check className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={cancelRename}
+                                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1"
+                                >
+                                  <X className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <>
+                                <h4 className="text-sm font-medium text-white truncate">
+                                  {session.title}
+                                </h4>
+                                <p className="text-xs text-blue-200/70 mt-1">
+                                  {session.messages.length} 条消息 • {new Date(session.lastUpdate).toLocaleDateString()}
+                                </p>
+                              </>
+                            )}
+                          </div>
+                          {editingSessionId !== session.id && (
+                            <div className="flex items-center space-x-1 ml-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  startRenaming(session.id, session.title)
                                 }}
-                                className="flex-1 bg-slate-700 text-white text-sm px-2 py-1 rounded border border-blue-500/30 focus:outline-none focus:border-blue-400"
-                                autoFocus
-                              />
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={saveRename}
-                                className="text-green-400 hover:text-green-300 hover:bg-green-500/10 p-1"
+                                className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 p-1"
                               >
-                                <Check className="w-3 h-3" />
+                                <Edit3 className="w-3 h-3" />
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={cancelRename}
-                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1"
-                              >
-                                <X className="w-3 h-3" />
-                              </Button>
+                              {sessions.filter(s => !s.isHistory).length > 1 && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    // deleteSession(session.id)
+                                  }}
+                                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              )}
                             </div>
-                          ) : (
-                            <>
-                              <h4 className="text-sm font-medium text-white truncate">
-                                {session.title}
-                              </h4>
-                              <p className="text-xs text-blue-200/70 mt-1">
-                                {session.messages.length} 条消息 • {new Date(session.lastUpdate).toLocaleDateString()}
-                              </p>
-                            </>
                           )}
                         </div>
-                        {editingSessionId !== session.id && (
-                          <div className="flex items-center space-x-1 ml-2">
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 历史会话 */}
+                <div>
+                  <div className="flex items-center justify-between px-2 mb-2">
+                    <h3 className="text-xs font-medium text-blue-200/70">历史会话</h3>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => fetchHistoryConversations(true)}
+                      disabled={isLoadingHistory}
+                      className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 h-6 px-2"
+                    >
+                      {isLoadingHistory ? (
+                        <div className="flex items-center space-x-1">
+                          <div className="animate-spin w-3 h-3 border border-blue-400 border-t-transparent rounded-full" />
+                          <span>加载中</span>
+                        </div>
+                      ) : '刷新'}
+                    </Button>
+                  </div>
+
+                  {/* 错误提示 */}
+                  {historyError && (
+                    <div className="px-2 mb-2">
+                      <div className="text-xs text-red-400 bg-red-500/10 rounded p-2">
+                        {historyError}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    {/* 已加载的历史会话 */}
+                    {sessions.filter(session => session.isHistory).map((session) => (
+                      <div
+                        key={session.id}
+                        className={`p-3 rounded-lg cursor-pointer transition-colors ${session.id === currentSessionId
+                          ? 'bg-blue-600/20 border border-blue-500/30'
+                          : 'bg-slate-800/30 hover:bg-slate-700/30'
+                          }`}
+                        onClick={() => setCurrentSessionId(session.id)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            {editingSessionId === session.id ? (
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  type="text"
+                                  value={editingTitle}
+                                  onChange={(e) => setEditingTitle(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') saveRename()
+                                    if (e.key === 'Escape') cancelRename()
+                                  }}
+                                  className="flex-1 bg-slate-700 text-white text-sm px-2 py-1 rounded border border-blue-500/30 focus:outline-none focus:border-blue-400"
+                                  autoFocus
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={saveRename}
+                                  className="text-green-400 hover:text-green-300 hover:bg-green-500/10 p-1"
+                                >
+                                  <Check className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={cancelRename}
+                                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1"
+                                >
+                                  <X className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <>
+                                <h4 className="text-sm font-medium text-white truncate">
+                                  {session.title}
+                                </h4>
+                                <p className="text-xs text-blue-200/70 mt-1">
+                                  {session.messages.length} 条消息 • 历史 • {new Date(session.lastUpdate).toLocaleDateString()}
+                                </p>
+                              </>
+                            )}
+                          </div>
+                          {editingSessionId !== session.id && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -2070,531 +2418,422 @@ export default function EnhancedChatWithSidebar({
                                 e.stopPropagation()
                                 startRenaming(session.id, session.title)
                               }}
-                              className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 p-1"
+                              className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 ml-2 p-1"
                             >
                               <Edit3 className="w-3 h-3" />
                             </Button>
-                            {sessions.filter(s => !s.isHistory).length > 1 && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  // deleteSession(session.id)
-                                }}
-                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* 历史会话 */}
-              <div>
-                <div className="flex items-center justify-between px-2 mb-2">
-                  <h3 className="text-xs font-medium text-blue-200/70">历史会话</h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => fetchHistoryConversations(true)}
-                    disabled={isLoadingHistory}
-                    className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 h-6 px-2"
-                  >
-                    {isLoadingHistory ? (
-                      <div className="flex items-center space-x-1">
-                        <div className="animate-spin w-3 h-3 border border-blue-400 border-t-transparent rounded-full" />
-                        <span>加载中</span>
-                      </div>
-                    ) : '刷新'}
-                  </Button>
-                </div>
-
-                {/* 错误提示 */}
-                {historyError && (
-                  <div className="px-2 mb-2">
-                    <div className="text-xs text-red-400 bg-red-500/10 rounded p-2">
-                      {historyError}
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  {/* 已加载的历史会话 */}
-                  {sessions.filter(session => session.isHistory).map((session) => (
-                    <div
-                      key={session.id}
-                      className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                        session.id === currentSessionId
-                          ? 'bg-blue-600/20 border border-blue-500/30'
-                          : 'bg-slate-800/30 hover:bg-slate-700/30'
-                      }`}
-                      onClick={() => setCurrentSessionId(session.id)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1 min-w-0">
-                          {editingSessionId === session.id ? (
-                            <div className="flex items-center space-x-2">
-                              <input
-                                type="text"
-                                value={editingTitle}
-                                onChange={(e) => setEditingTitle(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') saveRename()
-                                  if (e.key === 'Escape') cancelRename()
-                                }}
-                                className="flex-1 bg-slate-700 text-white text-sm px-2 py-1 rounded border border-blue-500/30 focus:outline-none focus:border-blue-400"
-                                autoFocus
-                              />
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={saveRename}
-                                className="text-green-400 hover:text-green-300 hover:bg-green-500/10 p-1"
-                              >
-                                <Check className="w-3 h-3" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={cancelRename}
-                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1"
-                              >
-                                <X className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <>
-                              <h4 className="text-sm font-medium text-white truncate">
-                                {session.title}
-                              </h4>
-                              <p className="text-xs text-blue-200/70 mt-1">
-                                {session.messages.length} 条消息 • 历史 • {new Date(session.lastUpdate).toLocaleDateString()}
-                              </p>
-                            </>
                           )}
                         </div>
-                        {editingSessionId !== session.id && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              startRenaming(session.id, session.title)
-                            }}
-                            className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 ml-2 p-1"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                          </Button>
-                        )}
                       </div>
-                    </div>
-                  ))}
+                    ))}
 
-                  {/* 未加载的历史会话 */}
-                  {historyConversations
-                    .filter(historyConv => !sessions.some(session => session.difyConversationId === historyConv.id))
-                    .map((historyConv) => (
-                    <div
-                      key={`history_${historyConv.id}`}
-                      className="p-3 rounded-lg transition-colors bg-slate-800/20 hover:bg-slate-700/30 border border-slate-600/30 group"
-                    >
-                      <div className="flex items-center justify-between">
+                    {/* 未加载的历史会话 */}
+                    {historyConversations
+                      .filter(historyConv => !sessions.some(session => session.difyConversationId === historyConv.id || session.id === historyConv.id)) // 兼容RAGFlow
+                      .map((historyConv) => (
                         <div
-                          className="flex-1 min-w-0 cursor-pointer"
-                          onClick={() => loadHistoryConversation(historyConv)}
+                          key={`history_${historyConv.id}`}
+                          className="p-3 rounded-lg transition-colors bg-slate-800/20 hover:bg-slate-700/30 border border-slate-600/30 group"
                         >
-                          {renamingHistoryId === historyConv.id ? (
-                            <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="text"
-                                value={renamingHistoryTitle}
-                                onChange={(e) => setRenamingHistoryTitle(e.target.value)}
-                                className="w-full px-2 py-1 text-sm bg-slate-700 text-white border border-slate-600 rounded focus:outline-none focus:border-blue-400"
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    renameHistoryConversation(historyConv.id, renamingHistoryTitle)
-                                    setRenamingHistoryId(null)
-                                  } else if (e.key === 'Escape') {
-                                    setRenamingHistoryId(null)
-                                  }
-                                }}
-                                autoFocus
-                              />
-                              <div className="flex space-x-1">
+                          <div className="flex items-center justify-between">
+                            <div
+                              className="flex-1 min-w-0 cursor-pointer"
+                              onClick={() => loadHistoryConversation(historyConv)}
+                            >
+                              {renamingHistoryId === historyConv.id ? (
+                                <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="text"
+                                    value={renamingHistoryTitle}
+                                    onChange={(e) => setRenamingHistoryTitle(e.target.value)}
+                                    className="w-full px-2 py-1 text-sm bg-slate-700 text-white border border-slate-600 rounded focus:outline-none focus:border-blue-400"
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        renameHistoryConversation(historyConv.id, renamingHistoryTitle)
+                                        setRenamingHistoryId(null)
+                                      } else if (e.key === 'Escape') {
+                                        setRenamingHistoryId(null)
+                                      }
+                                    }}
+                                    autoFocus
+                                  />
+                                  <div className="flex space-x-1">
+                                    <Button
+                                      size="sm"
+                                      onClick={() => {
+                                        renameHistoryConversation(historyConv.id, renamingHistoryTitle)
+                                        setRenamingHistoryId(null)
+                                      }}
+                                      className="h-6 px-2 text-xs bg-blue-600 hover:bg-blue-700"
+                                    >
+                                      <Check className="w-3 h-3" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => setRenamingHistoryId(null)}
+                                      className="h-6 px-2 text-xs text-slate-400 hover:text-white"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <h4 className="text-sm font-medium text-slate-300 truncate">
+                                    {historyConv.name || '未命名对话'}
+                                  </h4>
+                                  <p className="text-xs text-slate-400 mt-1">
+                                    {(() => {
+                                      if (!historyConv.created_at) return '未知时间'
+
+                                      try {
+                                        // 尝试不同的时间戳格式
+                                        let timestamp = Number(historyConv.created_at)
+
+                                        // 如果是秒级时间戳，转换为毫秒
+                                        if (timestamp < 10000000000) {
+                                          timestamp = timestamp * 1000
+                                        }
+
+                                        const date = new Date(timestamp)
+
+                                        // 检查日期是否有效
+                                        if (isNaN(date.getTime()) || date.getFullYear() < 2020) {
+                                          return '未知时间'
+                                        }
+
+                                        return date.toLocaleDateString('zh-CN', {
+                                          year: 'numeric',
+                                          month: '2-digit',
+                                          day: '2-digit'
+                                        })
+                                      } catch (error) {
+                                        console.warn('时间解析失败:', historyConv.created_at, error)
+                                        return '未知时间'
+                                      }
+                                    })()}
+                                  </p>
+                                </>
+                              )}
+                            </div>
+                            {renamingHistoryId !== historyConv.id && (
+                              <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Button
+                                  variant="ghost"
                                   size="sm"
-                                  onClick={() => {
-                                    renameHistoryConversation(historyConv.id, renamingHistoryTitle)
-                                    setRenamingHistoryId(null)
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setRenamingHistoryId(historyConv.id)
+                                    setRenamingHistoryTitle(historyConv.name || '未命名对话')
                                   }}
-                                  className="h-6 px-2 text-xs bg-blue-600 hover:bg-blue-700"
+                                  className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 p-1"
                                 >
-                                  <Check className="w-3 h-3" />
+                                  <Edit3 className="w-3 h-3" />
                                 </Button>
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => setRenamingHistoryId(null)}
-                                  className="h-6 px-2 text-xs text-slate-400 hover:text-white"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    deleteHistoryConversation(historyConv.id)
+                                  }}
+                                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1"
                                 >
-                                  <X className="w-3 h-3" />
+                                  <Trash2 className="w-3 h-3" />
                                 </Button>
                               </div>
-                            </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+
+                    {/* 加载更多按钮 */}
+                    {hasMoreHistory && !isLoadingHistory && (
+                      <div className="p-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => fetchHistoryConversations(false, true)}
+                          className="w-full text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 border border-blue-500/20"
+                        >
+                          加载更多
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
+          )}
+        </div>
+
+        {/* 主聊天区域 */}
+        <div className="flex-1 flex flex-col">
+          <div className="p-4 border-b border-blue-500/20 bg-slate-900/30 backdrop-blur-sm">
+            <div className="flex items-center space-x-4">
+              <Avatar className="w-12 h-12 ring-2 ring-blue-500/30">
+                <AvatarImage src={actualAgentAvatar} />
+                <AvatarFallback className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-lg font-semibold">
+                  {agentName?.[0] || 'A'}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <h3 className="font-semibold text-white">{agentName || 'AI助手'}</h3>
+                <p className="text-sm text-blue-200/70">
+                  {currentSession?.title || '新对话'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <ScrollArea className="flex-1 p-6">
+            <div className="space-y-6 w-full">
+              {currentSession?.messages.map((message) => {
+                const isUser = message.role === 'user'
+
+                return (
+                  <div key={message.id} className={`flex w-full ${isUser ? 'justify-end pr-8' : 'justify-start pl-8'} mb-6`}>
+                    <div className={`flex ${isUser ? 'flex-row-reverse' : 'flex-row'} items-start space-x-4 ${isUser ? 'space-x-reverse' : ''} max-w-[75%]`}>
+                      <Avatar className="w-[50px] h-[50px] flex-shrink-0 mt-1">
+                        <AvatarImage src={isUser ? actualUserAvatar : actualAgentAvatar} />
+                        <AvatarFallback className={`text-white text-lg ${isUser
+                          ? 'bg-gradient-to-r from-green-500 to-emerald-500'
+                          : 'bg-gradient-to-r from-blue-500 to-cyan-500'
+                          }`}>
+                          {isUser ? (actualUserAvatar ? 'U' : '用') : agentName[0]}
+                        </AvatarFallback>
+                      </Avatar>
+
+                      <div className="flex-1 min-w-0">
+                        <div className={`rounded-xl px-4 py-3 text-base leading-relaxed ${isUser
+                          ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg user-message'
+                          : 'bg-white/95 text-gray-800 border border-gray-200 shadow-sm'
+                          }`} style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                          {message.isStreaming ? (
+                            (message as any).isThinking || !message.content ? (
+                              <TypingIndicator />
+                            ) : (
+                              <>
+                                {console.log('[Render] 渲染流式消息:', {
+                                  messageId: message.id,
+                                  contentType: typeof message.content,
+                                  content: message.content,
+                                  stringContent: String(message.content)
+                                })}
+                                <TypewriterEffect content={String(message.content)} speed={20} />
+                              </>
+                            )
                           ) : (
-                            <>
-                              <h4 className="text-sm font-medium text-slate-300 truncate">
-                                {historyConv.name || '未命名对话'}
-                              </h4>
-                              <p className="text-xs text-slate-400 mt-1">
-                                {(() => {
-                                  if (!historyConv.created_at) return '未知时间'
+                            <EnhancedMessageContent content={String(message.content || '')} />
+                          )}
 
-                                  try {
-                                    // 尝试不同的时间戳格式
-                                    let timestamp = Number(historyConv.created_at)
+                          {message.attachments && message.attachments.length > 0 && (
+                            <div className="mt-3 space-y-2">
+                              {message.attachments.map((attachment) => (
+                                <AttachmentRenderer
+                                  key={attachment.id}
+                                  attachment={attachment}
+                                  isStreamingComplete={!message.isStreaming}
+                                />
+                              ))}
+                            </div>
+                          )}
 
-                                    // 如果是秒级时间戳，转换为毫秒
-                                    if (timestamp < 10000000000) {
-                                      timestamp = timestamp * 1000
-                                    }
+                          {/* 下载链接检测和显示 */}
+                          {!isUser && !message.isStreaming && (() => {
+                            const fileLinks = extractFileLinks(message.content)
+                            return fileLinks.length > 0 && (
+                              <div className="mt-3 space-y-2">
+                                {fileLinks.map((fileLink) => (
+                                  <FileCard
+                                    key={fileLink.id}
+                                    attachment={{
+                                      id: fileLink.id,
+                                      name: fileLink.name,
+                                      type: fileLink.type,
+                                      size: fileLink.size,
+                                      url: fileLink.downloadUrl,
+                                      source: 'agent' as const
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                            )
+                          })()}
 
-                                    const date = new Date(timestamp)
-
-                                    // 检查日期是否有效
-                                    if (isNaN(date.getTime()) || date.getFullYear() < 2020) {
-                                      return '未知时间'
-                                    }
-
-                                    return date.toLocaleDateString('zh-CN', {
-                                      year: 'numeric',
-                                      month: '2-digit',
-                                      day: '2-digit'
-                                    })
-                                  } catch (error) {
-                                    console.warn('时间解析失败:', historyConv.created_at, error)
-                                    return '未知时间'
+                          {/* 错误重试 */}
+                          {message.hasError && (
+                            <div className="mt-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-red-600 border-red-300 hover:bg-red-50"
+                                onClick={() => {
+                                  // 找到用户的原始消息并重新发送
+                                  const userMessage = currentSession.messages.find(msg =>
+                                    msg.timestamp < message.timestamp && msg.role === 'user'
+                                  )
+                                  if (userMessage) {
+                                    // 重置错误消息状态
+                                    setSessions(prev => prev.map(session =>
+                                      session.id === currentSessionId ?
+                                        {
+                                          ...session,
+                                          messages: session.messages.map(msg =>
+                                            msg.id === message.id ?
+                                              {
+                                                ...msg,
+                                                hasError: false,
+                                                content: '正在重新处理...'
+                                              } :
+                                              msg
+                                          )
+                                        } :
+                                        session
+                                    ))
+                                    // 重新发送消息
+                                    setInput(userMessage.content)
+                                    setAttachments(userMessage.attachments || [])
+                                    // 延迟一下让状态更新，然后发送
+                                    setTimeout(() => sendMessage(), 100)
                                   }
-                                })()}
-                              </p>
-                            </>
+                                }}
+                                disabled={isLoading || isStreaming}
+                              >
+                                {isLoading || isStreaming ? '处理中...' : '重试发送'}
+                              </Button>
+                            </div>
                           )}
                         </div>
-                        {renamingHistoryId !== historyConv.id && (
-                          <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setRenamingHistoryId(historyConv.id)
-                                setRenamingHistoryTitle(historyConv.name || '未命名对话')
-                              }}
-                              className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 p-1"
-                            >
-                              <Edit3 className="w-3 h-3" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                deleteHistoryConversation(historyConv.id)
-                              }}
-                              className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
+
+                        {/* 时间戳 */}
+                        <div className={`text-xs text-blue-200/50 mt-2 ${isUser ? 'text-right' : 'text-left'}`}>
+                          {message.timestamp && !isNaN(message.timestamp)
+                            ? new Date(message.timestamp).toLocaleTimeString('zh-CN', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: false
+                            })
+                            : '刚刚'
+                          }
+                        </div>
+                        {/* RAGFlow 引用卡片 */}
+                        {message.reference && agentConfig?.platform === 'RAGFLOW' && (
+                          <div className="mt-2 text-left">
+                            <RAGFlowReferenceCard reference={message.reference} agentId={agentConfig?.agentId} />
                           </div>
                         )}
                       </div>
                     </div>
-                  ))}
-
-                  {/* 加载更多按钮 */}
-                  {hasMoreHistory && !isLoadingHistory && (
-                    <div className="p-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => fetchHistoryConversations(false, true)}
-                        className="w-full text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 border border-blue-500/20"
-                      >
-                        加载更多
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
+                  </div>
+                )
+              })}
+              <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
-        )}
-      </div>
 
-      {/* 主聊天区域 */}
-      <div className="flex-1 flex flex-col">
-        <div className="p-4 border-b border-blue-500/20 bg-slate-900/30 backdrop-blur-sm">
-          <div className="flex items-center space-x-4">
-            <Avatar className="w-12 h-12 ring-2 ring-blue-500/30">
-              <AvatarImage src={actualAgentAvatar} />
-              <AvatarFallback className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-lg font-semibold">
-                {agentName?.[0] || 'A'}
-              </AvatarFallback>
-            </Avatar>
-            <div>
-              <h3 className="font-semibold text-white">{agentName || 'AI助手'}</h3>
-              <p className="text-sm text-blue-200/70">
-                {currentSession?.title || '新对话'}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <ScrollArea className="flex-1 p-6">
-          <div className="space-y-6 w-full">
-            {currentSession?.messages.map((message) => {
-              const isUser = message.role === 'user'
-
-              return (
-                <div key={message.id} className={`flex w-full ${isUser ? 'justify-end pr-8' : 'justify-start pl-8'} mb-6`}>
-                  <div className={`flex ${isUser ? 'flex-row-reverse' : 'flex-row'} items-start space-x-4 ${isUser ? 'space-x-reverse' : ''} max-w-[75%]`}>
-                    <Avatar className="w-[50px] h-[50px] flex-shrink-0 mt-1">
-                      <AvatarImage src={isUser ? actualUserAvatar : actualAgentAvatar} />
-                      <AvatarFallback className={`text-white text-lg ${
-                        isUser
-                          ? 'bg-gradient-to-r from-green-500 to-emerald-500'
-                          : 'bg-gradient-to-r from-blue-500 to-cyan-500'
-                      }`}>
-                        {isUser ? (actualUserAvatar ? 'U' : '用') : agentName[0]}
-                      </AvatarFallback>
-                    </Avatar>
-
+          <div className="p-4 border-t border-blue-500/20 bg-slate-900/30 backdrop-blur-sm">
+            {/* 附件预览 */}
+            {attachments.length > 0 && (
+              <div className="mb-4 space-y-2">
+                {attachments.map((attachment) => (
+                  <div key={attachment.id} className="flex items-center space-x-2 bg-slate-800/50 rounded-lg p-2">
+                    {attachment.type.startsWith('image/') ? (
+                      <Image size={16} className="text-blue-400" />
+                    ) : (
+                      <FileText size={16} className="text-green-400" />
+                    )}
                     <div className="flex-1 min-w-0">
-                    <div className={`rounded-xl px-4 py-3 text-base leading-relaxed ${
-                      isUser
-                        ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg user-message'
-                        : 'bg-white/95 text-gray-800 border border-gray-200 shadow-sm'
-                    }`} style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-                      {message.isStreaming ? (
-                        (message as any).isThinking || !message.content ? (
-                          <TypingIndicator />
+                      <div className="text-sm text-white truncate">{attachment.name}</div>
+                      <div className="text-xs text-blue-200/70">
+                        {(attachment.size / 1024).toFixed(1)}KB
+                        {attachment.uploadFileId ? (
+                          <span className="text-green-400 ml-2">✓ 已上传</span>
                         ) : (
-                          <>
-                            {console.log('[Render] 渲染流式消息:', {
-                              messageId: message.id,
-                              contentType: typeof message.content,
-                              content: message.content,
-                              stringContent: String(message.content)
-                            })}
-                            <TypewriterEffect content={String(message.content)} speed={20} />
-                          </>
-                        )
-                      ) : (
-                        <EnhancedMessageContent content={String(message.content || '')} />
-                      )}
-
-                      {message.attachments && message.attachments.length > 0 && (
-                        <div className="mt-3 space-y-2">
-                          {message.attachments.map((attachment) => (
-                            <AttachmentRenderer
-                              key={attachment.id}
-                              attachment={attachment}
-                              isStreamingComplete={!message.isStreaming}
-                            />
-                          ))}
-                        </div>
-                      )}
-
-                      {/* 下载链接检测和显示 */}
-                      {!isUser && !message.isStreaming && (() => {
-                        const fileLinks = extractFileLinks(message.content)
-                        return fileLinks.length > 0 && (
-                          <div className="mt-3 space-y-2">
-                            {fileLinks.map((fileLink) => (
-                              <FileCard
-                                key={fileLink.id}
-                                attachment={{
-                                  id: fileLink.id,
-                                  name: fileLink.name,
-                                  type: fileLink.type,
-                                  size: fileLink.size,
-                                  url: fileLink.downloadUrl,
-                                  source: 'agent' as const
-                                }}
-                              />
-                            ))}
-                          </div>
-                        )
-                      })()}
-
-                      {/* 错误重试 */}
-                      {message.hasError && (
-                        <div className="mt-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-red-600 border-red-300 hover:bg-red-50"
-                            onClick={() => {
-                              // 找到用户的原始消息并重新发送
-                              const userMessage = currentSession.messages.find(msg =>
-                                msg.timestamp < message.timestamp && msg.role === 'user'
-                              )
-                              if (userMessage) {
-                                // 重置错误消息状态
-                                setSessions(prev => prev.map(session =>
-                                  session.id === currentSessionId
-                                    ? {
-                                        ...session,
-                                        messages: session.messages.map(msg =>
-                                          msg.id === message.id
-                                            ? { ...msg, hasError: false, content: '正在重新处理...' }
-                                            : msg
-                                        )
-                                      }
-                                    : session
-                                ))
-                                // 重新发送消息
-                                setInput(userMessage.content)
-                                setAttachments(userMessage.attachments || [])
-                                // 延迟一下让状态更新，然后发送
-                                setTimeout(() => sendMessage(), 100)
-                              }
-                            }}
-                            disabled={isLoading || isStreaming}
-                          >
-                            {isLoading || isStreaming ? '处理中...' : '重试发送'}
-                          </Button>
-                        </div>
-                      )}
+                          <span className="text-yellow-400">⚠ 本地文件</span>
+                        )}
+                      </div>
                     </div>
-
-                    {/* 时间戳 */}
-                    <div className={`text-xs text-blue-200/50 mt-2 ${isUser ? 'text-right' : 'text-left'}`}>
-                      {message.timestamp && !isNaN(message.timestamp)
-                        ? new Date(message.timestamp).toLocaleTimeString('zh-CN', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: false
-                          })
-                        : '刚刚'
-                      }
-                    </div>
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeAttachment(attachment.id)}
+                      className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-6 w-6 p-0"
+                    >
+                      <X size={12} />
+                    </Button>
                   </div>
-                </div>
-              )
-            })}
-            <div ref={messagesEndRef} />
-          </div>
-        </ScrollArea>
+                ))}
+              </div>
+            )}
 
-        <div className="p-4 border-t border-blue-500/20 bg-slate-900/30 backdrop-blur-sm">
-          {/* 附件预览 */}
-          {attachments.length > 0 && (
-            <div className="mb-4 space-y-2">
-              {attachments.map((attachment) => (
-                <div key={attachment.id} className="flex items-center space-x-2 bg-slate-800/50 rounded-lg p-2">
-                  {attachment.type.startsWith('image/') ? (
-                    <Image size={16} className="text-blue-400" />
-                  ) : (
-                    <FileText size={16} className="text-green-400" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm text-white truncate">{attachment.name}</div>
-                    <div className="text-xs text-blue-200/70">
-                      {(attachment.size / 1024).toFixed(1)}KB
-                      {attachment.uploadFileId ? (
-                        <span className="text-green-400 ml-2">✓ 已上传</span>
-                      ) : (
-                        <span className="text-yellow-400">⚠ 本地文件</span>
-                      )}
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeAttachment(attachment.id)}
-                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-6 w-6 p-0"
-                  >
-                    <X size={12} />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="flex items-center space-x-2 bg-white/5 rounded-full p-2 border border-white/10">
-            {/* 文件上传按钮 */}
-            <input
-              type="file"
-              id="file-upload"
-              multiple
-              accept="image/*,application/pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.ppt,.pptx,.xml,.epub,audio/*,video/*"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => document.getElementById('file-upload')?.click()}
-              disabled={isUploading}
-              className="text-blue-200 hover:text-white hover:bg-blue-500/10 h-8 w-8 p-0 rounded-full"
-              title={isUploading ? "正在上传文件..." : "上传文件"}
-            >
-              {isUploading ? (
-                <div className="animate-spin w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full" />
-              ) : (
-                <Paperclip size={16} />
-              )}
-            </Button>
-
-            <div className="flex-1 relative">
-              <Textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder={`向${agentName}发送消息...`}
-                className="min-h-[36px] max-h-24 resize-none bg-transparent border-none text-white placeholder:text-blue-200/50 focus:outline-none focus:ring-0 px-2 text-base"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    if (!isLoading && (input.trim() || attachments.length > 0)) {
-                      sendMessage()
-                    }
-                  }
-                }}
+            <div className="flex items-center space-x-2 bg-white/5 rounded-full p-2 border border-white/10">
+              {/* 文件上传按钮 */}
+              <input
+                type="file"
+                id="file-upload"
+                multiple
+                accept="image/*,application/pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.ppt,.pptx,.xml,.epub,audio/*,video/*"
+                onChange={handleFileUpload}
+                className="hidden"
               />
-            </div>
-
-            {isStreaming ? (
               <Button
-                className="bg-red-600 hover:bg-red-700 text-white h-8 w-8 p-0 rounded-full"
+                variant="ghost"
+                size="sm"
+                onClick={() => document.getElementById('file-upload')?.click()}
+                disabled={isUploading}
+                className="text-blue-200 hover:text-white hover:bg-blue-500/10 h-8 w-8 p-0 rounded-full"
+                title={isUploading ? "正在上传文件..." : "上传文件"}
               >
-                <StopCircle size={16} />
-              </Button>
-            ) : (
-              <Button
-                onClick={sendMessage}
-                disabled={isLoading || (!input.trim() && attachments.length === 0)}
-                className="bg-blue-600 hover:bg-blue-700 text-white h-8 w-8 p-0 rounded-full disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                {isUploading ? (
+                  <div className="animate-spin w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full" />
                 ) : (
-                  <Send size={16} />
+                  <Paperclip size={16} />
                 )}
               </Button>
-            )}
+
+              <div className="flex-1 relative">
+                <Textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder={`向${agentName}发送消息...`}
+                  className="min-h-[36px] max-h-24 resize-none bg-transparent border-none text-white placeholder:text-blue-200/50 focus:outline-none focus:ring-0 px-2 text-base"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      if (!isLoading && (input.trim() || attachments.length > 0)) {
+                        sendMessage()
+                      }
+                    }
+                  }}
+                />
+              </div>
+
+              {isStreaming ? (
+                <Button
+                  className="bg-red-600 hover:bg-red-700 text-white h-8 w-8 p-0 rounded-full"
+                >
+                  <StopCircle size={16} />
+                </Button>
+              ) : (
+                <Button
+                  onClick={sendMessage}
+                  disabled={isLoading || (!input.trim() && attachments.length === 0)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white h-8 w-8 p-0 rounded-full disabled:opacity-50"
+                >
+                  {isLoading ? (
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                  ) : (
+                    <Send size={16} />
+                  )}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
     </>
   )
 }

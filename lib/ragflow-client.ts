@@ -43,24 +43,7 @@ export class RAGFlowClient {
     this.config = config
   }
 
-  /**
-   * 测试 RAGFlow 服务连接
-   */
-  async testConnection(): Promise<boolean> {
-    try {
-      console.log('[RAGFlowClient] 测试连接:', this.config.baseUrl)
-      const response = await fetch(`${this.config.baseUrl}/api/v1/health`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(300000) // 300秒超时
-      })
 
-      console.log('[RAGFlowClient] 连接测试响应:', response.status)
-      return response.ok
-    } catch (error) {
-      console.error('[RAGFlowClient] 连接测试失败:', error)
-      return false
-    }
-  }
 
   setConversationId(conversationId: string) {
     this.conversationId = conversationId
@@ -73,7 +56,8 @@ export class RAGFlowClient {
     query: string,
     onMessage: (message: RAGFlowMessage) => void,
     onError?: (error: Error) => void,
-    onComplete?: () => void
+    onComplete?: () => void,
+    quote: boolean = true // 默认为 true
   ): Promise<void> {
     try {
       // 取消之前的请求和超时
@@ -120,7 +104,8 @@ export class RAGFlowClient {
         question: query,
         stream: false, // 改为非流式模式
         session_id: this.conversationId,
-        user_id: this.config.userId  // 添加用户ID
+        user_id: this.config.userId,  // 添加用户ID
+        quote: true // 启用引用返回
       }
 
       console.log('[RAGFlowClient] 发送请求:', {
@@ -386,6 +371,37 @@ export class RAGFlowClient {
   }
 
   /**
+   * 获取会话列表
+   */
+  async getSessions(page: number = 1, pageSize: number = 20): Promise<{ id: string; name: string; create_date: string }[]> {
+    try {
+      const response = await fetch(
+        `${this.config.baseUrl}/api/v1/chats/${this.config.agentId}/sessions?page=${page}&page_size=${pageSize}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.config.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          signal: AbortSignal.timeout(30000) // 30秒超时
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error(`获取会话列表失败: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      if (data.code === 0 && Array.isArray(data.data)) {
+        return data.data
+      }
+      return []
+    } catch (error) {
+      console.error('[RAGFlowClient] 获取会话列表失败:', error)
+      return []
+    }
+  }
+
+  /**
    * 测试连接
    */
   async testConnection(): Promise<{ success: boolean; error?: string }> {
@@ -409,7 +425,7 @@ export class RAGFlowClient {
       }
 
       const data = await response.json()
-      
+
       // 检查指定的 agentId 是否存在
       if (data.data && Array.isArray(data.data)) {
         const agentExists = data.data.some((agent: any) => agent.id === this.config.agentId)
