@@ -6,6 +6,7 @@ import { ErrorHandler, AuthorizationError, ValidationError, NotFoundError } from
 import { validateAndSanitize, chatSchemas } from "@/lib/security/validation"
 import { checkRateLimit, chatRateLimiter } from "@/lib/security/rate-limiter"
 import { extractRequestMeta, logger } from "@/lib/utils/logger"
+import { verifyToken, extractTokenFromHeader } from "@/lib/auth/jwt"
 
 export async function POST(request: NextRequest) {
   const meta = extractRequestMeta(request)
@@ -18,9 +19,30 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { message, agentId, sessionId, files } = validateAndSanitize(chatSchemas.sendMessage, body)
 
-    // 简化认证 - 临时实现
-    const user = { id: 'temp-user-id', email: 'temp@example.com' }
-    // TODO: 实现真正的JWT认证
+    // JWT 认证 - 从 Cookie 或 Authorization 头获取 token
+    const cookieToken = request.cookies.get('auth-token')?.value
+    const headerToken = extractTokenFromHeader(request.headers.get('authorization'))
+    const token = cookieToken || headerToken
+
+    if (!token) {
+      throw new AuthorizationError("未提供认证令牌，请先登录")
+    }
+
+    // 验证 JWT token
+    const payload = verifyToken(token)
+    if (!payload) {
+      throw new AuthorizationError("无效的认证令牌，请重新登录")
+    }
+
+    // 从 JWT payload 中获取用户信息
+    const user = {
+      id: payload.userId,
+      email: `${payload.userId}@company.com`,  // 如果需要 email，可以从数据库查询
+      companyId: payload.companyId,
+      role: payload.role
+    }
+
+    logger.info("用户认证成功", { userId: user.id, companyId: user.companyId, agentId })
 
     // 聊天速率限制
     const chatIdentifier = `chat:${user.id}`
@@ -241,5 +263,5 @@ export async function POST(request: NextRequest) {
         platform: agent.platform
       }
     })
-  }, meta.requestId, user?.id, meta.ip)
+  }, meta.requestId, user.id, meta.ip)
 }

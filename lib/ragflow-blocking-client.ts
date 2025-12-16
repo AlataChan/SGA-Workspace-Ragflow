@@ -92,7 +92,7 @@ export class RAGFlowBlockingClient {
 
       const requestBody = {
         question: message,
-        stream: false, // 非流式模式
+        stream: true, // ✅ 启用流式模式
         session_id: this.conversationId,
         user_id: this.config.userId
       }
@@ -133,26 +133,11 @@ export class RAGFlowBlockingClient {
         return
       }
 
-      // 处理非流式响应
-      const responseData = await response.json()
-      console.log('[RAGFlowBlocking] 收到完整响应:', responseData)
-
-      if (responseData.code !== 0) {
-        const errorMsg = responseData.message || '请求失败'
-        console.error('[RAGFlowBlocking] API 返回错误:', responseData)
-        onError?.(errorMsg)
-        onMessage({
-          type: 'error',
-          content: `RAGFlow API 错误: ${errorMsg}`
-        })
-        return
-      }
-
-      // 提取响应数据
-      const data = responseData.data
-      if (!data || !data.answer) {
-        const errorMsg = '响应数据格式错误'
-        console.error('[RAGFlowBlocking] 响应数据结构:', data)
+      // ✅ 处理流式 SSE 响应
+      const reader = response.body?.getReader()
+      if (!reader) {
+        const errorMsg = '无法读取响应流'
+        console.error('[RAGFlowBlocking] 响应体为空')
         onError?.(errorMsg)
         onMessage({
           type: 'error',
@@ -161,41 +146,141 @@ export class RAGFlowBlockingClient {
         return
       }
 
-      const content = data.answer || ''
-      const reference = data.reference || null
-      const sessionId = data.session_id || this.conversationId
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let fullContent = ''
+      let finalReference: any = null
+      let finalSessionId = this.conversationId
 
-      // 更新会话ID
-      if (sessionId && sessionId !== this.conversationId) {
-        this.conversationId = sessionId
-        console.log('[RAGFlowBlocking] 更新会话ID:', this.conversationId)
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+
+          if (done) {
+            console.log('[RAGFlowBlocking] 流式响应完成')
+            break
+          }
+
+          // 解码数据块
+          buffer += decoder.decode(value, { stream: true })
+
+          // 按行分割
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || '' // 保留最后一个不完整的行
+
+          for (const line of lines) {
+            const trimmedLine = line.trim()
+
+            // 跳过空行和注释
+            if (!trimmedLine || trimmedLine.startsWith(':')) {
+              continue
+            }
+
+            // 解析 SSE 数据
+            if (trimmedLine.startsWith('data:')) {
+              const dataStr = trimmedLine.substring(5).trim()
+
+              // 跳过 [DONE] 标记
+              if (dataStr === '[DONE]') {
+                console.log('[RAGFlowBlocking] 收到 [DONE] 标记')
+                continue
+              }
+
+              try {
+                const data = JSON.parse(dataStr)
+
+                if (data.code !== 0) {
+                  const errorMsg = data.message || '请求失败'
+                  console.error('[RAGFlowBlocking] SSE 错误:', data)
+                  onError?.(errorMsg)
+                  onMessage({
+                    type: 'error',
+                    content: `RAGFlow API 错误: ${errorMsg}`
+                  })
+                  continue
+                }
+
+                // 提取数据
+                const answer = data.data?.answer
+                const reference = data.data?.reference
+                const sessionId = data.data?.session_id
+
+                if (answer) {
+                  // RAGFlow 返回的是累积的完整内容，直接使用
+                  fullContent = answer
+
+                  console.log('[RAGFlowBlocking] 收到流式内容:', {
+                    contentLength: fullContent.length,
+                    contentPreview: fullContent.substring(0, 50) + (fullContent.length > 50 ? '...' : '')
+                  })
+
+                  // 发送内容更新
+                  onMessage({
+                    type: 'content',
+                    content: fullContent,
+                    reference: reference || null,
+                    conversationId: sessionId || this.conversationId
+                  })
+                }
+
+                // 保存最终的引用和会话ID
+                if (reference) {
+                  finalReference = reference
+                }
+                if (sessionId) {
+                  finalSessionId = sessionId
+                }
+
+              } catch (parseError) {
+                console.warn('[RAGFlowBlocking] 解析 SSE 数据失败:', {
+                  error: parseError,
+                  data: dataStr.substring(0, 100)
+                })
+              }
+            }
+          }
+        }
+
+        // 更新会话ID
+        if (finalSessionId && finalSessionId !== this.conversationId) {
+          this.conversationId = finalSessionId
+          console.log('[RAGFlowBlocking] 更新会话ID:', this.conversationId)
+        }
+
+        console.log('[RAGFlowBlocking] 流式响应处理完成:', {
+          contentLength: fullContent.length,
+          hasReference: !!finalReference,
+          sessionId: finalSessionId
+        })
+
+        const content = fullContent
+        const reference = finalReference
+        const sessionId = finalSessionId
+
+        // 发送完成信号
+        onMessage({
+          type: 'complete',
+          content: content,
+          reference: reference,
+          conversationId: sessionId
+        })
+
+        onComplete?.()
+
+      } catch (streamError: any) {
+        if (streamError.name === 'AbortError') {
+          console.log('[RAGFlowBlocking] 流式读取被取消')
+          return
+        }
+
+        console.error('[RAGFlowBlocking] 流式处理失败:', streamError)
+        const errorMsg = streamError.message || '流式处理失败'
+        onError?.(errorMsg)
+        onMessage({
+          type: 'error',
+          content: errorMsg
+        })
       }
-
-      console.log('[RAGFlowBlocking] 处理完整响应:', {
-        contentLength: content.length,
-        contentPreview: content.substring(0, 100) + (content.length > 100 ? '...' : ''),
-        hasReference: !!reference,
-        sessionId: sessionId
-      })
-
-      // 发送完整内容
-      onMessage({
-        type: 'content',
-        content: content,
-        reference: reference,
-        conversationId: sessionId,
-        messageId: data.id
-      })
-
-      // 发送完成信号
-      onMessage({
-        type: 'complete',
-        content: content,
-        reference: reference,
-        conversationId: sessionId
-      })
-
-      onComplete?.()
 
     } catch (error: any) {
       if (error.name === 'AbortError') {

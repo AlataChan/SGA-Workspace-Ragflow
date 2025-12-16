@@ -1400,9 +1400,39 @@ export default function EnhancedChatWithSidebar({
     }
   }, [agentConfig?.platform, agentConfig?.difyUrl, agentConfig?.difyKey, agentConfig?.baseUrl, agentConfig?.apiKey, agentConfig?.agentId, agentConfig?.userId])
 
-  // 发送消息
+  // 上次发送时间
+  const lastSendTimeRef = useRef<number>(0)
+  // 最小发送间隔（毫秒）
+  const MIN_SEND_INTERVAL = 1000 // 1秒
+
+  // 发送消息（带节流保护）
   const sendMessage = async () => {
-    if ((!input.trim() && attachments.length === 0) || isLoading || isStreaming || !currentSession) return
+    // 基础验证
+    if ((!input.trim() && attachments.length === 0) || isLoading || isStreaming || !currentSession) {
+      console.log('[EnhancedChat] 发送消息被阻止:', {
+        hasInput: !!input.trim(),
+        hasAttachments: attachments.length > 0,
+        isLoading,
+        isStreaming,
+        hasSession: !!currentSession
+      })
+      return
+    }
+
+    // 节流保护：防止快速连续点击
+    const now = Date.now()
+    const timeSinceLastSend = now - lastSendTimeRef.current
+    if (timeSinceLastSend < MIN_SEND_INTERVAL) {
+      console.log('[EnhancedChat] 发送过于频繁，请稍后重试', {
+        timeSinceLastSend,
+        minInterval: MIN_SEND_INTERVAL
+      })
+      toast.warning(`请稍后再试（${Math.ceil((MIN_SEND_INTERVAL - timeSinceLastSend) / 1000)}秒）`)
+      return
+    }
+
+    // 更新最后发送时间
+    lastSendTimeRef.current = now
 
     // 检查客户端是否初始化
     if (agentConfig?.platform === 'DIFY') {
@@ -1492,6 +1522,14 @@ export default function EnhancedChatWithSidebar({
       setIsStreaming(false)
     }
   }
+
+  // 组件卸载时清理
+  useEffect(() => {
+    return () => {
+      // 清理最后发送时间引用
+      lastSendTimeRef.current = 0
+    }
+  }, [])
 
   // DIFY 消息发送
   const sendDifyMessage = async (messageContent: string, conversationId: string, assistantMessage: Message, fullContent: string) => {
