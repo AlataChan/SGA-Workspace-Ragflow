@@ -1,21 +1,37 @@
 /**
  * RAGFlow 客户端
  * 用于与 RAGFlow API 进行通信
+ *
+ * 支持多种端点类型:
+ * - legacy: 旧版 /api/v1/chats/${agentId}/completions (可能已废弃)
+ * - dialog: 新版 /v1/conversation/completion (推荐用于普通对话)
+ * - agent: 新版 /api/v1/webhook/${agentId} (推荐用于复杂工作流)
+ * - auto: 自动选择，优先使用新端点，失败则回退到旧端点
  */
+
+import { RAGFlowDialogClient, RAGFlowDialogMessage } from './ragflow-dialog-client'
+import { RAGFlowAgentClient, RAGFlowAgentMessage } from './ragflow-agent-client'
+
+export type RAGFlowEndpointType = 'legacy' | 'dialog' | 'agent' | 'auto'
 
 export interface RAGFlowConfig {
   baseUrl: string
   apiKey: string
   agentId: string
   userId: string  // 添加 userId 字段（与 DIFY 保持一致）
+  endpointType?: RAGFlowEndpointType  // 端点类型选择，默认 'auto'
+  jwtToken?: string  // Dialog 模式需要 JWT Token
+  dialogId?: string  // Dialog 模式需要 Dialog ID
 }
 
 export interface RAGFlowMessage {
-  type: 'content' | 'thinking' | 'reference' | 'error' | 'complete'
+  type: 'content' | 'thinking' | 'reference' | 'error' | 'complete' | 'step'
   content?: string
   reference?: any
   conversationId?: string
   messageId?: string
+  step?: string  // Agent 模式的步骤信息
+  stepMessage?: string
 }
 
 export interface RAGFlowStreamResponse {
@@ -51,13 +67,126 @@ export class RAGFlowClient {
 
   /**
    * 发送消息到 RAGFlow
+   * 根据配置的 endpointType 选择合适的端点
    */
   async sendMessage(
     query: string,
     onMessage: (message: RAGFlowMessage) => void,
     onError?: (error: Error) => void,
-    onComplete?: () => void,
-    quote: boolean = true // 默认为 true
+    onComplete?: () => void
+  ): Promise<void> {
+    const endpointType = this.config.endpointType || 'auto'
+
+    console.log('[RAGFlowClient] 使用端点类型:', endpointType)
+
+    switch (endpointType) {
+      case 'dialog':
+        return this.sendViaDialog(query, onMessage, onError, onComplete)
+      case 'agent':
+        return this.sendViaAgent(query, onMessage, onError, onComplete)
+      case 'legacy':
+        return this.sendViaLegacy(query, onMessage, onError, onComplete)
+      case 'auto':
+      default:
+        // 自动模式：优先尝试 Dialog，失败则回退到 Legacy
+        try {
+          return await this.sendViaDialog(query, onMessage, onError, onComplete)
+        } catch (error) {
+          console.warn('[RAGFlowClient] Dialog 端点失败，回退到 Legacy 端点:', error)
+          return this.sendViaLegacy(query, onMessage, onError, onComplete)
+        }
+    }
+  }
+
+  /**
+   * 使用 Dialog 端点发送消息 (v0.22.1 推荐)
+   */
+  private async sendViaDialog(
+    query: string,
+    onMessage: (message: RAGFlowMessage) => void,
+    onError?: (error: Error) => void,
+    onComplete?: () => void
+  ): Promise<void> {
+    if (!this.config.jwtToken) {
+      throw new Error('Dialog 模式需要 jwtToken')
+    }
+    if (!this.config.dialogId) {
+      throw new Error('Dialog 模式需要 dialogId')
+    }
+
+    const dialogClient = new RAGFlowDialogClient({
+      baseUrl: this.config.baseUrl,
+      jwtToken: this.config.jwtToken,
+      userId: this.config.userId
+    })
+
+    // 如果有会话ID，设置它
+    if (this.conversationId) {
+      dialogClient.setConversationId(this.conversationId)
+    } else {
+      // 创建新会话
+      const convId = await dialogClient.createConversation(this.config.dialogId)
+      this.conversationId = convId
+    }
+
+    // 转换消息格式
+    const wrappedOnMessage = (msg: RAGFlowDialogMessage) => {
+      onMessage({
+        type: msg.type,
+        content: msg.content,
+        reference: msg.reference,
+        conversationId: msg.conversationId
+      })
+    }
+
+    const wrappedOnError = (error: string) => {
+      onError?.(new Error(error))
+    }
+
+    return dialogClient.sendMessage(query, wrappedOnMessage, onComplete, wrappedOnError)
+  }
+
+  /**
+   * 使用 Agent Webhook 端点发送消息 (v0.22.1 推荐)
+   */
+  private async sendViaAgent(
+    query: string,
+    onMessage: (message: RAGFlowMessage) => void,
+    onError?: (error: Error) => void,
+    onComplete?: () => void
+  ): Promise<void> {
+    const agentClient = new RAGFlowAgentClient({
+      baseUrl: this.config.baseUrl,
+      apiToken: this.config.apiKey,
+      agentId: this.config.agentId,
+      userId: this.config.userId
+    })
+
+    // 转换消息格式
+    const wrappedOnMessage = (msg: RAGFlowAgentMessage) => {
+      onMessage({
+        type: msg.type,
+        content: msg.content,
+        step: msg.step,
+        stepMessage: msg.stepMessage
+      })
+    }
+
+    const wrappedOnError = (error: string) => {
+      onError?.(new Error(error))
+    }
+
+    return agentClient.sendMessage(query, wrappedOnMessage, onComplete, wrappedOnError)
+  }
+
+  /**
+   * 使用旧版端点发送消息 (可能已废弃)
+   */
+  private async sendViaLegacy(
+    query: string,
+    onMessage: (message: RAGFlowMessage) => void,
+    onError?: (error: Error) => void,
+    onComplete?: () => void
   ): Promise<void> {
     try {
       // 取消之前的请求和超时
@@ -108,7 +237,7 @@ export class RAGFlowClient {
         quote: true // 启用引用返回
       }
 
-      console.log('[RAGFlowClient] 发送请求:', {
+      console.log('[RAGFlowClient] 发送请求 (Legacy):', {
         url: `${this.config.baseUrl}/api/v1/chats/${this.config.agentId}/completions`,
         agentId: this.config.agentId,
         sessionId: this.conversationId
