@@ -6,7 +6,10 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start"
+    "start": "next start",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
   },
   "dependencies": {
     "@fortaine/fetch-event-source": "^3.0.6",
@@ -112,11 +115,18 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.1.5",
+    "@testing-library/react": "^14.1.2",
+    "@testing-library/user-event": "^14.5.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22",
     "@types/pg": "^8.10.9",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "typescript": "^5"
+    "@vitejs/plugin-react": "^4.2.1",
+    "@vitest/ui": "^1.0.4",
+    "jsdom": "^23.0.1",
+    "typescript": "^5",
+    "vitest": "^1.0.4"
   }
 }
