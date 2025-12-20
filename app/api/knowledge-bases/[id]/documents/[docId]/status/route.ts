@@ -1,12 +1,13 @@
 /**
  * 文档解析状态查询 API
- * 
+ *
  * GET /api/knowledge-bases/[id]/documents/[docId]/status - 查询解析状态
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyUserAuth } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { DocumentStatus, DocumentStatusInfo, convertRagflowStatus } from '@/lib/types/document'
 
 /**
  * 查询文档解析状态
@@ -79,7 +80,7 @@ async function fetchDocumentStatus(
   apiKey: string,
   kbId: string,
   docId: string
-): Promise<{ success: boolean; data?: any; error?: string }> {
+): Promise<{ success: boolean; data?: DocumentStatusInfo; error?: string }> {
   try {
     // 获取文档列表，找到指定文档
     const url = `${baseUrl}/v1/document/list?kb_id=${kbId}&page=1&page_size=100`
@@ -122,23 +123,24 @@ async function fetchDocumentStatus(
       }
     }
 
-    // 转换状态格式
-    const status = targetDoc.status === '1' ? 'completed' : 
-                   targetDoc.status === '2' ? 'failed' : 
-                   'parsing'
+    // ✅ 使用标准化的状态转换函数，返回数字枚举
+    const status = convertRagflowStatus(targetDoc.status)
+
+    const statusInfo: DocumentStatusInfo = {
+      docId: targetDoc.id,
+      name: targetDoc.name,
+      status: status,
+      progress: targetDoc.progress || 0,
+      chunkNum: targetDoc.chunk_num || 0,
+      tokenNum: targetDoc.token_num || 0,
+      size: targetDoc.size || 0,
+      createTime: targetDoc.create_time,
+      errorMsg: targetDoc.error_msg,
+    }
 
     return {
       success: true,
-      data: {
-        docId: targetDoc.id,
-        name: targetDoc.name,
-        status: status,
-        progress: targetDoc.progress || 0,
-        chunkNum: targetDoc.chunk_num || 0,
-        tokenNum: targetDoc.token_num || 0,
-        size: targetDoc.size || 0,
-        createTime: targetDoc.create_time
-      }
+      data: statusInfo
     }
   } catch (error) {
     console.error('获取文档状态失败:', error)

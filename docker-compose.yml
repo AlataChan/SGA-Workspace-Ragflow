@@ -58,7 +58,14 @@ services:
       - DEFAULT_ADMIN_EMAIL=${DEFAULT_ADMIN_EMAIL}
       - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD}
       - DEFAULT_DIFY_BASE_URL=${DEFAULT_DIFY_BASE_URL}
-      
+
+      # RAGFlow配置
+      - RAGFLOW_URL=${RAGFLOW_URL}
+      - RAGFLOW_API_KEY=${RAGFLOW_API_KEY}
+      - RAGFLOW_CHAT_ID=${RAGFLOW_CHAT_ID}
+      - RAGFLOW_AGENT_ID=${RAGFLOW_AGENT_ID}
+      - RAGFLOW_KB_ID=${RAGFLOW_KB_ID}
+
     depends_on:
       postgres:
         condition: service_healthy
