@@ -1,24 +1,25 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { marked, Tokens } from 'marked'
 
 interface SimpleContentRendererProps {
   content: string
-  isStreaming?: boolean
-  onComplete?: () => void
 }
 
-export default function SimpleContentRenderer({
-  content,
-  isStreaming: _isStreaming = false,
-  onComplete
-}: SimpleContentRendererProps) {
-  const [displayedContent, setDisplayedContent] = useState('')
-  const typewriterTimerRef = useRef<NodeJS.Timeout | null>(null)
+// 配置标记 - 只初始化一次
+let markedConfigured = false
 
-  // 配置 marked - 只在组件挂载时执行一次
+/**
+ * 简化的内容渲染器 - 只负责将Markdown转为HTML
+ * 打字效果由外层 TypewriterEffect 控制
+ */
+export default function SimpleContentRenderer({ content }: SimpleContentRendererProps) {
+  // marked 配置只执行一次
   useEffect(() => {
+    if (markedConfigured) return
+    markedConfigured = true
+
     // marked v16+ 使用 use() 方法配置
     marked.use({
       async: false, // 强制同步模式
@@ -39,12 +40,12 @@ export default function SimpleContentRenderer({
 
         // 自定义表格单元格渲染
         tablecell(token: Tokens.TableCell): string {
-          const content = this.parser.parseInline(token.tokens);
+          const cellContent = this.parser.parseInline(token.tokens);
           const type = token.header ? 'th' : 'td';
           const style = token.header
             ? 'border: 1px solid #4b5563; padding: 12px 8px; background-color: rgba(55, 65, 81, 0.9); text-align: left; font-weight: 600; color: #f3f4f6;'
             : 'border: 1px solid #4b5563; padding: 10px 8px; color: #d1d5db; background-color: rgba(31, 41, 55, 0.6);';
-          return `<${type} style="${style}">${content}</${type}>`;
+          return `<${type} style="${style}">${cellContent}</${type}>`;
         },
 
         // 自定义图片渲染
@@ -74,7 +75,7 @@ export default function SimpleContentRenderer({
           </div>`;
         },
 
-        // 自定义段落渲染 - 使用 token.tokens 解析内联内容
+        // 自定义段落渲染
         paragraph(token: Tokens.Paragraph): string {
           const text = this.parser.parseInline(token.tokens);
           return `<p style="margin: 12px 0; line-height: 1.7;">${text}</p>`;
@@ -105,101 +106,29 @@ export default function SimpleContentRenderer({
     });
   }, [])
 
-  // 强化打字机效果 - 在内容变化时重新开始且避免闭包导致的无限循环
-  useEffect(() => {
-    // 重置并启动
-    if (typewriterTimerRef.current) {
-      clearTimeout(typewriterTimerRef.current)
-    }
-    setDisplayedContent('')
-    // 立即开始打字
-    startTypewriterEffect()
-
-    return () => {
-      if (typewriterTimerRef.current) {
-        clearTimeout(typewriterTimerRef.current)
-      }
-    }
-  }, [content])
-
-  // 清理定时器
-  useEffect(() => {
-    return () => {
-      if (typewriterTimerRef.current) {
-        clearTimeout(typewriterTimerRef.current)
-      }
-    }
-  }, [])
-
-  const indexRef = useRef(0)
-
-  const startTypewriterEffect = () => {
-    if (typewriterTimerRef.current) {
-      clearTimeout(typewriterTimerRef.current)
-    }
-
-    const tick = () => {
-      setDisplayedContent(prev => {
-        // 结束条件：索引达到内容长度
-        if (indexRef.current >= content.length) {
-          onComplete?.()
-          return prev
-        }
-
-        const nextChar = content.charAt(indexRef.current)
-        indexRef.current += 1
-
-        // 计划下一次渲染
-        const delay = nextChar === ' ' ? 5 : nextChar === '\n' ? 15 : 20
-        typewriterTimerRef.current = setTimeout(tick, delay)
-
-        return prev + nextChar
-      })
-    }
-
-    // 每次启动都重置索引并从头开始
-    indexRef.current = displayedContent.length
-    tick()
-  }
-
-  // 渲染内容
-  const renderContent = () => {
-    console.log('[SimpleContentRenderer] 渲染内容:', {
-      displayedContent,
-      contentType: typeof displayedContent,
-      contentLength: displayedContent?.length || 0
-    })
+  // 使用 useMemo 缓存渲染结果，避免重复计算
+  const htmlContent = useMemo(() => {
+    if (!content) return '';
 
     try {
-      // marked v16+ 的 parse 方法可能返回 Promise
-      // 使用 marked.use({ async: false }) 确保同步行为
-      const htmlContent = marked.parse(displayedContent)
+      const result = marked.parse(content);
 
-      console.log('[SimpleContentRenderer] HTML内容:', {
-        type: typeof htmlContent,
-        isPromise: htmlContent instanceof Promise,
-        value: typeof htmlContent === 'string' ? htmlContent.substring(0, 100) : htmlContent
-      })
-
-      // 如果是Promise,这是一个错误,降级处理
-      if (htmlContent instanceof Promise) {
-        console.error('[SimpleContentRenderer] marked.parse 返回了Promise,降级处理')
-        return displayedContent.replace(/\n/g, '<br>')
+      // 安全检查
+      if (result instanceof Promise) {
+        console.error('[SimpleContentRenderer] marked.parse 返回了Promise');
+        return content.replace(/\n/g, '<br>');
       }
 
-      // 确保返回字符串
-      if (typeof htmlContent === 'string') {
-        return htmlContent
+      if (typeof result === 'string') {
+        return result;
       }
 
-      // 降级:若仍非字符串,按纯文本处理
-      console.warn('[SimpleContentRenderer] HTML内容不是字符串,降级处理:', htmlContent)
-      return displayedContent.replace(/\n/g, '<br>')
+      return content.replace(/\n/g, '<br>');
     } catch (error) {
-      console.error('[SimpleContentRenderer] Markdown渲染失败:', error)
-      return displayedContent.replace(/\n/g, '<br>')
+      console.error('[SimpleContentRenderer] Markdown渲染失败:', error);
+      return content.replace(/\n/g, '<br>');
     }
-  }
+  }, [content])
 
   return (
     <div
@@ -212,7 +141,7 @@ export default function SimpleContentRenderer({
         letterSpacing: '0.01em',
         wordSpacing: '0.05em'
       }}
-      dangerouslySetInnerHTML={{ __html: renderContent() }}
+      dangerouslySetInnerHTML={{ __html: htmlContent }}
     />
   )
 }

@@ -80,51 +80,76 @@ function safeStringifyContent(content: unknown): string {
   return result;
 }
 
-// 打字效果组件
+// 打字效果组件 - 优化版：批量更新 + 减少渲染频率
 interface TypewriterEffectProps {
   content: string
   speed?: number
+  batchSize?: number // 每次更新的字符数
 }
 
-const TypewriterEffect: React.FC<TypewriterEffectProps> = ({ content, speed = 30 }) => {
+const TypewriterEffect: React.FC<TypewriterEffectProps> = ({
+  content,
+  speed = 25,
+  batchSize = 3 // 每次显示3个字符，减少渲染次数
+}) => {
   const [displayedContent, setDisplayedContent] = useState('')
-  const [currentIndex, setCurrentIndex] = useState(0)
   const contentRef = useRef('')
+  const indexRef = useRef(0)
+  const rafRef = useRef<number | null>(null)
+  const lastUpdateRef = useRef(0)
 
   useEffect(() => {
-    // 如果内容变化了（流式更新）
+    // 内容变化时重置
     if (content !== contentRef.current) {
-      console.log('[TypewriterEffect] 内容更新:', {
-        oldContent: contentRef.current.substring(0, 50) + (contentRef.current.length > 50 ? '...' : ''),
-        newContent: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
-        contentType: typeof content,
-        contentLength: content.length
-      })
-
-      const oldContent = contentRef.current
       contentRef.current = content
 
-      // 对于RAGFlow的全量更新，直接重新开始
-      if (content !== oldContent) {
+      // 如果新内容是旧内容的延续（流式追加），从当前位置继续
+      // 如果是全新内容，从头开始
+      if (!content.startsWith(displayedContent)) {
+        indexRef.current = 0
         setDisplayedContent('')
-        setCurrentIndex(0)
       }
     }
-  }, [content]) // 移除了 displayedContent.length 和 currentIndex 依赖
+  }, [content, displayedContent])
 
   useEffect(() => {
-    if (currentIndex < content.length) {
-      const timer = setTimeout(() => {
-        setDisplayedContent(content.slice(0, currentIndex + 1))
-        setCurrentIndex(prev => prev + 1)
-      }, speed)
-      return () => clearTimeout(timer)
-    }
-  }, [currentIndex, content, speed])
+    // 使用 requestAnimationFrame 进行节流更新
+    const animate = (timestamp: number) => {
+      // 控制更新频率
+      if (timestamp - lastUpdateRef.current < speed) {
+        rafRef.current = requestAnimationFrame(animate)
+        return
+      }
 
-  return (
-    <SimpleContentRenderer content={displayedContent} />
-  )
+      lastUpdateRef.current = timestamp
+
+      if (indexRef.current < contentRef.current.length) {
+        // 批量更新：每次增加 batchSize 个字符
+        const nextIndex = Math.min(indexRef.current + batchSize, contentRef.current.length)
+        const newContent = contentRef.current.slice(0, nextIndex)
+
+        indexRef.current = nextIndex
+        setDisplayedContent(newContent)
+
+        rafRef.current = requestAnimationFrame(animate)
+      }
+    }
+
+    rafRef.current = requestAnimationFrame(animate)
+
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+      }
+    }
+  }, [content, speed, batchSize])
+
+  // 如果内容已完全显示，直接渲染完整内容
+  if (displayedContent.length >= content.length) {
+    return <SimpleContentRenderer content={content} />
+  }
+
+  return <SimpleContentRenderer content={displayedContent} />
 }
 
 // 加载动画组件
