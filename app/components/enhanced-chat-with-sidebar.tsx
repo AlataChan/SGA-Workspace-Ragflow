@@ -33,6 +33,52 @@ import FileCard from './file-card'
 import { EnhancedDifyClient, DifyStreamMessage } from '@/lib/enhanced-dify-client'
 import { RAGFlowBlockingClient, RAGFlowMessage } from '@/lib/ragflow-blocking-client'
 import RAGFlowReferenceCard from '@/components/chat/ragflow-reference-card'
+import { normalizeRagflowContent } from '@/lib/ragflow-utils'
+
+// 配置 marked 为同步模式
+marked.setOptions({
+  async: false, // 强制同步模式,避免返回Promise
+  gfm: true,
+  breaks: true,
+})
+
+/**
+ * 安全地将消息内容转换为字符串
+ * 处理对象、数组等非字符串类型,避免显示[object Object]
+ */
+function safeStringifyContent(content: unknown): string {
+  if (content === null || content === undefined) {
+    return '';
+  }
+
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (typeof content === 'number' || typeof content === 'boolean') {
+    return String(content);
+  }
+
+  // 如果是对象,使用normalizeRagflowContent处理
+  if (typeof content === 'object') {
+    console.warn('[safeStringifyContent] 收到对象类型的内容,使用normalizeRagflowContent处理:', content);
+    const normalized = normalizeRagflowContent(content);
+    // 确保不返回[object Object]
+    if (normalized === '[object Object]' || normalized.includes('[object Object]')) {
+      console.error('[safeStringifyContent] 检测到[object Object],返回空字符串');
+      return '';
+    }
+    return normalized;
+  }
+
+  // 其他类型,转字符串但检查结果
+  const result = String(content);
+  if (result === '[object Object]') {
+    console.error('[safeStringifyContent] String()返回了[object Object]');
+    return '';
+  }
+  return result;
+}
 
 // 打字效果组件
 interface TypewriterEffectProps {
@@ -221,7 +267,33 @@ const EnhancedMessageContent: React.FC<EnhancedMessageContentProps> = ({ content
     ; (window as any).copyCode = copyToClipboard
   }, [])
 
-  const htmlContent = content ? marked.parse(content, { async: false }) as string : ''
+  // 安全地解析 Markdown - 处理 marked v16+ 可能返回 Promise 的情况
+  const getHtmlContent = () => {
+    if (!content) return ''
+
+    try {
+      const result = marked.parse(content)
+
+      // 如果返回Promise,降级处理
+      if (result instanceof Promise) {
+        console.error('[EnhancedMessageContent] marked.parse 返回了Promise,降级处理')
+        return content.replace(/\n/g, '<br>')
+      }
+
+      // 确保是字符串
+      if (typeof result === 'string') {
+        return result
+      }
+
+      console.warn('[EnhancedMessageContent] marked.parse 返回了非字符串:', typeof result)
+      return content.replace(/\n/g, '<br>')
+    } catch (error) {
+      console.error('[EnhancedMessageContent] Markdown解析失败:', error)
+      return content.replace(/\n/g, '<br>')
+    }
+  }
+
+  const htmlContent = getHtmlContent()
   const processedContent = processCodeBlocks(htmlContent)
 
   return (
@@ -478,6 +550,7 @@ interface AgentConfig {
   baseUrl?: string
   apiKey?: string
   agentId?: string
+  localAgentId?: string // 后端查询用的本地Agent ID
 }
 
 interface DifyFile {
@@ -686,8 +759,9 @@ export default function EnhancedChatWithSidebar({
   // 获取历史对话列表
   const fetchHistoryConversations = useCallback(async (forceRefresh = false, loadMore = false) => {
     // RAGFlow 处理逻辑
-    if (agentConfig?.platform === 'RAGFLOW' && agentConfig.agentId) {
+    if (agentConfig?.platform === 'RAGFLOW' && (agentConfig.localAgentId || agentConfig.agentId)) {
       if (isLoadingHistory) return
+      const backendAgentId = agentConfig.localAgentId || agentConfig.agentId
 
       // 检查缓存
       const now = Date.now()
@@ -704,7 +778,9 @@ export default function EnhancedChatWithSidebar({
         setHistoryError(null)
 
         const page = loadMore ? Math.ceil(historyCacheRef.current.conversations.length / 20) + 1 : 1
-        const response = await fetch(`/api/ragflow/conversations?agent_id=${agentConfig.agentId}&page=${page}&page_size=20`)
+        const response = await fetch(
+          `/api/ragflow/conversations?agent_id=${backendAgentId}&page=${page}&page_size=20&user_id=${encodeURIComponent(agentConfig.userId)}`
+        )
 
         if (response.ok) {
           const data = await response.json()
@@ -868,7 +944,7 @@ export default function EnhancedChatWithSidebar({
       setIsLoadingHistory(false)
       console.log('[EnhancedChat] 历史对话获取完成')
     }
-  }, [agentConfig?.difyUrl, agentConfig?.difyKey, agentConfig?.userId, agentConfig?.platform, agentConfig?.agentId])
+  }, [agentConfig?.difyUrl, agentConfig?.difyKey, agentConfig?.userId, agentConfig?.platform, agentConfig?.agentId, agentConfig?.localAgentId])
 
   // 创建新会话
   const createNewSession = () => {
@@ -937,19 +1013,28 @@ export default function EnhancedChatWithSidebar({
         }, 15000) // 15秒超时（历史消息可能较多）
 
         try {
-          if (agentConfig?.platform === 'RAGFLOW' && agentConfig.agentId) {
+          if (agentConfig?.platform === 'RAGFLOW' && (agentConfig.localAgentId || agentConfig.agentId)) {
             // RAGFlow 历史消息逻辑
-            const response = await fetch(`/api/ragflow/history?agent_id=${agentConfig.agentId}&conversation_id=${historyConv.id}`)
+            const backendAgentId = agentConfig.localAgentId || agentConfig.agentId
+            const response = await fetch(
+              `/api/ragflow/history?agent_id=${backendAgentId}&conversation_id=${historyConv.id}&user_id=${encodeURIComponent(agentConfig.userId)}`
+            )
             clearTimeout(timeoutId)
 
             if (response.ok) {
               const data = await response.json()
               convertedMessages = data.messages.map((msg: any) => ({
-                id: msg.id || nanoid(),
-                role: msg.role || (msg.type === 'human' ? 'user' : 'assistant'),
-                content: msg.content,
+                id: msg.id || msg.message_id || nanoid(),
+                role: msg.role?.toLowerCase?.() === 'user'
+                  ? 'user'
+                  : msg.role?.toLowerCase?.() === 'assistant'
+                    ? 'assistant'
+                    : (msg.type === 'human' ? 'user' : 'assistant'),
+                content: normalizeRagflowContent(
+                  msg.content ?? msg.data?.content ?? msg.answer ?? msg.outputs?.content ?? msg.output?.content
+                ),
                 timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
-                reference: msg.reference
+                reference: msg.reference ?? msg.data?.reference
               }))
             } else {
               throw new Error(`获取RAGFlow历史消息失败: ${response.status}`)
@@ -1094,10 +1179,21 @@ export default function EnhancedChatWithSidebar({
 
   // 初始化时获取历史对话
   useEffect(() => {
-    if ((agentConfig?.difyUrl && agentConfig?.difyKey) || (agentConfig?.baseUrl && agentConfig?.apiKey && agentConfig?.agentId)) {
+    if (
+      (agentConfig?.difyUrl && agentConfig?.difyKey)
+      || (agentConfig?.baseUrl && agentConfig?.apiKey && (agentConfig?.localAgentId || agentConfig?.agentId))
+    ) {
       fetchHistoryConversations()
     }
-  }, [agentConfig?.difyUrl, agentConfig?.difyKey, agentConfig?.baseUrl, agentConfig?.apiKey, agentConfig?.agentId, fetchHistoryConversations])
+  }, [
+    agentConfig?.difyUrl,
+    agentConfig?.difyKey,
+    agentConfig?.baseUrl,
+    agentConfig?.apiKey,
+    agentConfig?.agentId,
+    agentConfig?.localAgentId,
+    fetchHistoryConversations
+  ])
 
   // 删除历史对话
   const deleteHistoryConversation = async (conversationId: string) => {
@@ -1824,13 +1920,7 @@ export default function EnhancedChatWithSidebar({
           switch (message.type) {
             case 'content':
               // 累积流式内容 - 确保内容是字符串
-              let contentToAdd = ''
-              if (typeof message.content === 'string') {
-                contentToAdd = message.content
-              } else if (message.content) {
-                // 如果不是字符串，尝试转换
-                contentToAdd = String(message.content)
-              }
+              const contentToAdd = normalizeRagflowContent(message.content)
 
               console.log('[EnhancedChat] 处理后的内容:', contentToAdd)
 
@@ -1886,9 +1976,9 @@ export default function EnhancedChatWithSidebar({
 
             case 'complete':
               // 消息完成 - 确保内容是字符串
-              const finalContent = message.content ?
-                (typeof message.content === 'string' ? message.content : String(message.content)) :
-                fullContent
+              const finalContent = message.content
+                ? normalizeRagflowContent(message.content)
+                : fullContent
 
               setSessions(prev => prev.map(session =>
                 session.id === currentSessionId ?
@@ -2657,13 +2747,13 @@ export default function EnhancedChatWithSidebar({
                                   messageId: message.id,
                                   contentType: typeof message.content,
                                   content: message.content,
-                                  stringContent: String(message.content)
+                                  safeContent: safeStringifyContent(message.content)
                                 })}
-                                <TypewriterEffect content={String(message.content)} speed={20} />
+                                <TypewriterEffect content={safeStringifyContent(message.content)} speed={20} />
                               </>
                             )
                           ) : (
-                            <EnhancedMessageContent content={String(message.content || '')} />
+                            <EnhancedMessageContent content={safeStringifyContent(message.content)} />
                           )}
 
                           {message.attachments && message.attachments.length > 0 && (
@@ -2680,7 +2770,7 @@ export default function EnhancedChatWithSidebar({
 
                           {/* 下载链接检测和显示 */}
                           {!isUser && !message.isStreaming && (() => {
-                            const fileLinks = extractFileLinks(message.content)
+                            const fileLinks = extractFileLinks(safeStringifyContent(message.content))
                             return fileLinks.length > 0 && (
                               <div className="mt-3 space-y-2">
                                 {fileLinks.map((fileLink) => (
@@ -2731,7 +2821,7 @@ export default function EnhancedChatWithSidebar({
                                         session
                                     ))
                                     // 重新发送消息
-                                    setInput(userMessage.content)
+                                    setInput(safeStringifyContent(userMessage.content))
                                     setAttachments(userMessage.attachments || [])
                                     // 延迟一下让状态更新，然后发送
                                     setTimeout(() => sendMessage(), 100)
@@ -2759,7 +2849,10 @@ export default function EnhancedChatWithSidebar({
                         {/* RAGFlow 引用卡片 */}
                         {message.reference && agentConfig?.platform === 'RAGFLOW' && (
                           <div className="mt-2 text-left">
-                            <RAGFlowReferenceCard reference={message.reference} agentId={agentConfig?.agentId} />
+                            <RAGFlowReferenceCard
+                              reference={message.reference}
+                              agentId={agentConfig?.localAgentId || agentConfig?.agentId}
+                            />
                           </div>
                         )}
                       </div>

@@ -3,6 +3,8 @@
  * 使用非流式模式，一次性返回完整响应
  */
 
+import { normalizeRagflowContent } from "./ragflow-utils";
+
 export interface RAGFlowConfig {
   baseUrl: string
   apiKey: string
@@ -57,7 +59,11 @@ export class RAGFlowBlockingClient {
       }
 
       const data = await response.json()
-      this.conversationId = data.data.session_id
+      const sessionId = data?.data?.id || data?.data?.session_id
+      if (!sessionId) {
+        throw new Error('创建会话失败: 未返回会话ID')
+      }
+      this.conversationId = sessionId
       console.log('[RAGFlowBlocking] 创建新会话:', this.conversationId)
       return this.conversationId
     } catch (error) {
@@ -201,13 +207,25 @@ export class RAGFlowBlockingClient {
                 }
 
                 // 提取数据
-                const answer = data.data?.answer
-                const reference = data.data?.reference
-                const sessionId = data.data?.session_id
+                const payload = data.data
+                const answerCandidate = payload?.answer
+                  ?? payload?.content
+                  ?? payload?.final_answer
+                  ?? payload?.outputs?.content
+                  ?? payload?.data?.content
+                  ?? payload?.data?.outputs?.content
+                  ?? payload?.data?.answer
+                const reference = payload?.reference ?? payload?.data?.reference
+                const sessionId = payload?.session_id ?? payload?.data?.session_id
 
-                if (answer) {
+                if (answerCandidate !== undefined && answerCandidate !== null) {
+                  const normalizedContent = normalizeRagflowContent(answerCandidate)
+                  if (normalizedContent.length === 0) {
+                    continue
+                  }
+
                   // RAGFlow 返回的是累积的完整内容，直接使用
-                  fullContent = answer
+                  fullContent = normalizedContent
 
                   console.log('[RAGFlowBlocking] 收到流式内容:', {
                     contentLength: fullContent.length,

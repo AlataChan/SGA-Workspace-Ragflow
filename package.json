@@ -81,7 +81,7 @@
     "marked": "^16.2.1",
     "mermaid": "^11.10.1",
     "nanoid": "^5.1.5",
-    "next": "14.2.5",
+    "next": "^14.2.5",
     "next-themes": "latest",
     "openapi-client-axios": "^7.7.0",
     "pg": "^8.11.3",

@@ -42,10 +42,10 @@ model User {
   id               String                @id @default(cuid())
   companyId        String                @map("company_id")
   username         String                @map("username")
-  userId           String                @map("user_id")
-  phone            String
+  userId           String                @default("") @map("user_id")
+  phone            String                @default("")
   passwordHash     String                @map("password_hash")
-  chineseName      String                @map("chinese_name")
+  chineseName      String                @default("") @map("chinese_name")
   englishName      String?               @map("english_name")
   email            String?
   displayName      String?               @map("display_name")

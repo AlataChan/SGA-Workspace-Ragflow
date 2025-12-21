@@ -366,6 +366,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
         baseUrl: agent.platformConfig.baseUrl,
         apiKey: agent.platformConfig.apiKey,
         agentId: agent.platformConfig.agentId,
+        localAgentId: agent.id,
         userId: user.user_id || user.id || 'user-123'
       }
     } else {

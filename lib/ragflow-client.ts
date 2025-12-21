@@ -502,18 +502,28 @@ export class RAGFlowClient {
   /**
    * 获取会话列表
    */
-  async getSessions(page: number = 1, pageSize: number = 20): Promise<{ id: string; name: string; create_date: string }[]> {
+  async getSessions(
+    page: number = 1,
+    pageSize: number = 20,
+    userId?: string
+  ): Promise<{ id: string; name: string; create_date: string }[]> {
     try {
-      const response = await fetch(
-        `${this.config.baseUrl}/api/v1/chats/${this.config.agentId}/sessions?page=${page}&page_size=${pageSize}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${this.config.apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          signal: AbortSignal.timeout(30000) // 30秒超时
-        }
+      const url = new URL(
+        `${this.config.baseUrl.replace(/\/$/, '')}/api/v1/chats/${this.config.agentId}/sessions`
       )
+      url.searchParams.set('page', String(page))
+      url.searchParams.set('page_size', String(pageSize))
+      if (userId) {
+        url.searchParams.set('user_id', userId)
+      }
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(30000) // 30秒超时
+      })
 
       if (!response.ok) {
         throw new Error(`获取会话列表失败: ${response.status} ${response.statusText}`)

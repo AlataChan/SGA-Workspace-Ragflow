@@ -15,6 +15,7 @@ import {
 import { useState } from 'react'
 import { cn } from "@/lib/utils"
 import RAGFlowReferenceCard from './ragflow-reference-card'
+import { normalizeRagflowContent } from '@/lib/ragflow-utils'
 
 interface RAGFlowReference {
   total: number
@@ -49,6 +50,7 @@ export default function RAGFlowMessageRenderer({
   agentId
 }: RAGFlowMessageRendererProps) {
   const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({})
+  const safeContent = normalizeRagflowContent(message.content)
 
   const copyToClipboard = async (text: string, id: string) => {
     try {
@@ -184,7 +186,7 @@ export default function RAGFlowMessageRenderer({
             ),
           }}
         >
-          {message.content}
+          {safeContent}
         </ReactMarkdown>
 
         {/* 流式输出指示器 */}

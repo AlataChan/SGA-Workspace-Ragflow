@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/database/simple-db'
 import { RAGFlowClient } from '@/lib/ragflow-client'
+import prisma from '@/lib/prisma'
 
 export async function GET(request: NextRequest) {
     try {
@@ -18,7 +18,9 @@ export async function GET(request: NextRequest) {
         }
 
         // 获取 Agent 配置
-        const agent = await db.findAgentById(agent_id)
+        const agent = await prisma.agent.findUnique({
+            where: { id: agent_id }
+        })
         if (!agent) {
             return NextResponse.json(
                 { error: 'Agent not found' },
@@ -26,22 +28,34 @@ export async function GET(request: NextRequest) {
             )
         }
 
-        if (agent.platform.toLowerCase() !== 'ragflow') {
+        if (agent.platform !== 'RAGFLOW') {
             return NextResponse.json(
                 { error: 'Agent platform is not RAGFlow' },
                 { status: 400 }
             )
         }
 
+        const platformConfig = agent.platformConfig as Record<string, any> | null
+        const baseUrl = platformConfig?.baseUrl?.replace(/\/$/, '')
+        const apiKey = platformConfig?.apiKey
+        const ragflowAgentId = platformConfig?.agentId
+
+        if (!baseUrl || !apiKey || !ragflowAgentId) {
+            return NextResponse.json(
+                { error: 'RAGFlow agent config is incomplete' },
+                { status: 400 }
+            )
+        }
+
         // 初始化 RAGFlow 客户端
         const ragflowClient = new RAGFlowClient({
-            baseUrl: agent.apiUrl,
-            apiKey: agent.apiKey,
-            agentId: agent.modelConfig?.agent_id || agent.id,
+            baseUrl,
+            apiKey,
+            agentId: ragflowAgentId,
             userId: user_id
         })
 
-        const sessions = await ragflowClient.getSessions(page, page_size)
+        const sessions = await ragflowClient.getSessions(page, page_size, user_id)
 
         return NextResponse.json({
             data: sessions,

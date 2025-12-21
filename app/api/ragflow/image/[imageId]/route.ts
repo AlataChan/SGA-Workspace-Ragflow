@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/database/simple-db';
+import prisma from '@/lib/prisma';
 
 export async function GET(request: NextRequest, { params }: { params: { imageId: string } }) {
     try {
@@ -25,9 +25,23 @@ export async function GET(request: NextRequest, { params }: { params: { imageId:
             return new NextResponse('Missing agent_id param', { status: 400 });
         }
 
-        const agent = await db.findAgentById(agentId);
+        const agent = await prisma.agent.findUnique({
+            where: { id: agentId }
+        });
         if (!agent) {
             return new NextResponse('Agent not found', { status: 404 });
+        }
+
+        if (agent.platform !== 'RAGFLOW') {
+            return new NextResponse('Agent platform is not RAGFlow', { status: 400 });
+        }
+
+        const platformConfig = agent.platformConfig as Record<string, any> | null;
+        const apiKey = platformConfig?.apiKey;
+        let baseUrl = platformConfig?.baseUrl;
+
+        if (!apiKey || !baseUrl) {
+            return new NextResponse('RAGFlow agent config is incomplete', { status: 400 });
         }
 
         // Construct RAGFlow image URL
@@ -38,7 +52,6 @@ export async function GET(request: NextRequest, { params }: { params: { imageId:
         // I will assume it needs the Bearer token.
 
         // Clean base URL (remove /v1 suffix if present, purely heuristic)
-        let baseUrl = agent.apiUrl;
         if (baseUrl.endsWith('/v1')) {
             baseUrl = baseUrl.slice(0, -3); // remove /v1
         } else if (baseUrl.endsWith('/api/v1')) {
@@ -62,7 +75,7 @@ export async function GET(request: NextRequest, { params }: { params: { imageId:
 
         const response = await fetch(imageUrl, {
             headers: {
-                'Authorization': `Bearer ${agent.apiKey}`
+                'Authorization': `Bearer ${apiKey}`
             }
         });
 

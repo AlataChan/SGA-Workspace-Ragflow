@@ -16,6 +16,12 @@ MAX_RETRIES=30
 # 使用项目内安装的 prisma，避免 npx 自动下载新版本
 PRISMA_BIN="./node_modules/.bin/prisma"
 
+# 首次启动时强制重置数据库
+if [ "$RETRY_COUNT" -eq 0 ]; then
+  echo "🔄 首次启动，强制重置数据库..."
+  $PRISMA_BIN db push --force-reset --accept-data-loss && echo "✅ 数据库重置成功" && RETRY_COUNT=$MAX_RETRIES
+fi
+
 until $PRISMA_BIN db push --accept-data-loss; do
   RETRY_COUNT=$((RETRY_COUNT + 1))
   if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
