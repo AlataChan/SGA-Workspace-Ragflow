@@ -172,9 +172,9 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
       .selectAll("line")
       .data(validLinks)
       .join("line")
-      .attr("stroke", d => (d as any).isTemporary ? "#fbbf24" : "#999")
-      .attr("stroke-opacity", 0.8)
-      .attr("stroke-width", 2)
+      .attr("stroke", d => (d as any).isTemporary ? "#fbbf24" : "#6b7280")
+      .attr("stroke-opacity", 0.7)
+      .attr("stroke-width", 1.5)
       .attr("stroke-dasharray", (d: any) => d.isTemporary ? "5,5" : "none");
 
     // 创建节点
@@ -333,9 +333,8 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
         width="100%"
         height="100%"
         viewBox={`0 0 ${width} ${height}`}
-        className="w-full h-full bg-gradient-to-br from-gray-50 to-blue-50"
+        className="w-full h-full bg-[#0d1117]"
         style={{
-          border: '1px solid #e5e7eb',
           position: 'absolute',
           top: 0,
           left: 0,
