@@ -45,21 +45,155 @@ export interface RAGFlowStreamResponse {
   message?: string
 }
 
+/**
+ * ID 类型枚举
+ */
+export type RAGFlowIdType = 'agent' | 'chat' | 'unknown'
+
+/**
+ * ID 检测结果
+ */
+export interface RAGFlowIdDetectionResult {
+  type: RAGFlowIdType
+  name?: string
+  id: string
+}
+
 export class RAGFlowClient {
   private config: RAGFlowConfig
   private currentController: AbortController | null = null
   private currentTimeoutId: NodeJS.Timeout | null = null
   private conversationId: string | null = null
+  private detectedIdType: RAGFlowIdType | null = null // 缓存检测结果
 
   // 超时配置
   static readonly TIMEOUT_MS = 300000 // 5分钟超时
   static readonly THINKING_TIMEOUT_MS = 30000 // 思考阶段30秒超时
 
   constructor(config: RAGFlowConfig) {
-    this.config = config
+    // 自动清理 URL（方案2）
+    this.config = {
+      ...config,
+      baseUrl: RAGFlowClient.cleanBaseUrl(config.baseUrl)
+    }
   }
 
+  /**
+   * 清理 baseUrl，移除错误添加的 API 路径（方案2）
+   * @param url 原始 URL
+   * @returns 清理后的 baseUrl
+   */
+  static cleanBaseUrl(url: string): string {
+    if (!url) return url
 
+    // 移除末尾斜杠
+    let cleaned = url.replace(/\/+$/, '')
+
+    // 移除常见的错误后缀
+    const suffixesToRemove = [
+      '/api/v1/agents',
+      '/api/v1/chats',
+      '/api/v1/datasets',
+      '/api/v1',
+      '/v1'
+    ]
+
+    for (const suffix of suffixesToRemove) {
+      if (cleaned.toLowerCase().endsWith(suffix.toLowerCase())) {
+        cleaned = cleaned.slice(0, -suffix.length)
+        console.log(`[RAGFlowClient] URL 自动清理: 移除后缀 "${suffix}"`)
+        break
+      }
+    }
+
+    return cleaned
+  }
+
+  /**
+   * 检测 ID 类型（方案3）
+   * 通过调用 API 检测传入的 ID 是 Agent 还是 Chat
+   */
+  async detectIdType(forceRefresh = false): Promise<RAGFlowIdDetectionResult> {
+    // 如果已缓存且不强制刷新，直接返回
+    if (this.detectedIdType && !forceRefresh) {
+      return {
+        type: this.detectedIdType,
+        id: this.config.agentId
+      }
+    }
+
+    const { baseUrl, apiKey, agentId } = this.config
+
+    console.log('[RAGFlowClient] 开始检测 ID 类型:', agentId)
+
+    // 先检查 agents 列表
+    try {
+      const agentsResponse = await fetch(`${baseUrl}/api/v1/agents`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(10000)
+      })
+
+      if (agentsResponse.ok) {
+        const data = await agentsResponse.json()
+        if (data.code === 0 && data.data && Array.isArray(data.data)) {
+          const found = data.data.find((item: any) => item.id === agentId)
+          if (found) {
+            this.detectedIdType = 'agent'
+            console.log('[RAGFlowClient] 检测到 ID 类型: Agent, 名称:', found.title || found.name)
+            return {
+              type: 'agent',
+              name: found.title || found.name,
+              id: agentId
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[RAGFlowClient] 检查 agents 端点失败:', error)
+    }
+
+    // 再检查 chats 列表
+    try {
+      const chatsResponse = await fetch(`${baseUrl}/api/v1/chats`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(10000)
+      })
+
+      if (chatsResponse.ok) {
+        const data = await chatsResponse.json()
+        if (data.code === 0 && data.data && Array.isArray(data.data)) {
+          const found = data.data.find((item: any) => item.id === agentId)
+          if (found) {
+            this.detectedIdType = 'chat'
+            console.log('[RAGFlowClient] 检测到 ID 类型: Chat, 名称:', found.name)
+            return {
+              type: 'chat',
+              name: found.name,
+              id: agentId
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[RAGFlowClient] 检查 chats 端点失败:', error)
+    }
+
+    // 都没找到
+    this.detectedIdType = 'unknown'
+    console.warn('[RAGFlowClient] 无法检测 ID 类型，ID 可能无效:', agentId)
+    return {
+      type: 'unknown',
+      id: agentId
+    }
+  }
 
   setConversationId(conversationId: string) {
     this.conversationId = conversationId
@@ -68,6 +202,7 @@ export class RAGFlowClient {
   /**
    * 发送消息到 RAGFlow
    * 根据配置的 endpointType 选择合适的端点
+   * 如果是 auto 模式，会先检测 ID 类型再选择端点
    */
   async sendMessage(
     query: string,
@@ -88,12 +223,49 @@ export class RAGFlowClient {
         return this.sendViaLegacy(query, onMessage, onError, onComplete)
       case 'auto':
       default:
-        // 自动模式：优先尝试 Dialog，失败则回退到 Legacy
+        // 自动模式：先检测 ID 类型，然后选择正确的端点
+        return this.sendViaAutoDetect(query, onMessage, onError, onComplete)
+    }
+  }
+
+  /**
+   * 自动检测 ID 类型并选择正确的端点发送消息（方案3核心逻辑）
+   */
+  private async sendViaAutoDetect(
+    query: string,
+    onMessage: (message: RAGFlowMessage) => void,
+    onError?: (error: Error) => void,
+    onComplete?: () => void
+  ): Promise<void> {
+    // 发送检测中提示
+    onMessage({
+      type: 'thinking',
+      content: '正在检测 RAGFlow 配置类型...'
+    })
+
+    // 检测 ID 类型
+    const detection = await this.detectIdType()
+
+    console.log('[RAGFlowClient] 自动检测结果:', detection)
+
+    switch (detection.type) {
+      case 'agent':
+        console.log('[RAGFlowClient] 使用 Agent 端点')
+        return this.sendViaAgent(query, onMessage, onError, onComplete)
+
+      case 'chat':
+        console.log('[RAGFlowClient] 使用 Chat (Legacy) 端点')
+        return this.sendViaLegacy(query, onMessage, onError, onComplete)
+
+      case 'unknown':
+      default:
+        // 未知类型，尝试 Legacy 端点（兼容性更好）
+        console.warn('[RAGFlowClient] ID 类型未知，尝试 Legacy 端点')
         try {
-          return await this.sendViaDialog(query, onMessage, onError, onComplete)
-        } catch (error) {
-          console.warn('[RAGFlowClient] Dialog 端点失败，回退到 Legacy 端点:', error)
-          return this.sendViaLegacy(query, onMessage, onError, onComplete)
+          return await this.sendViaLegacy(query, onMessage, onError, onComplete)
+        } catch (legacyError) {
+          console.warn('[RAGFlowClient] Legacy 端点失败，尝试 Agent 端点:', legacyError)
+          return this.sendViaAgent(query, onMessage, onError, onComplete)
         }
     }
   }

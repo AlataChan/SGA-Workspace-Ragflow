@@ -238,6 +238,36 @@ async function POST(request: NextRequest) {
   }
 }
 
+/**
+ * 清理 RAGFlow baseUrl，移除错误添加的 API 路径
+ * 例如: http://example.com:9301/api/v1/agents -> http://example.com:9301
+ */
+function cleanRAGFlowBaseUrl(url: string): string {
+  if (!url) return url
+
+  // 移除末尾斜杠
+  let cleaned = url.replace(/\/+$/, '')
+
+  // 移除常见的错误后缀
+  const suffixesToRemove = [
+    '/api/v1/agents',
+    '/api/v1/chats',
+    '/api/v1/datasets',
+    '/api/v1',
+    '/v1'
+  ]
+
+  for (const suffix of suffixesToRemove) {
+    if (cleaned.toLowerCase().endsWith(suffix.toLowerCase())) {
+      cleaned = cleaned.slice(0, -suffix.length)
+      console.log(`[RAGFlow] URL 自动清理: 移除后缀 "${suffix}"`)
+      break
+    }
+  }
+
+  return cleaned
+}
+
 // RAGFlow连接测试函数
 async function testRAGFlowConnection(config: any): Promise<{ success: boolean, message: string }> {
   try {
@@ -250,8 +280,8 @@ async function testRAGFlowConnection(config: any): Promise<{ success: boolean, m
       }
     }
 
-    // 清理URL，确保格式正确
-    const cleanBaseUrl = baseUrl.replace(/\/$/, '')
+    // 清理URL，确保格式正确（自动移除错误的 API 路径后缀）
+    const cleanBaseUrl = cleanRAGFlowBaseUrl(baseUrl)
 
     console.log('测试 RAGFlow 连接:', {
       baseUrl: cleanBaseUrl,
