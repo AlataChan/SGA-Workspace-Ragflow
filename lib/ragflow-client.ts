@@ -319,7 +319,8 @@ export class RAGFlowClient {
   }
 
   /**
-   * 使用 Agent Webhook 端点发送消息 (v0.22.1 推荐)
+   * 使用官方 Agent API 端点发送消息
+   * 端点: POST /api/v1/agents/{agent_id}/completions
    */
   private async sendViaAgent(
     query: string,
@@ -334,13 +335,25 @@ export class RAGFlowClient {
       userId: this.config.userId
     })
 
+    // 如果有缓存的会话ID，设置到 agent client
+    if (this.conversationId) {
+      agentClient.setSessionId(this.conversationId)
+    }
+
     // 转换消息格式
     const wrappedOnMessage = (msg: RAGFlowAgentMessage) => {
+      // 更新会话ID
+      if (msg.sessionId) {
+        this.conversationId = msg.sessionId
+      }
+
       onMessage({
-        type: msg.type,
+        type: msg.type as RAGFlowMessage['type'],
         content: msg.content,
         step: msg.step,
-        stepMessage: msg.stepMessage
+        stepMessage: msg.stepMessage,
+        reference: msg.reference,
+        conversationId: msg.sessionId || this.conversationId || undefined
       })
     }
 
