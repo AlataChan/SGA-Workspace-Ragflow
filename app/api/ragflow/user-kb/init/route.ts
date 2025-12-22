@@ -12,6 +12,15 @@ import { verifyToken } from '@/lib/auth/jwt'
 import { cookies } from 'next/headers'
 
 /**
+ * 获取知识库模式配置
+ * @returns 'temporary' | 'persistent'
+ */
+function getKBMode(): 'temporary' | 'persistent' {
+  const mode = process.env.USER_KB_MODE?.toLowerCase()
+  return mode === 'temporary' ? 'temporary' : 'persistent'
+}
+
+/**
  * 获取 RAGFlow 配置
  */
 function getRAGFlowConfig() {
@@ -54,6 +63,9 @@ async function getCurrentUser(request: NextRequest) {
 /**
  * POST /api/ragflow/user-kb/init
  * 初始化用户私人知识库
+ *
+ * 请求体参数：
+ * - sessionId?: string  会话ID（临时模式下使用）
  */
 export async function POST(request: NextRequest) {
   try {
@@ -66,9 +78,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 2. 检查是否已有默认知识库
+    // 2. 获取请求参数
+    let sessionId: string | undefined
+    try {
+      const body = await request.json()
+      sessionId = body.sessionId
+    } catch {
+      // 无请求体，忽略
+    }
+
+    // 3. 获取模式配置
+    const mode = getKBMode()
+    const isTemporary = mode === 'temporary'
+
+    // 4. 检查是否已有知识库
+    const whereClause: any = { userId: user.id, isDefault: true }
+    if (isTemporary && sessionId) {
+      whereClause.sessionId = sessionId
+    }
+
     const existingMapping = await prisma.userKnowledgeBaseMapping.findFirst({
-      where: { userId: user.id, isDefault: true }
+      where: whereClause
     })
 
     if (existingMapping) {
@@ -79,14 +109,19 @@ export async function POST(request: NextRequest) {
           id: existingMapping.id,
           ragflowKbId: existingMapping.ragflowKbId,
           ragflowKbName: existingMapping.ragflowKbName,
-          isDefault: existingMapping.isDefault
+          isDefault: existingMapping.isDefault,
+          isTemporary: existingMapping.isTemporary,
+          mode
         }
       })
     }
 
-    // 3. 调用 RAGFlow 创建 Dataset
+    // 5. 调用 RAGFlow 创建 Dataset
     const config = getRAGFlowConfig()
-    const kbName = `user_${user.id}_private_kb`
+    const timestamp = Date.now()
+    const kbName = isTemporary
+      ? `temp_${user.id}_${sessionId || timestamp}`
+      : `user_${user.id}_private_kb`
 
     const response = await fetch(`${config.baseUrl}/api/v1/datasets`, {
       method: 'POST',
@@ -96,7 +131,9 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         name: kbName,
-        description: `${user.username} 的私人知识库`,
+        description: isTemporary
+          ? `临时知识库 - ${user.username}`
+          : `${user.username} 的私人知识库`,
         embedding_model: 'BAAI/bge-large-zh-v1.5',
         permission: 'me'
       })
@@ -112,7 +149,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await response.json()
-    
+
     if (result.code !== 0 || !result.data?.id) {
       console.error('[User KB Init] RAGFlow 返回错误:', result)
       return NextResponse.json(
@@ -121,19 +158,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 4. 保存映射关系到本地数据库
+    // 6. 保存映射关系到本地数据库
     const mapping = await prisma.userKnowledgeBaseMapping.create({
       data: {
         userId: user.id,
         ragflowKbId: result.data.id,
         ragflowKbName: kbName,
-        isDefault: true
+        isDefault: true,
+        isTemporary,
+        sessionId: isTemporary ? sessionId : null
       }
     })
 
     console.log('[User KB Init] 创建成功:', {
       userId: user.id,
-      ragflowKbId: result.data.id
+      ragflowKbId: result.data.id,
+      mode,
+      isTemporary
     })
 
     return NextResponse.json({
@@ -143,7 +184,9 @@ export async function POST(request: NextRequest) {
         id: mapping.id,
         ragflowKbId: mapping.ragflowKbId,
         ragflowKbName: mapping.ragflowKbName,
-        isDefault: mapping.isDefault
+        isDefault: mapping.isDefault,
+        isTemporary: mapping.isTemporary,
+        mode
       }
     })
 

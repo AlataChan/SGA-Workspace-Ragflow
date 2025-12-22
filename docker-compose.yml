@@ -66,6 +66,10 @@ services:
       - RAGFLOW_AGENT_ID=${RAGFLOW_AGENT_ID}
       - RAGFLOW_KB_ID=${RAGFLOW_KB_ID}
 
+      # 用户私人知识库配置
+      # USER_KB_MODE: temporary(临时,对话结束删除) | persistent(持久,永久保存)
+      - USER_KB_MODE=${USER_KB_MODE:-persistent}
+
     depends_on:
       postgres:
         condition: service_healthy

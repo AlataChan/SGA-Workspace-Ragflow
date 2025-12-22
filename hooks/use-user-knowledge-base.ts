@@ -13,6 +13,8 @@ interface UserKnowledgeBase {
   ragflowKbName: string | null
   ragflowDialogId: string | null
   isDefault: boolean
+  isTemporary?: boolean
+  mode?: 'temporary' | 'persistent'
 }
 
 interface UseUserKnowledgeBaseReturn {
@@ -24,12 +26,16 @@ interface UseUserKnowledgeBaseReturn {
   error: string | null
   /** 是否已初始化 */
   initialized: boolean
+  /** 当前模式 */
+  mode: 'temporary' | 'persistent'
   /** 初始化知识库 */
-  initialize: () => Promise<boolean>
+  initialize: (sessionId?: string) => Promise<boolean>
   /** 刷新数据 */
   refresh: () => Promise<void>
   /** 同步 Dialog */
   syncDialog: () => Promise<boolean>
+  /** 清理临时知识库 */
+  cleanup: (sessionId?: string) => Promise<boolean>
 }
 
 /**
@@ -40,6 +46,7 @@ export function useUserKnowledgeBase(): UseUserKnowledgeBaseReturn {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [initialized, setInitialized] = useState(false)
+  const [mode, setMode] = useState<'temporary' | 'persistent'>('persistent')
 
   /**
    * 获取知识库信息
@@ -55,6 +62,7 @@ export function useUserKnowledgeBase(): UseUserKnowledgeBaseReturn {
       if (result.code === 0 && result.data) {
         setKnowledgeBase(result.data)
         setInitialized(true)
+        if (result.data.mode) setMode(result.data.mode)
       } else if (result.code === 404) {
         setKnowledgeBase(null)
         setInitialized(false)
@@ -70,20 +78,24 @@ export function useUserKnowledgeBase(): UseUserKnowledgeBaseReturn {
 
   /**
    * 初始化知识库
+   * @param sessionId 会话ID（临时模式下使用）
    */
-  const initialize = useCallback(async (): Promise<boolean> => {
+  const initialize = useCallback(async (sessionId?: string): Promise<boolean> => {
     try {
       setLoading(true)
       setError(null)
 
       const response = await fetch('/api/ragflow/user-kb/init', {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId })
       })
       const result = await response.json()
 
       if (result.code === 0 && result.data) {
         setKnowledgeBase(result.data)
         setInitialized(true)
+        if (result.data.mode) setMode(result.data.mode)
         toast.success('私人知识库创建成功')
         return true
       } else {
@@ -97,6 +109,36 @@ export function useUserKnowledgeBase(): UseUserKnowledgeBaseReturn {
       return false
     } finally {
       setLoading(false)
+    }
+  }, [])
+
+  /**
+   * 清理临时知识库
+   * @param sessionId 会话ID（可选）
+   */
+  const cleanup = useCallback(async (sessionId?: string): Promise<boolean> => {
+    try {
+      const url = sessionId
+        ? `/api/ragflow/user-kb/cleanup?sessionId=${sessionId}`
+        : '/api/ragflow/user-kb/cleanup'
+
+      const response = await fetch(url, { method: 'DELETE' })
+      const result = await response.json()
+
+      if (result.code === 0) {
+        if (result.data.cleaned > 0) {
+          setKnowledgeBase(null)
+          setInitialized(false)
+          toast.success(`已清理 ${result.data.cleaned} 个临时知识库`)
+        }
+        return true
+      } else {
+        toast.error(result.message || '清理失败')
+        return false
+      }
+    } catch {
+      toast.error('清理失败，请重试')
+      return false
     }
   }, [])
 
@@ -142,9 +184,11 @@ export function useUserKnowledgeBase(): UseUserKnowledgeBaseReturn {
     loading,
     error,
     initialized,
+    mode,
     initialize,
     refresh,
-    syncDialog
+    syncDialog,
+    cleanup
   }
 }
 

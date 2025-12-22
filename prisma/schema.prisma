@@ -201,12 +201,15 @@ model UserKnowledgeBaseMapping {
   ragflowKbName   String?  @map("ragflow_kb_name")    // RAGFlow 中的知识库名称（缓存）
   ragflowDialogId String?  @map("ragflow_dialog_id") // 关联的 Dialog ID（多知识库检索用）
   isDefault       Boolean  @default(true)             @map("is_default")
+  isTemporary     Boolean  @default(false)            @map("is_temporary")   // 是否为临时知识库
+  sessionId       String?  @map("session_id")         // 关联的对话会话 ID（临时模式用）
   createdAt       DateTime @default(now())            @map("created_at")
   updatedAt       DateTime @updatedAt                 @map("updated_at")
 
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, ragflowKbId])
+  @@index([sessionId])                                // 便于按会话查询
   @@map("user_knowledge_base_mappings")
 }
 
