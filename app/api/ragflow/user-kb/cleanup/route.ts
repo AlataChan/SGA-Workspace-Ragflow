@@ -37,7 +37,7 @@ function getRAGFlowConfig() {
 }
 
 /**
- * 获取当前用户
+ * 获取当前用户（仅需 userId，直接从 JWT 获取）
  */
 async function getCurrentUser() {
   const cookieStore = await cookies()

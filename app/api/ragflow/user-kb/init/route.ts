@@ -36,8 +36,9 @@ function getRAGFlowConfig() {
 
 /**
  * 获取当前用户
+ * 优先从数据库获取，如果不存在则使用 JWT 中的信息（兼容数据库重置场景）
  */
-async function getCurrentUser(request: NextRequest) {
+async function getCurrentUser(_request: NextRequest) {
   const cookieStore = await cookies()
   const token = cookieStore.get('auth-token')?.value
 
@@ -49,12 +50,23 @@ async function getCurrentUser(request: NextRequest) {
     const payload = await verifyToken(token)
     if (!payload?.userId) return null
 
+    // 优先从数据库获取
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
       select: { id: true, username: true, companyId: true }
     })
 
-    return user
+    if (user) {
+      return user
+    }
+
+    // 数据库中不存在，使用 JWT 中的信息（兼容数据库重置场景）
+    console.log('[User KB] 用户不在数据库中，使用 JWT 信息:', payload.userId)
+    return {
+      id: payload.userId,
+      username: `user_${payload.userId.slice(-6)}`,
+      companyId: payload.companyId || 'default'
+    }
   } catch {
     return null
   }
