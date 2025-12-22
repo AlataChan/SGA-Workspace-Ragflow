@@ -33,6 +33,9 @@ import FileCard from './file-card'
 import { EnhancedDifyClient, DifyStreamMessage } from '@/lib/enhanced-dify-client'
 import { RAGFlowBlockingClient, RAGFlowMessage } from '@/lib/ragflow-blocking-client'
 import RAGFlowReferenceCard from '@/components/chat/ragflow-reference-card'
+import { AddToKBButton } from '@/components/chat/add-to-kb-button'
+import { GenerateGraphButton } from '@/components/chat/generate-graph-button'
+import { useUserKnowledgeBase } from '@/hooks/use-user-knowledge-base'
 import { normalizeRagflowContent } from '@/lib/ragflow-utils'
 
 // 配置 marked 为同步模式
@@ -644,6 +647,9 @@ export default function EnhancedChatWithSidebar({
     hasMore: true
   })
   const messageCacheRef = useRef<MessageCache>({})
+
+  // 用户私人知识库 Hook
+  const { knowledgeBase, initialized: kbInitialized, initialize: initializeKB } = useUserKnowledgeBase()
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -2374,7 +2380,7 @@ export default function EnhancedChatWithSidebar({
               </Button>
             </div>
             {!sidebarCollapsed && (
-              <div className="mt-4">
+              <div className="mt-4 space-y-2">
                 <Button
                   onClick={createNewSession}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white"
@@ -2382,6 +2388,25 @@ export default function EnhancedChatWithSidebar({
                   <Plus className="w-4 h-4 mr-2" />
                   新对话
                 </Button>
+                {/* 生成图谱按钮 - 仅当用户有私人知识库时显示 */}
+                {kbInitialized && knowledgeBase?.ragflowKbId && (
+                  <GenerateGraphButton
+                    ragflowKbId={knowledgeBase.ragflowKbId}
+                    variant="outline"
+                    size="sm"
+                  />
+                )}
+                {/* 初始化私人知识库按钮 */}
+                {!kbInitialized && (
+                  <Button
+                    onClick={initializeKB}
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-blue-200 border-blue-500/30 hover:bg-blue-500/10"
+                  >
+                    初始化私人知识库
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -2860,16 +2885,25 @@ export default function EnhancedChatWithSidebar({
                           )}
                         </div>
 
-                        {/* 时间戳 */}
-                        <div className={`text-xs text-blue-200/50 mt-2 ${isUser ? 'text-right' : 'text-left'}`}>
-                          {message.timestamp && !isNaN(message.timestamp)
-                            ? new Date(message.timestamp).toLocaleTimeString('zh-CN', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: false
-                            })
-                            : '刚刚'
-                          }
+                        {/* 时间戳和操作按钮 */}
+                        <div className={`flex items-center gap-2 mt-2 ${isUser ? 'justify-end' : 'justify-start'}`}>
+                          <span className="text-xs text-blue-200/50">
+                            {message.timestamp && !isNaN(message.timestamp)
+                              ? new Date(message.timestamp).toLocaleTimeString('zh-CN', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: false
+                              })
+                              : '刚刚'
+                            }
+                          </span>
+                          {/* AI 消息添加到知识库按钮 */}
+                          {!isUser && !message.isStreaming && message.content && (
+                            <AddToKBButton
+                              content={safeStringifyContent(message.content)}
+                              defaultTitle={`对话_${new Date(message.timestamp).toLocaleDateString()}`}
+                            />
+                          )}
                         </div>
                         {/* RAGFlow 引用卡片 */}
                         {message.reference && agentConfig?.platform === 'RAGFLOW' && (

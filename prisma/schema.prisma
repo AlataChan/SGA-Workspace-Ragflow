@@ -62,6 +62,7 @@ model User {
   uploadedFiles                 UploadedFile[]
   agentPermissions              UserAgentPermission[]
   knowledgeGraphPermissions     UserKnowledgeGraphPermission[]
+  knowledgeBaseMappings         UserKnowledgeBaseMapping[]     // 用户私人知识库映射
   company                       Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   department                    Department?                   @relation(fields: [departmentId], references: [id])
 
@@ -189,6 +190,24 @@ model KnowledgeGraph {
 
   @@unique([companyId, name], name: "companyId_name")
   @@map("knowledge_graphs")
+}
+
+/// 用户私人知识库映射表
+/// 仅存储用户与 RAGFlow Dataset 的关联关系，真实数据存储在 RAGFlow
+model UserKnowledgeBaseMapping {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  ragflowKbId     String   @map("ragflow_kb_id")      // RAGFlow Dataset ID
+  ragflowKbName   String?  @map("ragflow_kb_name")    // RAGFlow 中的知识库名称（缓存）
+  ragflowDialogId String?  @map("ragflow_dialog_id") // 关联的 Dialog ID（多知识库检索用）
+  isDefault       Boolean  @default(true)             @map("is_default")
+  createdAt       DateTime @default(now())            @map("created_at")
+  updatedAt       DateTime @updatedAt                 @map("updated_at")
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ragflowKbId])
+  @@map("user_knowledge_base_mappings")
 }
 
 enum UserRole {
