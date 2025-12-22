@@ -2,11 +2,14 @@
 # 🐳 企业AI工作空间 - 多阶段Docker构建
 # ===========================================
 
-# 基础镜像 - Node.js 20 Alpine
-FROM node:20-alpine AS base
+# 基础镜像 - Node.js 20 Debian Slim (更好的 SWC 兼容性)
+FROM node:20-slim AS base
 
 # 安装系统依赖
-RUN apk add --no-cache libc6-compat curl
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # 复制package文件
@@ -59,9 +62,9 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 
-# 创建非root用户
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# 创建非root用户 (Debian 语法)
+RUN groupadd --system --gid 1001 nodejs && \
+    useradd --system --uid 1001 --gid nodejs nextjs
 
 # 创建必要目录
 RUN mkdir -p /app/logs && chown nextjs:nodejs /app/logs
