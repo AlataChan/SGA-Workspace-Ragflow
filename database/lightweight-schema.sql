@@ -1,5 +1,6 @@
--- 🗄️ 企业AI工作空间 - 轻量级数据库Schema
--- 简单、直接、够用的PostgreSQL设计
+-- 🗄️ SGA 企业AI工作空间 - PostgreSQL 数据库 Schema
+-- 与 Prisma Schema 完全同步
+-- 生成时间: 2024-12-24
 
 -- 启用必要的扩展
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -7,93 +8,147 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 CREATE EXTENSION IF NOT EXISTS "btree_gin";
 
 -- ===========================================
+-- 枚举类型定义
+-- ===========================================
+
+-- 用户角色枚举
+CREATE TYPE "UserRole" AS ENUM ('ADMIN', 'USER');
+
+-- Agent 平台枚举
+CREATE TYPE "AgentPlatform" AS ENUM ('DIFY', 'RAGFLOW', 'HIAGENT', 'OPENAI', 'CLAUDE', 'CUSTOM');
+
+-- 消息角色枚举
+CREATE TYPE "MessageRole" AS ENUM ('USER', 'ASSISTANT');
+
+-- ===========================================
 -- 核心业务表
 -- ===========================================
 
--- 企业表 (多租户核心)
+-- 企业表
 CREATE TABLE companies (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id TEXT PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
-    slug VARCHAR(100) UNIQUE,
-    description TEXT,
     logo_url VARCHAR(500),
-    settings JSONB DEFAULT '{}',
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 用户表 (包含认证信息)
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-    
-    -- 基本信息
-    username VARCHAR(50) NOT NULL UNIQUE,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    display_name VARCHAR(255),
-    position VARCHAR(100), -- 职位
-    avatar_url VARCHAR(500),
-    
-    -- 认证信息
-    password_hash VARCHAR(255) NOT NULL,
-    salt VARCHAR(255) NOT NULL,
-    
-    -- 角色权限
-    role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('user', 'admin', 'super_admin')),
-    
-    -- 状态信息
-    is_active BOOLEAN DEFAULT true,
-    email_verified BOOLEAN DEFAULT false,
-    last_login_at TIMESTAMPTZ,
-    login_count INTEGER DEFAULT 0,
-    
-    -- 偏好设置
-    preferences JSONB DEFAULT '{}',
-    
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- AI智能体表
-CREATE TABLE ai_agents (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-    created_by UUID REFERENCES users(id),
-    
-    -- 基本信息
+-- 部门表
+CREATE TABLE departments (
+    id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    avatar_url VARCHAR(500),
+    icon VARCHAR(100),
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     
-    -- 平台配置
-    platform VARCHAR(50) NOT NULL CHECK (platform IN ('dify', 'openai', 'anthropic', 'custom')),
-    api_url VARCHAR(500) NOT NULL,
-    api_key TEXT, -- 加密存储
-    app_id VARCHAR(255), -- Dify等平台的应用ID
-    
-    -- 模型配置
-    model_config JSONB DEFAULT '{}',
-    system_prompt TEXT,
-    temperature REAL DEFAULT 0.7,
-    max_tokens INTEGER DEFAULT 2000,
-    
-    -- 状态统计
-    is_active BOOLEAN DEFAULT true,
-    is_public BOOLEAN DEFAULT false,
-    usage_count INTEGER DEFAULT 0,
-    
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    CONSTRAINT "companyId_name" UNIQUE (company_id, name)
 );
 
--- 用户智能体访问权限
-CREATE TABLE user_agent_access (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    agent_id UUID NOT NULL REFERENCES ai_agents(id) ON DELETE CASCADE,
-    granted_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(user_id, agent_id)
+-- 用户表
+CREATE TABLE users (
+    id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    username VARCHAR(100) NOT NULL,
+    user_id VARCHAR(100) NOT NULL,
+    phone VARCHAR(50) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    chinese_name VARCHAR(100) NOT NULL,
+    english_name VARCHAR(100),
+    email VARCHAR(255),
+    display_name VARCHAR(255),
+    avatar_url VARCHAR(500),
+    department_id TEXT REFERENCES departments(id),
+    position VARCHAR(100),
+    role "UserRole" NOT NULL DEFAULT 'USER',
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    last_login_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    
+    -- SSO 相关字段
+    yunzhijia_user_id VARCHAR(100) UNIQUE,
+    sso_provider VARCHAR(100),
+    sso_access_token TEXT,
+    sso_refresh_token TEXT,
+    sso_token_expires_at TIMESTAMPTZ,
+    
+    -- 唯一约束
+    CONSTRAINT "unique_username" UNIQUE (company_id, username),
+    CONSTRAINT "unique_user_id" UNIQUE (company_id, user_id),
+    CONSTRAINT "unique_phone" UNIQUE (company_id, phone)
+);
+
+-- Agent 智能体表
+CREATE TABLE agents (
+    id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    department_id TEXT NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+    chinese_name VARCHAR(100) NOT NULL,
+    english_name VARCHAR(100),
+    position VARCHAR(100) NOT NULL,
+    description TEXT,
+    avatar_url VARCHAR(500),
+    photo_url VARCHAR(500),
+    platform "AgentPlatform" NOT NULL DEFAULT 'DIFY',
+    platform_config JSONB,
+    dify_url VARCHAR(500),
+    dify_key VARCHAR(500),
+    is_online BOOLEAN NOT NULL DEFAULT false,
+    connection_tested_at TIMESTAMPTZ,
+    last_error TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 用户 Agent 权限表
+CREATE TABLE user_agent_permissions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    granted_by TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    
+    CONSTRAINT "unique_user_agent" UNIQUE (user_id, agent_id)
+);
+
+-- ===========================================
+-- 知识图谱系统表
+-- ===========================================
+
+-- 知识图谱表 (RAGFlow 集成)
+CREATE TABLE knowledge_graphs (
+    id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    ragflow_url VARCHAR(500) NOT NULL,
+    api_key VARCHAR(500) NOT NULL,
+    kb_id VARCHAR(255) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    last_sync_at TIMESTAMPTZ,
+    last_error TEXT,
+    node_count INTEGER NOT NULL DEFAULT 0,
+    edge_count INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    
+    CONSTRAINT "companyId_name_kg" UNIQUE (company_id, name)
+);
+
+-- 用户知识图谱权限表
+CREATE TABLE user_knowledge_graph_permissions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    knowledge_graph_id TEXT NOT NULL REFERENCES knowledge_graphs(id) ON DELETE CASCADE,
+    granted_by TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    
+    CONSTRAINT "userId_knowledgeGraphId" UNIQUE (user_id, knowledge_graph_id)
 );
 
 -- ===========================================
@@ -102,212 +157,76 @@ CREATE TABLE user_agent_access (
 
 -- 聊天会话表
 CREATE TABLE chat_sessions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    agent_id UUID NOT NULL REFERENCES ai_agents(id) ON DELETE CASCADE,
-    
-    -- 会话信息
-    title VARCHAR(500) DEFAULT '新对话',
-    conversation_id VARCHAR(100), -- 外部平台会话ID
-    
-    -- 配置信息
-    model_config JSONB DEFAULT '{}',
-    system_prompt TEXT,
-    
-    -- 统计信息
-    message_count INTEGER DEFAULT 0,
-    token_count INTEGER DEFAULT 0,
-    
-    -- 状态管理
-    is_pinned BOOLEAN DEFAULT false,
-    is_archived BOOLEAN DEFAULT false,
-    is_deleted BOOLEAN DEFAULT false,
-    last_message_at TIMESTAMPTZ,
-    
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    session_name VARCHAR(500),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- 聊天消息表
 CREATE TABLE chat_messages (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    session_id UUID NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    
-    -- 消息内容
-    role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role "MessageRole" NOT NULL,
     content TEXT NOT NULL,
-    
-    -- 元数据
-    model VARCHAR(100),
-    token_count INTEGER DEFAULT 0,
-    
-    -- 状态
-    is_error BOOLEAN DEFAULT false,
-    error_message TEXT,
-    
-    -- 扩展数据
-    attachments JSONB DEFAULT '[]',
-    metadata JSONB DEFAULT '{}',
-    
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- ===========================================
--- 知识库系统表
--- ===========================================
-
--- 知识库表
-CREATE TABLE knowledge_bases (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-    created_by UUID REFERENCES users(id),
-    
-    -- 基本信息
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    
-    -- 配置
-    embedding_model VARCHAR(100) DEFAULT 'text-embedding-ada-002',
-    chunk_size INTEGER DEFAULT 1000,
-    chunk_overlap INTEGER DEFAULT 200,
-    qdrant_collection VARCHAR(255) NOT NULL,
-    
-    -- 统计
-    document_count INTEGER DEFAULT 0,
-    total_size BIGINT DEFAULT 0,
-    
-    -- 状态
-    is_active BOOLEAN DEFAULT true,
-    
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 知识库文档表
-CREATE TABLE knowledge_documents (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    knowledge_base_id UUID NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
-    
-    -- 文件信息
-    name VARCHAR(255) NOT NULL,
-    file_path VARCHAR(500),
-    file_type VARCHAR(50),
-    file_size BIGINT,
-    content_hash VARCHAR(64),
-    
-    -- 处理状态
-    processing_status VARCHAR(20) DEFAULT 'pending' CHECK (
-        processing_status IN ('pending', 'processing', 'completed', 'failed')
-    ),
-    chunk_count INTEGER DEFAULT 0,
-    error_message TEXT,
-    
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    metadata JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ===========================================
 -- 文件管理表
 -- ===========================================
 
--- 文件上传表
-CREATE TABLE file_uploads (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    
-    -- 文件信息
-    original_name VARCHAR(255) NOT NULL,
-    stored_name VARCHAR(255) NOT NULL,
+-- 上传文件表
+CREATE TABLE uploaded_files (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    file_name VARCHAR(255) NOT NULL,
     file_path VARCHAR(500) NOT NULL,
-    file_type VARCHAR(50),
-    file_size BIGINT,
-    mime_type VARCHAR(100),
-    
-    -- 用途分类
-    upload_type VARCHAR(20) DEFAULT 'general' CHECK (
-        upload_type IN ('avatar', 'document', 'attachment', 'general')
-    ),
-    
-    -- 状态
-    is_processed BOOLEAN DEFAULT false,
-    
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- ===========================================
--- 系统管理表
--- ===========================================
-
--- 用户会话表 (JWT会话管理)
-CREATE TABLE user_sessions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    
-    -- 会话信息
-    token_hash VARCHAR(255) NOT NULL UNIQUE,
-    refresh_token_hash VARCHAR(255),
-    
-    -- 设备信息
-    ip_address INET,
-    user_agent TEXT,
-    device_info JSONB DEFAULT '{}',
-    
-    -- 状态
-    is_active BOOLEAN DEFAULT true,
-    expires_at TIMESTAMPTZ NOT NULL,
-    last_used_at TIMESTAMPTZ DEFAULT NOW(),
-    
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 系统配置表
-CREATE TABLE system_configs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    key VARCHAR(100) UNIQUE NOT NULL,
-    value JSONB NOT NULL,
-    description TEXT,
-    is_public BOOLEAN DEFAULT false,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 审计日志表
-CREATE TABLE audit_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id),
-    company_id UUID REFERENCES companies(id),
-    
-    -- 操作信息
-    action VARCHAR(100) NOT NULL,
-    resource_type VARCHAR(50) NOT NULL,
-    resource_id UUID,
-    
-    -- 详细信息
-    details JSONB DEFAULT '{}',
-    ip_address INET,
-    user_agent TEXT,
-    
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    file_url VARCHAR(500) NOT NULL,
+    file_size INTEGER NOT NULL,
+    file_type VARCHAR(100) NOT NULL,
+    metadata JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ===========================================
 -- 索引优化
 -- ===========================================
 
--- 主要索引
+-- 公司相关索引
+CREATE INDEX idx_departments_company_id ON departments(company_id);
+
+-- 用户相关索引
 CREATE INDEX idx_users_company_id ON users(company_id);
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_username ON users(username);
-CREATE INDEX idx_ai_agents_company_id ON ai_agents(company_id);
+CREATE INDEX idx_users_department_id ON users(department_id);
+CREATE INDEX idx_users_yunzhijia_user_id ON users(yunzhijia_user_id);
+
+-- Agent 相关索引
+CREATE INDEX idx_agents_company_id ON agents(company_id);
+CREATE INDEX idx_agents_department_id ON agents(department_id);
+
+-- 权限相关索引
+CREATE INDEX idx_user_agent_permissions_user_id ON user_agent_permissions(user_id);
+CREATE INDEX idx_user_agent_permissions_agent_id ON user_agent_permissions(agent_id);
+CREATE INDEX idx_user_kg_permissions_user_id ON user_knowledge_graph_permissions(user_id);
+CREATE INDEX idx_user_kg_permissions_kg_id ON user_knowledge_graph_permissions(knowledge_graph_id);
+
+-- 知识图谱相关索引
+CREATE INDEX idx_knowledge_graphs_company_id ON knowledge_graphs(company_id);
+
+-- 聊天相关索引
 CREATE INDEX idx_chat_sessions_user_id ON chat_sessions(user_id);
 CREATE INDEX idx_chat_sessions_agent_id ON chat_sessions(agent_id);
 CREATE INDEX idx_chat_messages_session_id ON chat_messages(session_id);
+CREATE INDEX idx_chat_messages_user_id ON chat_messages(user_id);
 CREATE INDEX idx_chat_messages_created_at ON chat_messages(created_at);
-CREATE INDEX idx_knowledge_bases_company_id ON knowledge_bases(company_id);
-CREATE INDEX idx_file_uploads_user_id ON file_uploads(user_id);
-CREATE INDEX idx_user_sessions_user_id ON user_sessions(user_id);
-CREATE INDEX idx_user_sessions_token_hash ON user_sessions(token_hash);
+
+-- 文件相关索引
+CREATE INDEX idx_uploaded_files_user_id ON uploaded_files(user_id);
 
 -- 全文搜索索引
 CREATE INDEX idx_chat_messages_content_gin ON chat_messages USING gin(to_tsvector('simple', content));
@@ -327,57 +246,73 @@ $$ language 'plpgsql';
 
 -- 创建触发器
 CREATE TRIGGER update_companies_updated_at BEFORE UPDATE ON companies FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_departments_updated_at BEFORE UPDATE ON departments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_ai_agents_updated_at BEFORE UPDATE ON ai_agents FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_agents_updated_at BEFORE UPDATE ON agents FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_knowledge_graphs_updated_at BEFORE UPDATE ON knowledge_graphs FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_chat_sessions_updated_at BEFORE UPDATE ON chat_sessions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_knowledge_bases_updated_at BEFORE UPDATE ON knowledge_bases FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_knowledge_documents_updated_at BEFORE UPDATE ON knowledge_documents FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_system_configs_updated_at BEFORE UPDATE ON system_configs FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ===========================================
 -- 初始数据
 -- ===========================================
 
+-- 生成 cuid 风格的 ID 函数
+CREATE OR REPLACE FUNCTION generate_cuid() RETURNS TEXT AS $$
+BEGIN
+    RETURN 'c' || encode(gen_random_bytes(12), 'hex');
+END;
+$$ LANGUAGE plpgsql;
+
 -- 插入默认企业
-INSERT INTO companies (id, name, slug, description) VALUES
-('00000000-0000-0000-0000-000000000001', '示例企业', 'demo-company', '演示企业，用于系统测试')
+INSERT INTO companies (id, name, logo_url) VALUES
+('cldefault00001', 'SGA企业', '/assets/sga-logo.png')
 ON CONFLICT (name) DO NOTHING;
 
--- 插入固定的超级管理员账号（不可删除）
+-- 插入默认部门
+INSERT INTO departments (id, company_id, name, description, icon, sort_order) VALUES
+('cldept00000001', 'cldefault00001', '管理层', '公司高级管理团队', 'Crown', 1),
+('cldept00000002', 'cldefault00001', 'AI Consultant 中心', '人工智能咨询服务团队', 'Bot', 2),
+('cldept00000003', 'cldefault00001', '财务及风控中心', '财务管理和风险控制团队', 'Shield', 3),
+('cldept00000004', 'cldefault00001', '市场营销部', '市场推广和营销团队', 'Megaphone', 4)
+ON CONFLICT ON CONSTRAINT "companyId_name" DO NOTHING;
+
+-- 插入固定的管理员账号
 -- 密码: sga0303 (使用bcrypt加密)
 INSERT INTO users (
     id,
     company_id,
     username,
+    user_id,
+    phone,
+    password_hash,
+    chinese_name,
+    english_name,
     email,
     display_name,
-    password_hash,
-    salt,
     role,
-    is_active,
-    email_verified
+    is_active
 ) VALUES (
-    '00000000-0000-0000-0000-000000000001',
-    '00000000-0000-0000-0000-000000000001',
+    'cladmin0000001',
+    'cldefault00001',
     'admin',
-    'admin@system.local',
+    'admin',
+    '17700000771',
+    '$2a$12$ZYaqH0KbjfBYnnfyj66h7ub/PUxheLAHjgVq5nM3R6m5P7NP2SZzK',
     '系统管理员',
-    '$2a$12$ZYaqH0KbjfBYnnfyj66h7ub/PUxheLAHjgVq5nM3R6m5P7NP2SZzK', -- sga0303
-    'system_salt',
-    'super_admin',
-    true,
+    'System Admin',
+    'admin@sga.local',
+    '系统管理员',
+    'ADMIN',
     true
-) ON CONFLICT (username) DO UPDATE SET
+) ON CONFLICT ON CONSTRAINT "unique_username" DO UPDATE SET
     password_hash = EXCLUDED.password_hash,
-    role = 'super_admin',
+    role = 'ADMIN',
     is_active = true;
 
--- 插入系统配置
-INSERT INTO system_configs (key, value, description, is_public) VALUES
-('app_name', '"企业AI工作空间"', '应用名称', true),
-('app_version', '"1.0.0"', '应用版本', true),
-('max_file_size', '10485760', '最大文件大小(字节)', false),
-('jwt_expiry', '86400', 'JWT过期时间(秒)', false),
-('session_timeout', '604800', '会话超时时间(秒)', false),
-('enable_registration', 'false', '是否允许注册', false)
-ON CONFLICT (key) DO NOTHING;
+-- ===========================================
+-- 说明
+-- ===========================================
+-- 此 Schema 与 prisma/schema.prisma 保持完全同步
+-- 使用 TEXT 类型的 ID（cuid 格式）与 Prisma 保持一致
+-- 所有表名和字段名使用 snake_case（通过 Prisma @map 映射）
+-- 枚举类型与 Prisma enum 定义一致
