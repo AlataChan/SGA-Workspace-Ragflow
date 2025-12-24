@@ -9,6 +9,8 @@ import { verifyUserAuth } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { DocumentStatus, DocumentStatusInfo, convertRagflowStatus } from '@/lib/types/document'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * 查询文档解析状态
  * 
@@ -150,4 +152,3 @@ async function fetchDocumentStatus(
     }
   }
 }
-

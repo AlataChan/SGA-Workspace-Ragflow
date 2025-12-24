@@ -13,6 +13,7 @@ import {
   Target
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import RAGFlowDocumentPreviewHover from "./ragflow-document-preview-hover"
 
 interface RAGFlowChunk {
   id: string
@@ -150,6 +151,16 @@ export default function RAGFlowReferenceCard({
                     <span className="text-xs text-gray-600 dark:text-gray-400 truncate">
                       {chunk.document_name}
                     </span>
+                    {chunk.dataset_id && chunk.document_id && (
+                      <RAGFlowDocumentPreviewHover
+                        chunk={{
+                          dataset_id: chunk.dataset_id,
+                          document_id: chunk.document_id,
+                          document_name: chunk.document_name,
+                          positions: chunk.positions
+                        }}
+                      />
+                    )}
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <Target className="w-3 h-3 text-gray-400" />

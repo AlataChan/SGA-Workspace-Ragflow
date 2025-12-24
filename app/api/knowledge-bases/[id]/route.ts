@@ -11,6 +11,8 @@ import { verifyUserAuth, verifyAdminAuth } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { z } from 'zod'
 
+export const dynamic = 'force-dynamic'
+
 // 更新知识库的验证 schema
 const updateKnowledgeBaseSchema = z.object({
   name: z.string().min(1).optional(),
@@ -408,4 +410,3 @@ async function deleteRAGFlowKnowledgeBase(
     }
   }
 }
-

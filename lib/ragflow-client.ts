@@ -413,13 +413,12 @@ export class RAGFlowClient {
         console.log('[RAGFlowClient] 创建新会话:', this.conversationId)
       }
 
-      // 构建请求体 - 使用正确的 RAGFlow API 格式
+      // 构建请求体 - Chat Assistant API 格式
       const requestBody = {
         question: query,
-        stream: false, // 改为非流式模式
+        stream: true,
         session_id: this.conversationId,
-        user_id: this.config.userId,  // 添加用户ID
-        quote: true // 启用引用返回
+        user_id: this.config.userId,
       }
 
       console.log('[RAGFlowClient] 发送请求 (Legacy):', {
@@ -454,127 +453,132 @@ export class RAGFlowClient {
         throw new Error(`RAGFlow API 错误: ${response.status} - ${errorText}`)
       }
 
-      // 处理流式响应
       const reader = response.body?.getReader()
       if (!reader) {
         throw new Error('无法读取响应流')
       }
 
+      const decoder = new TextDecoder()
+      let buffer = ''
       let fullContent = ''
       let reference: any = null
-      let completed = false
+      let lastMessageId: string | null = null
+      let ended = false
 
       try {
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
 
-          const chunk = new TextDecoder().decode(value)
-          const lines = chunk.split('\n')
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
 
           for (const line of lines) {
-            if (line.startsWith('data:')) {
-              try {
-                const jsonStr = line.slice(5).trim()
-                if (jsonStr === '' || jsonStr === 'true') continue
+            const trimmed = line.trim()
+            if (!trimmed || !trimmed.startsWith('data:')) continue
 
-                const data = JSON.parse(jsonStr)
-                console.log('[RAGFlowClient] 收到原始数据:', JSON.stringify(data, null, 2))
+            const jsonStr = trimmed.slice(5).trim()
+            if (!jsonStr || jsonStr === 'true' || jsonStr === '[DONE]') continue
 
-                if (data.code === 0 && data.data) {
-                  // 检查是否是结束标志
-                  if (data.data === true) {
-                    console.log('[RAGFlowClient] 收到流式结束标志')
-                    // 发送完成消息
-                    onMessage({
-                      type: 'complete',
-                      content: fullContent,
-                      reference: reference,
-                      conversationId: this.conversationId
-                    })
-                    completed = true
-                    break
-                  }
+            let data: any
+            try {
+              data = JSON.parse(jsonStr)
+            } catch (parseError) {
+              console.warn('[RAGFlowClient] 解析响应数据失败:', parseError)
+              continue
+            }
 
-                  if (typeof data.data === 'object' && data.data.answer) {
-                    console.log('[RAGFlowClient] 收到 answer 数据:', {
-                      answerType: typeof data.data.answer,
-                      answerContent: data.data.answer,
-                      hasReference: !!data.data.reference,
-                      sessionId: data.data.session_id,
-                      messageId: data.data.id
-                    })
+            if (data.code !== 0) {
+              onMessage({
+                type: 'error',
+                content: data.message || `API 错误 (code: ${data.code})`
+              })
+              throw new Error(data.message || `RAGFlow API 错误 (code: ${data.code})`)
+            }
 
-                    // 根据 RAGFlow 文档，answer 字段就是字符串内容
-                    const answer = data.data.answer
+            // 结束标志：data.data === true
+            if (data.data === true) {
+              console.log('[RAGFlowClient] 收到流式结束标志 (data: true)')
+              ended = true
+              break
+            }
 
-                    if (typeof answer === 'string' && answer.trim()) {
-                      fullContent = answer
+            if (!data.data || typeof data.data !== 'object') continue
 
-                      console.log('[RAGFlowClient] 发送内容消息:', {
-                        contentLength: fullContent.length,
-                        contentPreview: fullContent.substring(0, 100) + (fullContent.length > 100 ? '...' : '')
-                      })
+            if (data.data.id) {
+              lastMessageId = String(data.data.id)
+            }
 
-                      // 发送内容消息
-                      onMessage({
-                        type: 'content',
-                        content: fullContent,
-                        reference: data.data.reference || reference,
-                        conversationId: this.conversationId || data.data.session_id,
-                        messageId: data.data.id
-                      })
+            if (data.data.session_id) {
+              this.conversationId = data.data.session_id
+            }
 
-                      // 更新引用信息
-                      if (data.data.reference) {
-                        reference = data.data.reference
-                        console.log('[RAGFlowClient] 更新引用信息')
-                      }
-
-                      // 更新会话ID
-                      if (data.data.session_id) {
-                        this.conversationId = data.data.session_id
-                        console.log('[RAGFlowClient] 更新会话ID:', this.conversationId)
-                      }
-                    } else {
-                      console.warn('[RAGFlowClient] answer 不是有效字符串:', {
-                        answerType: typeof answer,
-                        answer: answer
-                      })
-                    }
-                  }
-                } else if (data.code !== 0) {
-                  // 错误响应
-                  console.error('[RAGFlowClient] API 返回错误:', data)
-                  onMessage({
-                    type: 'error',
-                    content: data.message || `API 错误 (code: ${data.code})`
-                  })
-                  break
-                }
-              } catch (parseError) {
-                console.warn('[RAGFlowClient] 解析响应数据失败:', parseError)
+            const answer = data.data.answer
+            if (typeof answer === 'string' && answer.length > 0) {
+              // 兼容两种模式：
+              // 1) 增量 delta：answer 变短/非累积，需拼接
+              // 2) 累积 full：answer 逐步变长，直接覆盖
+              if (answer.length >= fullContent.length) {
+                fullContent = answer
+              } else {
+                fullContent += answer
               }
+
+              if (data.data.reference) {
+                reference = data.data.reference
+              }
+
+              onMessage({
+                type: 'content',
+                content: fullContent,
+                reference: data.data.reference || reference,
+                conversationId: this.conversationId || undefined,
+                messageId: lastMessageId || undefined
+              })
+            }
+
+            if (data.data.reference) {
+              reference = data.data.reference
             }
           }
+
+          if (ended) break
         }
       } finally {
         reader.releaseLock()
       }
 
-      // 如果没有在流中发出完成事件，这里补发一次
-      if (!completed) {
-        onMessage({
-          type: 'complete',
-          content: fullContent,
-          reference: reference,
-          conversationId: this.conversationId
-        })
+      // 尝试“强引用”：若流式结束时没拿到引用，从会话历史中补一次（不改正文，只补文末引用）
+      if (!reference && this.conversationId) {
+        try {
+          const history = await this.getConversationHistory(this.conversationId)
+          for (let i = history.length - 1; i >= 0; i--) {
+            const msg = history[i] as any
+            const refCandidate = msg?.reference ?? msg?.data?.reference
+            const hasChunks = !!refCandidate?.chunks && Object.keys(refCandidate.chunks).length > 0
+            const hasDocAggs = !!refCandidate?.doc_aggs && Object.keys(refCandidate.doc_aggs).length > 0
+            if (hasChunks || hasDocAggs) {
+              reference = refCandidate
+              break
+            }
+          }
+        } catch (historyError) {
+          console.warn('[RAGFlowClient] 获取会话历史以补引用失败:', historyError)
+        }
       }
+
+      onMessage({
+        type: 'complete',
+        content: fullContent,
+        reference: reference,
+        conversationId: this.conversationId || undefined,
+        messageId: lastMessageId || undefined
+      })
 
       onComplete?.()
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('[RAGFlowClient] 发送消息失败:', error)
 
       if (error.name === 'AbortError') {
@@ -762,7 +766,7 @@ export class RAGFlowClient {
       }
 
       return { success: true }
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         error: error.message || '连接测试失败'

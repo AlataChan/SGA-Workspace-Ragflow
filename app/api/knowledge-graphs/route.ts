@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { PrismaClient } from "@prisma/client"
 import { verifyUserAuth } from "@/lib/auth/user"
 
+export const dynamic = 'force-dynamic'
+
 const prisma = new PrismaClient()
 
 // 获取知识图谱列表（普通用户版本）

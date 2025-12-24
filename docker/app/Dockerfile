@@ -1,9 +1,6 @@
 # 轻量级Next.js应用Dockerfile
 FROM node:18-alpine AS base
 
-# 安装必要的系统依赖
-RUN apk add --no-cache libc6-compat curl
-
 # 安装pnpm (Next.js需要)
 RUN npm install -g pnpm
 
@@ -39,7 +36,7 @@ ENV PATH="/usr/local/bin:$PATH"
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3000/api/health || exit 1
+  CMD node -e 'require("http").get("http://localhost:3000/api/health",(r)=>process.exit(r.statusCode===200?0:1)).on("error",()=>process.exit(1))'
 
 # 启动开发服务器
 CMD ["npm", "run", "dev"]

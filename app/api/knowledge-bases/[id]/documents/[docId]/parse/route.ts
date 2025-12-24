@@ -8,6 +8,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyUserAuth } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * 手动触发文档解析
  * 
@@ -121,4 +123,3 @@ async function triggerDocumentParsing(
     }
   }
 }
-

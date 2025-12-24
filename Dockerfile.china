@@ -5,11 +5,6 @@
 # 基础镜像 - 使用阿里云镜像
 FROM registry.cn-hangzhou.aliyuncs.com/google_containers/node:20-alpine AS base
 
-# 配置 Alpine 国内镜像源
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-
-# 安装系统依赖
-RUN apk add --no-cache libc6-compat curl
 WORKDIR /app
 
 # 复制package文件
@@ -94,4 +89,3 @@ ENV HOSTNAME="0.0.0.0"
 
 # 启动应用
 CMD ["node", "server.js"]
-

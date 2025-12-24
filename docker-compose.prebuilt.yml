@@ -17,7 +17,10 @@ services:
     # 使用 Node.js 镜像直接运行（开发模式）
     image: node:20-alpine
     working_dir: /app
-    command: sh -c "npm install && npx prisma generate && npm run dev"
+    # ⚠️ 使用 `npm ci` 而不是 `npm install`：
+    # - `npm install` 遇到损坏/不完整的 node_modules 时不会强制重装（会导致 next build 报缺文件）
+    # - `npm ci` 会先清空再严格按 lockfile 重装，能稳定修复 Geist 字体/ESM 文件缺失等问题
+    command: sh -c "npm ci && npx prisma generate && npm run dev"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -81,4 +84,3 @@ volumes:
     driver: local
   redis_data:
     driver: local
-

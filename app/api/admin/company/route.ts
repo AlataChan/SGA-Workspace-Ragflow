@@ -9,6 +9,8 @@ import prisma from '@/lib/prisma'
 import { withAdminAuth } from '@/lib/auth/middleware'
 import { z } from 'zod'
 
+export const dynamic = 'force-dynamic'
+
 // 更新公司信息的验证模式
 const updateCompanySchema = z.object({
   name: z.string().min(1, "公司名称不能为空").max(100, "公司名称过长"),

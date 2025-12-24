@@ -9,6 +9,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyUserAuth } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * 获取知识库文档列表
  * 
@@ -263,4 +265,3 @@ async function uploadDocument(
     }
   }
 }
-

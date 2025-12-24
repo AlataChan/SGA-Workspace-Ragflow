@@ -10,6 +10,8 @@ import { verifyUserAuth, verifyAdminAuth } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { z } from 'zod'
 
+export const dynamic = 'force-dynamic'
+
 // 创建知识库的验证 schema
 const createKnowledgeBaseSchema = z.object({
   name: z.string().min(1, "知识库名称不能为空"),
@@ -244,4 +246,3 @@ async function createRAGFlowKnowledgeBase(
     }
   }
 }
-

@@ -3,6 +3,8 @@ import { RAGFlowClient } from '@/lib/ragflow-client';
 import prisma from '@/lib/prisma';
 import { normalizeRagflowContent } from '@/lib/ragflow-utils';
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
     try {
         const searchParams = request.nextUrl.searchParams;
