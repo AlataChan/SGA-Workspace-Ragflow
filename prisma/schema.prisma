@@ -57,6 +57,14 @@ model User {
   lastLoginAt      DateTime?             @map("last_login_at")
   createdAt        DateTime              @default(now()) @map("created_at")
   updatedAt        DateTime              @updatedAt @map("updated_at")
+  
+  // SSO 相关字段
+  yunzhijiaUserId   String?   @unique @map("yunzhijia_user_id")
+  ssoProvider       String?   @map("sso_provider")
+  ssoAccessToken    String?   @map("sso_access_token")
+  ssoRefreshToken   String?   @map("sso_refresh_token")
+  ssoTokenExpiresAt DateTime? @map("sso_token_expires_at")
+  
   messages                      ChatMessage[]
   sessions                      ChatSession[]
   uploadedFiles                 UploadedFile[]
