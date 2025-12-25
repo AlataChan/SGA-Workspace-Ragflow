@@ -82,20 +82,32 @@ export class TempKbService {
         where: { userId }
       })
 
-      if (tempKb && tempKb.status === 'ACTIVE') {
-        // 更新最后活跃时间
-        await prisma.userTempKnowledgeBase.update({
-          where: { id: tempKb.id },
-          data: { lastActiveAt: new Date() }
-        })
-        
+      // 如果已存在知识库，直接复用（无论状态）
+      if (tempKb) {
+        // 如果状态不是 ACTIVE，更新为 ACTIVE
+        if (tempKb.status !== 'ACTIVE') {
+          tempKb = await prisma.userTempKnowledgeBase.update({
+            where: { id: tempKb.id },
+            data: {
+              status: 'ACTIVE',
+              lastActiveAt: new Date()
+            }
+          })
+        } else {
+          // 更新最后活跃时间
+          await prisma.userTempKnowledgeBase.update({
+            where: { id: tempKb.id },
+            data: { lastActiveAt: new Date() }
+          })
+        }
+
         return {
           success: true,
           data: this.mapToTempKbInfo(tempKb)
         }
       }
 
-      // 2. 创建新的临时知识库
+      // 2. 创建新的临时知识库（仅当不存在时）
       const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { username: true, chineseName: true }

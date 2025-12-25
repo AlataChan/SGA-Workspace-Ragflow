@@ -29,6 +29,17 @@ export class RAGFlowBlockingClient {
     this.config = config
   }
 
+  /**
+   * 取消当前正在进行的请求
+   */
+  cancel(): void {
+    if (this.currentController) {
+      this.currentController.abort()
+      this.currentController = null
+      console.log('[RAGFlowBlocking] 请求已取消')
+    }
+  }
+
   async createSession(): Promise<string> {
     try {
       console.log('[RAGFlowBlocking] 创建会话请求:', {
