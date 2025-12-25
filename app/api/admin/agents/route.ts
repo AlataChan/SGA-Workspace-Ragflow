@@ -42,6 +42,7 @@ const platformConfigSchemas = {
     baseUrl: z.string().min(1, "RAGFlow URL不能为空"),
     apiKey: z.string().min(1, "API Key不能为空"),
     agentId: z.string().min(1, "Agent ID或Chat ID不能为空"),
+    datasetId: z.string().optional(), // 知识库ID，用于PDF预览功能
   }),
   HIAGENT: z.object({
     baseUrl: z.string().min(1, "HiAgent URL不能为空"),

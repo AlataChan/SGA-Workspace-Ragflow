@@ -34,6 +34,8 @@ import { EnhancedDifyClient, DifyStreamMessage } from '@/lib/enhanced-dify-clien
 import { RAGFlowBlockingClient, RAGFlowMessage } from '@/lib/ragflow-blocking-client'
 import RAGFlowReferenceCard from '@/components/chat/ragflow-reference-card'
 import { normalizeRagflowContent } from '@/lib/ragflow-utils'
+import TempKbDialog from '@/components/temp-kb/temp-kb-dialog'
+import SaveKnowledgeButton from '@/components/chat/save-knowledge-button'
 
 // 配置 marked 为同步模式
 marked.setOptions({
@@ -576,6 +578,7 @@ interface AgentConfig {
   apiKey?: string
   agentId?: string
   localAgentId?: string // 后端查询用的本地Agent ID
+  datasetId?: string    // RAGFlow 知识库ID，用于PDF预览
 }
 
 interface DifyFile {
@@ -2382,6 +2385,9 @@ export default function EnhancedChatWithSidebar({
                   <Plus className="w-4 h-4 mr-2" />
                   新对话
                 </Button>
+                <div className="mt-2">
+                  <TempKbDialog variant="sidebar" />
+                </div>
               </div>
             )}
           </div>
@@ -2858,6 +2864,37 @@ export default function EnhancedChatWithSidebar({
                               </Button>
                             </div>
                           )}
+
+                          {/* 助手消息操作按钮 - 错误消息不显示 */}
+                          {!isUser && !message.isStreaming && message.content && !message.hasError && (
+                            <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                                onClick={async () => {
+                                  try {
+                                    await navigator.clipboard.writeText(safeStringifyContent(message.content))
+                                    toast.success('已复制到剪贴板')
+                                  } catch (err) {
+                                    console.error('复制失败:', err)
+                                    toast.error('复制失败')
+                                  }
+                                }}
+                              >
+                                <Copy className="h-3.5 w-3.5 mr-1" />
+                                复制
+                              </Button>
+                              <SaveKnowledgeButton
+                                content={safeStringifyContent(message.content)}
+                                sourceMessageId={message.id}
+                                sourceType="assistant_reply"
+                                size="sm"
+                                showLabel
+                                className="h-7 px-2 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                              />
+                            </div>
+                          )}
                         </div>
 
                         {/* 时间戳 */}
@@ -2877,6 +2914,7 @@ export default function EnhancedChatWithSidebar({
                             <RAGFlowReferenceCard
                               reference={message.reference}
                               agentId={agentConfig?.localAgentId || agentConfig?.agentId}
+                              datasetId={agentConfig?.datasetId}
                             />
                           </div>
                         )}

@@ -208,7 +208,8 @@ export default function RAGFlowReferenceCard({
                           dataset_id: chunk.dataset_id,
                           document_id: chunk.document_id,
                           document_name: chunk.document_name,
-                          positions: chunk.positions
+                          positions: chunk.positions,
+                          content: chunk.content
                         }}
                       />
                     )}

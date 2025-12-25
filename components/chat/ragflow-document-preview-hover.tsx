@@ -5,12 +5,15 @@ import Link from "next/link"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { FileText } from "lucide-react"
 
 export interface RAGFlowChunkForPreview {
   document_id: string
   document_name: string
   dataset_id: string
   positions?: number[][]
+  /** 引用的文字内容 */
+  content?: string
 }
 
 function inferPdfPage(positions?: number[][]): number | null {
@@ -40,12 +43,13 @@ export default function RAGFlowDocumentPreviewHover({
     return url.pathname + url.search
   }, [chunk.dataset_id, chunk.document_id, chunk.document_name, page])
 
-  const inlineFileUrl = useMemo(() => {
-    const base = `/api/ragflow/datasets/${encodeURIComponent(chunk.dataset_id)}/documents/${encodeURIComponent(
-      chunk.document_id
-    )}?inline=1`
-    return `${base}${page ? `#page=${page}` : ""}`
-  }, [chunk.dataset_id, chunk.document_id, page])
+  // 截断内容预览
+  const truncatedContent = useMemo(() => {
+    if (!chunk.content) return null
+    return chunk.content.length > 300
+      ? chunk.content.substring(0, 300) + '...'
+      : chunk.content
+  }, [chunk.content])
 
   return (
     <HoverCard openDelay={200} closeDelay={100} open={open} onOpenChange={setOpen}>
@@ -60,41 +64,44 @@ export default function RAGFlowDocumentPreviewHover({
         </span>
       </HoverCardTrigger>
 
-      <HoverCardContent className="w-[420px] max-w-[90vw] p-0 overflow-hidden" side="top" align="start">
-        <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-sm font-medium truncate">
-              {chunk.document_name || "文档预览"}
-            </div>
-            <div className="text-xs text-muted-foreground truncate">
-              {page ? `page ${page}` : "PDF"}
+      <HoverCardContent
+        className="w-[420px] max-w-[90vw] p-0 overflow-hidden bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl"
+        side="top"
+        align="start"
+      >
+        {/* 标题栏 */}
+        <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3 bg-gray-50 dark:bg-gray-800">
+          <div className="min-w-0 flex items-center gap-2">
+            <FileText className="w-4 h-4 text-blue-500 flex-shrink-0" />
+            <div>
+              <div className="text-sm font-medium truncate text-gray-900 dark:text-gray-100">
+                {chunk.document_name || "文档预览"}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                {page ? `第 ${page} 页` : ""}
+              </div>
             </div>
           </div>
           <Link
             href={previewPageUrl}
             target="_blank"
-            className="text-xs underline underline-offset-4 hover:text-foreground/80 flex-shrink-0"
+            className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-4 hover:text-blue-800 dark:hover:text-blue-300 flex-shrink-0"
           >
             打开
           </Link>
         </div>
 
-        <div className="relative h-[240px] bg-muted">
-          {open ? (
-            <iframe
-              title={chunk.document_name || "PDF Preview"}
-              src={inlineFileUrl}
-              className="w-full h-full"
-              style={{ pointerEvents: "none" }}
-            />
-          ) : null}
-
-          <Link
-            href={previewPageUrl}
-            target="_blank"
-            className="absolute inset-0"
-            aria-label="Open full preview"
-          />
+        {/* 引用文字内容 - 不再使用 iframe 加载 PDF */}
+        <div className="p-3 max-h-[240px] overflow-y-auto bg-gray-50 dark:bg-gray-800/50">
+          {truncatedContent ? (
+            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
+              {truncatedContent}
+            </p>
+          ) : (
+            <p className="text-sm text-gray-400 dark:text-gray-500 italic">
+              暂无引用内容预览
+            </p>
+          )}
         </div>
       </HoverCardContent>
     </HoverCard>

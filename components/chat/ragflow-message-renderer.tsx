@@ -1,6 +1,6 @@
 "use client"
 
-import React from 'react'
+import React, { useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
@@ -16,6 +16,8 @@ import { useState } from 'react'
 import { cn } from "@/lib/utils"
 import RAGFlowReferenceCard from './ragflow-reference-card'
 import { normalizeRagflowContent } from '@/lib/ragflow-utils'
+import InlineReference from './inline-reference'
+import SaveKnowledgeButton from './save-knowledge-button'
 
 interface RAGFlowReference {
   total: number
@@ -41,6 +43,45 @@ interface RAGFlowMessageRendererProps {
   agentId?: string
 }
 
+/**
+ * 解析内容中的 [ID:数字]## 标记，返回分段数组
+ */
+function parseReferences(content: string): Array<{ type: 'text' | 'reference'; content: string; id?: string }> {
+  const segments: Array<{ type: 'text' | 'reference'; content: string; id?: string }> = []
+  // 匹配 ##数字## 或 [ID:数字] 或 ##ID:数字##
+  const pattern = /\[ID:(\d+)\]|##(\d+)##|##ID:(\d+)##/g
+  let lastIndex = 0
+  let match
+
+  while ((match = pattern.exec(content)) !== null) {
+    // 添加之前的文本
+    if (match.index > lastIndex) {
+      segments.push({
+        type: 'text',
+        content: content.slice(lastIndex, match.index)
+      })
+    }
+    // 添加引用标记，获取任意一个捕获组的ID
+    const refId = match[1] || match[2] || match[3]
+    segments.push({
+      type: 'reference',
+      content: match[0],
+      id: refId
+    })
+    lastIndex = match.index + match[0].length
+  }
+
+  // 添加剩余文本
+  if (lastIndex < content.length) {
+    segments.push({
+      type: 'text',
+      content: content.slice(lastIndex)
+    })
+  }
+
+  return segments.length > 0 ? segments : [{ type: 'text', content }]
+}
+
 export default function RAGFlowMessageRenderer({
   message,
   isStreaming = false,
@@ -51,6 +92,9 @@ export default function RAGFlowMessageRenderer({
 }: RAGFlowMessageRendererProps) {
   const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({})
   const safeContent = normalizeRagflowContent(message.content)
+
+  // 解析引用标记
+  const contentSegments = useMemo(() => parseReferences(safeContent), [safeContent])
 
   const copyToClipboard = async (text: string, id: string) => {
     try {
@@ -131,7 +175,7 @@ export default function RAGFlowMessageRenderer({
     Object.keys(message.reference.chunks).length > 0
 
   return (
-    <div className={cn("space-y-3", className)}>
+    <div className={cn("space-y-3 group relative", className)}>
       {/* RAGFlow 标识 */}
       {hasKnowledgeReference && (
         <div className="flex items-center gap-2 mb-2">
@@ -148,46 +192,62 @@ export default function RAGFlowMessageRenderer({
 
       {/* 主要内容 */}
       <div className="prose prose-invert max-w-none">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkBreaks]}
-          components={{
-            code: renderCodeBlock,
-            img: renderImage,
-            a: renderLink,
-            // 自定义其他组件
-            h1: ({ children }) => <h1 className="text-2xl font-bold mb-4 text-white">{children}</h1>,
-            h2: ({ children }) => <h2 className="text-xl font-bold mb-3 text-white">{children}</h2>,
-            h3: ({ children }) => <h3 className="text-lg font-bold mb-2 text-white">{children}</h3>,
-            p: ({ children }) => <p className="mb-3 text-gray-100 leading-relaxed">{children}</p>,
-            ul: ({ children }) => <ul className="list-disc list-inside mb-3 text-gray-100">{children}</ul>,
-            ol: ({ children }) => <ol className="list-decimal list-inside mb-3 text-gray-100">{children}</ol>,
-            li: ({ children }) => <li className="mb-1">{children}</li>,
-            blockquote: ({ children }) => (
-              <blockquote className="border-l-4 border-blue-500 pl-4 italic text-gray-300 my-4">
-                {children}
-              </blockquote>
-            ),
-            table: ({ children }) => (
-              <div className="overflow-x-auto my-4">
-                <table className="min-w-full border border-gray-600 rounded-lg">
-                  {children}
-                </table>
-              </div>
-            ),
-            th: ({ children }) => (
-              <th className="border border-gray-600 px-4 py-2 bg-gray-800 text-white font-semibold text-left">
-                {children}
-              </th>
-            ),
-            td: ({ children }) => (
-              <td className="border border-gray-600 px-4 py-2 text-gray-100">
-                {children}
-              </td>
-            ),
-          }}
-        >
-          {safeContent}
-        </ReactMarkdown>
+        {contentSegments.map((segment, index) => {
+          if (segment.type === 'reference' && segment.id && message.reference) {
+            return (
+              <InlineReference
+                key={`ref-${index}-${segment.id}`}
+                referenceId={segment.id}
+                reference={message.reference}
+                agentId={agentId}
+              />
+            )
+          }
+          // 文本段落使用 ReactMarkdown 渲染
+          return (
+            <ReactMarkdown
+              key={`text-${index}`}
+              remarkPlugins={[remarkGfm, remarkBreaks]}
+              components={{
+                code: renderCodeBlock,
+                img: renderImage,
+                a: renderLink,
+                // 自定义其他组件
+                h1: ({ children }) => <h1 className="text-2xl font-bold mb-4 text-white">{children}</h1>,
+                h2: ({ children }) => <h2 className="text-xl font-bold mb-3 text-white">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-lg font-bold mb-2 text-white">{children}</h3>,
+                p: ({ children }) => <p className="mb-3 text-gray-100 leading-relaxed">{children}</p>,
+                ul: ({ children }) => <ul className="list-disc list-inside mb-3 text-gray-100">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal list-inside mb-3 text-gray-100">{children}</ol>,
+                li: ({ children }) => <li className="mb-1">{children}</li>,
+                blockquote: ({ children }) => (
+                  <blockquote className="border-l-4 border-blue-500 pl-4 italic text-gray-300 my-4">
+                    {children}
+                  </blockquote>
+                ),
+                table: ({ children }) => (
+                  <div className="overflow-x-auto my-4">
+                    <table className="min-w-full border border-gray-600 rounded-lg">
+                      {children}
+                    </table>
+                  </div>
+                ),
+                th: ({ children }) => (
+                  <th className="border border-gray-600 px-4 py-2 bg-gray-800 text-white font-semibold text-left">
+                    {children}
+                  </th>
+                ),
+                td: ({ children }) => (
+                  <td className="border border-gray-600 px-4 py-2 text-gray-100">
+                    {children}
+                  </td>
+                ),
+              }}
+            >
+              {segment.content}
+            </ReactMarkdown>
+          )
+        })}
 
         {/* 流式输出指示器 */}
         {isStreaming && (
@@ -209,6 +269,32 @@ export default function RAGFlowMessageRenderer({
           </div>
         )}
       </div>
+
+      {/* 消息操作按钮 - 始终显示在右上角 */}
+      {safeContent && (
+        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 bg-background/80 hover:bg-background"
+            onClick={() => copyToClipboard(safeContent, 'message-content')}
+            disabled={isStreaming}
+          >
+            {copiedStates['message-content'] ? (
+              <Check className="h-3.5 w-3.5 text-green-500" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+          </Button>
+          <SaveKnowledgeButton
+            content={safeContent}
+            sourceMessageId={message.id}
+            sourceType="assistant_reply"
+            size="icon"
+            className="h-7 w-7 bg-background/80 hover:bg-background"
+          />
+        </div>
+      )}
 
       {/* 知识库引用卡片 */}
       {hasKnowledgeReference && (

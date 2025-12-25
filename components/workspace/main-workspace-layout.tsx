@@ -367,7 +367,8 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
         apiKey: agent.platformConfig.apiKey,
         agentId: agent.platformConfig.agentId,
         localAgentId: agent.id,
-        userId: user.user_id || user.id || 'user-123'
+        userId: user.user_id || user.id || 'user-123',
+        datasetId: agent.platformConfig.datasetId // 知识库ID，用于PDF预览
       }
     } else {
       console.error('不支持的平台类型:', agent.platform)
