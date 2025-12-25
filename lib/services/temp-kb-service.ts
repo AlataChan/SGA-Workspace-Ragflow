@@ -173,14 +173,46 @@ export class TempKbService {
         }
       }
 
-      const tempKb = await prisma.userTempKnowledgeBase.findUnique({
+      let tempKb = await prisma.userTempKnowledgeBase.findUnique({
         where: { userId: params.userId }
       })
+
+      if (!tempKb) {
+        return {
+          success: false,
+          error: '临时知识库不存在'
+        }
+      }
+
+      // 如果虚拟文档未创建，尝试创建
+      if (!tempKb.ragflowDocId) {
+        console.log('[TempKbService] 虚拟文档未创建，尝试创建...')
+        const docResult = await this.client.createVirtualDocument(
+          tempKb.ragflowKbId,
+          'user_saved_knowledge'
+        )
+
+        if (docResult.success && docResult.data?.documentId) {
+          await prisma.userTempKnowledgeBase.update({
+            where: { id: tempKb.id },
+            data: { ragflowDocId: docResult.data.documentId }
+          })
+          tempKb = await prisma.userTempKnowledgeBase.findUnique({
+            where: { userId: params.userId }
+          })
+        } else {
+          console.error('[TempKbService] 创建虚拟文档失败:', docResult.error)
+          return {
+            success: false,
+            error: '创建虚拟文档失败: ' + (docResult.error || '未知错误')
+          }
+        }
+      }
 
       if (!tempKb || !tempKb.ragflowDocId) {
         return {
           success: false,
-          error: '临时知识库文档未初始化'
+          error: '临时知识库文档初始化失败'
         }
       }
 

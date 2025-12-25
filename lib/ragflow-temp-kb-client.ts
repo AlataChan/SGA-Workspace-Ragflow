@@ -148,7 +148,8 @@ export class RAGFlowTempKbClient {
   }
 
   /**
-   * 创建虚拟文档（用于存储用户保存的知识片段）
+   * 创建初始文档（用于存储用户保存的知识片段）
+   * 使用 multipart/form-data 上传一个简单的文本文件到知识库
    */
   async createVirtualDocument(datasetId: string, name: string = 'user_knowledge'): Promise<{
     success: boolean
@@ -156,68 +157,50 @@ export class RAGFlowTempKbClient {
     error?: string
   }> {
     try {
-      const url = `${this.config.baseUrl}/api/v1/file/create`
-      
-      console.log('[TempKbClient] 创建虚拟文档:', { datasetId, name })
+      const url = `${this.config.baseUrl}/api/v1/datasets/${datasetId}/documents`
+
+      console.log('[TempKbClient] 上传初始文档:', { datasetId, name })
+
+      // 创建一个简单的文本内容作为初始文档
+      const initialContent = `# 用户知识库\n\n此文档用于存储用户保存的知识片段。\n\n创建时间: ${new Date().toISOString()}`
+
+      // 创建 Blob 和 FormData
+      const blob = new Blob([initialContent], { type: 'text/plain' })
+      const formData = new FormData()
+      formData.append('file', blob, `${name}.txt`)
 
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.config.apiKey}`,
-          'Content-Type': 'application/json',
+          // 注意：不要手动设置 Content-Type，fetch 会自动设置 multipart/form-data 和 boundary
         },
-        body: JSON.stringify({
-          name: `${name}.txt`,
-          type: 'VIRTUAL'
-        }),
+        body: formData,
         signal: AbortSignal.timeout(30000)
       })
 
       const result = await response.json()
+      console.log('[TempKbClient] 上传文档结果:', result)
 
-      if (result.code === 0 && result.data) {
-        // 将文件链接到知识库
-        await this.linkFileToDataset(result.data.id, datasetId)
+      if (result.code === 0 && result.data && result.data.length > 0) {
+        const documentId = result.data[0].id
+        console.log('[TempKbClient] 获取到 document_id:', documentId)
         return {
           success: true,
-          data: { documentId: result.data.id }
+          data: { documentId }
         }
       }
 
       return {
         success: false,
-        error: result.message || '创建虚拟文档失败'
+        error: result.message || '上传初始文档失败'
       }
     } catch (error) {
-      console.error('[TempKbClient] 创建虚拟文档异常:', error)
+      console.error('[TempKbClient] 创建初始文档异常:', error)
       return {
         success: false,
-        error: error instanceof Error ? error.message : '创建虚拟文档异常'
+        error: error instanceof Error ? error.message : '创建初始文档异常'
       }
-    }
-  }
-
-  /**
-   * 将文件链接到知识库
-   */
-  private async linkFileToDataset(fileId: string, datasetId: string): Promise<void> {
-    try {
-      const url = `${this.config.baseUrl}/api/v1/file/convert`
-
-      await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.config.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          file_ids: [fileId],
-          kb_ids: [datasetId]
-        }),
-        signal: AbortSignal.timeout(30000)
-      })
-    } catch (error) {
-      console.error('[TempKbClient] 链接文件到知识库失败:', error)
     }
   }
 
