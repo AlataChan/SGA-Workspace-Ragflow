@@ -37,6 +37,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import SavedChunksList from './saved-chunks-list'
+import KnowledgeGraphView from './knowledge-graph-view'
 
 interface TempKbInfo {
   id: string
@@ -350,22 +351,17 @@ export default function TempKbPanel({
           </TabsContent>
 
           <TabsContent value="graph" className="mt-4 min-h-[200px]">
-            <div className="text-center py-8 bg-slate-800 border border-slate-600 rounded-lg">
-              <Network className="h-12 w-12 mx-auto mb-3 text-slate-500" />
-              {kbInfo ? (
-                <>
-                  <p className="text-sm text-slate-300">图谱可视化功能开发中</p>
-                  <p className="text-xs mt-1 text-slate-500">
-                    节点: {kbInfo.nodeCount} | 关系: {kbInfo.edgeCount}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-sm text-slate-300">暂无图谱数据</p>
-                  <p className="text-xs mt-1 text-slate-500">保存知识片段后构建图谱</p>
-                </>
-              )}
-            </div>
+            {kbInfo && kbInfo.chunkCount > 0 ? (
+              <KnowledgeGraphView />
+            ) : (
+              <div className="text-center py-8 bg-slate-800 border border-slate-600 rounded-lg">
+                <Network className="h-12 w-12 mx-auto mb-3 text-slate-500" />
+                <p className="text-sm text-slate-300">暂无图谱数据</p>
+                <p className="text-xs mt-1 text-slate-500">
+                  保存知识片段后构建图谱
+                </p>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </CardContent>

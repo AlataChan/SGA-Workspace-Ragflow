@@ -109,7 +109,76 @@ graph TD
 5.  **离线能力**:
     - 在浏览器中大量使用 `IndexedDB` 缓存聊天记录，提供类似渐进式 Web 应用 (PWA) 的功能。
 
-## 6. 部署
+## 6. 知识图谱可视化
+
+### 6.1 功能概述
+为临时知识库提供知识图谱可视化功能，将 RAGFlow 返回的实体和关系数据以交互式力导向图形式展示。
+
+### 6.2 数据结构
+```typescript
+interface GraphData {
+  nodes: Array<{
+    id: string
+    entity_name: string      // 实体名称
+    entity_type: string      // 实体类型: organization, person, geo, event, category
+    description?: string     // 描述
+    pagerank?: number        // PageRank 值（重要性）
+  }>
+  edges: Array<{
+    source: string          // 源节点 ID
+    target: string          // 目标节点 ID
+    description?: string    // 关系描述
+    weight?: number         // 权重
+  }>
+}
+```
+
+### 6.3 技术选型
+| 方案 | 优点 | 缺点 | 选择 |
+|------|------|------|------|
+| D3.js Force Graph | 已安装、高度定制化、力导向布局自然 | 需要手动实现交互 | ✅ 采用 |
+| ReactFlow | 已安装、组件化 | 更适合流程图，节点布局不自然 | - |
+| react-force-graph | 专门用于力导向图 | 需要额外安装 | - |
+
+### 6.4 可视化设计
+
+#### 节点样式
+| 实体类型 | 颜色 | 说明 |
+|----------|------|------|
+| person | #3B82F6 (蓝色) | 人物 |
+| organization | #10B981 (绿色) | 组织/机构 |
+| geo | #F59E0B (橙色) | 地理位置 |
+| event | #8B5CF6 (紫色) | 事件 |
+| category | #EC4899 (粉色) | 分类 |
+| 默认 | #6B7280 (灰色) | 其他类型 |
+
+#### 节点大小
+- 根据 `pagerank` 值动态计算（范围 20-50px）
+- 重要性越高，节点越大
+
+#### 交互功能
+1. **拖拽节点**: 拖动调整布局
+2. **缩放/平移**: 鼠标滚轮缩放，拖拽画布平移
+3. **悬停提示**: 显示实体名称、类型、描述
+4. **边悬停**: 显示关系描述
+
+### 6.5 组件结构
+```
+components/temp-kb/
+├── knowledge-graph-view.tsx    # 图谱可视化组件（D3 力导向图）
+├── temp-kb-panel.tsx           # 集成图谱展示
+├── saved-chunks-list.tsx       # 知识片段列表
+└── temp-kb-dialog.tsx          # 知识库对话框
+```
+
+### 6.6 API 接口
+```
+GET  /api/temp-kb/graph         # 获取知识图谱数据
+POST /api/temp-kb/graph         # 触发图谱构建
+GET  /api/temp-kb/graph/status  # 查询构建状态
+```
+
+## 7. 部署
 
 项目设计为 "Docker 优先" 部署：
 - **生产环境**: 使用 `docker-compose.prod.yml` 编排 Nginx, App, Postgres, 和 Redis。

@@ -322,14 +322,34 @@ export class RAGFlowTempKbClient {
       })
 
       const result = await response.json()
+      console.log('[TempKbClient] 图谱构建状态响应:', JSON.stringify(result).slice(0, 200))
 
-      if (result.code === 0) {
+      if (result.code === 0 && result.data) {
+        const data = result.data
+        let status = 'unknown'
+        const progress = data.progress || 0
+
+        // 检查进度
+        if (progress >= 1) {
+          status = 'completed'
+        } else if (data.progress_msg?.includes('fail') || data.progress_msg?.includes('error')) {
+          status = 'failed'
+        } else {
+          status = 'building'
+        }
+
+        console.log('[TempKbClient] 图谱状态:', { status, progress })
         return {
           success: true,
-          data: {
-            status: result.data?.status || 'unknown',
-            progress: result.data?.progress
-          }
+          data: { status, progress }
+        }
+      }
+
+      // 如果 API 返回错误码，可能是没有构建任务
+      if (result.code === 102 || result.message?.includes('not found')) {
+        return {
+          success: true,
+          data: { status: 'completed', progress: 1 }
         }
       }
 
@@ -338,6 +358,7 @@ export class RAGFlowTempKbClient {
         error: result.message || '获取构建状态失败'
       }
     } catch (error) {
+      console.error('[TempKbClient] 获取图谱状态异常:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : '获取构建状态异常'
@@ -363,21 +384,22 @@ export class RAGFlowTempKbClient {
       })
 
       const result = await response.json()
+      console.log('[TempKbClient] 知识图谱原始响应:', JSON.stringify(result).slice(0, 500))
 
-      if (result.code === 0 && result.data?.graph) {
-        const graph = result.data.graph
-        const nodeCount = graph.nodes?.length || 0
-        const edgeCount = graph.edges?.length || 0
+      if (result.code === 0) {
+        // RAGFlow 可能返回 result.data 直接是图谱，也可能是 result.data.graph
+        const graph = result.data?.graph || result.data || {}
+        const nodes = graph.nodes || graph.entity || []
+        const edges = graph.edges || graph.relationship || []
+        const nodeCount = nodes.length
+        const edgeCount = edges.length
 
         console.log('[TempKbClient] 图谱获取成功:', { nodeCount, edgeCount })
 
         return {
           success: true,
           data: {
-            graph: {
-              nodes: graph.nodes || [],
-              edges: graph.edges || []
-            },
+            graph: { nodes, edges },
             nodeCount,
             edgeCount
           }
