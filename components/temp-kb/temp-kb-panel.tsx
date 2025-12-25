@@ -16,17 +16,6 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs"
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import {
   Database,
   Network,
   FileText,
@@ -183,6 +172,8 @@ export default function TempKbPanel({
   }
 
   const handleClear = async () => {
+    console.log('[TempKbPanel] handleClear 被调用, isClearing:', isClearing)
+
     if (isClearing) return
     setIsClearing(true)
 
@@ -190,21 +181,28 @@ export default function TempKbPanel({
       const token = localStorage.getItem('auth-token')
       if (!token) throw new Error('未登录')
 
+      console.log('[TempKbPanel] 开始调用删除 API...')
       const response = await fetch('/api/temp-kb', {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       })
 
+      console.log('[TempKbPanel] API 响应状态:', response.status)
       const result = await response.json()
+      console.log('[TempKbPanel] API 返回结果:', result)
+
       if (result.success) {
         setKbInfo(null)
+        console.log('[TempKbPanel] 清空成功')
       } else {
         throw new Error(result.error || '清空失败')
       }
     } catch (err) {
+      console.error('[TempKbPanel] 清空失败:', err)
       setError(err instanceof Error ? err.message : '清空失败')
     } finally {
       setIsClearing(false)
+      console.log('[TempKbPanel] handleClear 结束')
     }
   }
 
@@ -245,23 +243,20 @@ export default function TempKbPanel({
                 <RefreshCw className="h-4 w-4" />
               </Button>
               {kbInfo && (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon" disabled={isClearing}>
-                      {isClearing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-red-500" />}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>清空知识库</AlertDialogTitle>
-                      <AlertDialogDescription>确定要清空所有保存的知识片段吗？此操作无法撤销。</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>取消</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleClear} className="bg-red-500 hover:bg-red-600">清空</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  disabled={isClearing}
+                  onClick={() => {
+                    console.log('[TempKbPanel] 清空按钮被点击')
+                    if (window.confirm('确定要清空所有保存的知识片段吗？此操作无法撤销。')) {
+                      console.log('[TempKbPanel] 用户确认清空')
+                      handleClear()
+                    }
+                  }}
+                >
+                  {isClearing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-red-500" />}
+                </Button>
               )}
             </div>
           </div>
@@ -277,23 +272,20 @@ export default function TempKbPanel({
               <RefreshCw className="h-3.5 w-3.5" />
             </Button>
             {kbInfo && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="ghost" size="sm" disabled={isClearing} className="h-7 px-2">
-                    {isClearing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5 text-red-500" />}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>清空知识库</AlertDialogTitle>
-                    <AlertDialogDescription>确定要清空所有保存的知识片段吗？此操作无法撤销。</AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>取消</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleClear} className="bg-red-500 hover:bg-red-600">清空</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={isClearing}
+                className="h-7 px-2"
+                onClick={() => {
+                  console.log('[TempKbPanel] 紧凑模式清空按钮被点击')
+                  if (window.confirm('确定要清空所有保存的知识片段吗？此操作无法撤销。')) {
+                    handleClear()
+                  }
+                }}
+              >
+                {isClearing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5 text-red-500" />}
+              </Button>
             )}
           </div>
         )}

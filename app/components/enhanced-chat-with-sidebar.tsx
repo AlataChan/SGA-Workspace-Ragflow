@@ -1529,6 +1529,51 @@ export default function EnhancedChatWithSidebar({
   // 最小发送间隔（毫秒）
   const MIN_SEND_INTERVAL = 1000 // 1秒
 
+  /**
+   * 停止当前生成
+   */
+  const stopGeneration = useCallback(() => {
+    console.log('[EnhancedChat] 用户请求停止生成')
+
+    // 停止 Dify 客户端
+    if (difyClientRef.current) {
+      difyClientRef.current.stopCurrentRequest()
+      console.log('[EnhancedChat] Dify 请求已停止')
+    }
+
+    // 停止 RAGFlow 客户端
+    if (ragflowClientRef.current) {
+      ragflowClientRef.current.cancel()
+      console.log('[EnhancedChat] RAGFlow 请求已停止')
+    }
+
+    // 更新状态
+    setIsStreaming(false)
+    setIsLoading(false)
+
+    // 更新当前正在流式输出的消息状态
+    setSessions(prev => prev.map(session => {
+      if (session.id === currentSessionId) {
+        return {
+          ...session,
+          messages: session.messages.map(msg => {
+            if (msg.isStreaming) {
+              return {
+                ...msg,
+                isStreaming: false,
+                content: msg.content + '\n\n[已停止生成]'
+              }
+            }
+            return msg
+          })
+        }
+      }
+      return session
+    }))
+
+    toast.info('已停止生成')
+  }, [currentSessionId])
+
   // 发送消息（带节流保护）
   const sendMessage = async () => {
     // 基础验证
@@ -3007,7 +3052,9 @@ export default function EnhancedChatWithSidebar({
 
               {isStreaming ? (
                 <Button
+                  onClick={stopGeneration}
                   className="bg-red-600 hover:bg-red-700 text-white h-8 w-8 p-0 rounded-full"
+                  title="停止生成"
                 >
                   <StopCircle size={16} />
                 </Button>

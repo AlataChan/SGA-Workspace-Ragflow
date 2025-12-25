@@ -80,8 +80,10 @@ export async function POST(request: NextRequest) {
  * 清空临时知识库
  */
 export async function DELETE(request: NextRequest) {
+  console.log('[API] DELETE /api/temp-kb 收到请求')
   try {
     const userId = await getUserId(request)
+    console.log('[API] DELETE /api/temp-kb userId:', userId)
     if (!userId) {
       return NextResponse.json(
         { success: false, error: '未授权' },
@@ -89,8 +91,10 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    console.log('[API] 开始清空临时知识库...')
     const result = await tempKbService.clearTempKb(userId)
-    
+    console.log('[API] 清空结果:', result)
+
     return NextResponse.json(result)
   } catch (error) {
     console.error('[API] 清空临时知识库失败:', error)

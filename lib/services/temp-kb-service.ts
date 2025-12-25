@@ -101,12 +101,18 @@ export class TempKbService {
         select: { username: true, chineseName: true }
       })
 
-      const kbName = `temp_kb_${userId}_${Date.now()}`
-      
+      // 生成可读的知识库名称: 用户名_日期_temp_序号
+      const now = new Date()
+      const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
+      const userName = user?.chineseName || user?.username || 'user'
+      // 格式: 张三_20251225_1430_temp_kb
+      const kbName = `${userName}_${dateStr}_${timeStr}_temp_kb`
+
       // 在RAGFlow中创建知识库
       const createResult = await this.client.createDataset({
         name: kbName,
-        description: `用户 ${user?.chineseName || user?.username || userId} 的临时知识图谱`,
+        description: `用户 ${user?.chineseName || user?.username || userId} 的临时知识图谱 (创建于 ${now.toLocaleString('zh-CN')})`,
         enableGraphRAG: true,
         graphRAGMethod: 'light',
         entityTypes: ['organization', 'person', 'geo', 'event', 'category', 'concept']
@@ -508,8 +514,30 @@ export class TempKbService {
         return { success: true }
       }
 
-      // 删除RAGFlow知识库
-      await this.client.deleteDataset(tempKb.ragflowKbId)
+      console.log('[TempKbService] 开始清空临时知识库:', {
+        userId,
+        ragflowKbId: tempKb.ragflowKbId,
+        ragflowUrl: tempKb.ragflowUrl
+      })
+
+      // 使用临时知识库自己存储的配置创建客户端
+      const tempClient = new RAGFlowTempKbClient({
+        baseUrl: tempKb.ragflowUrl,
+        apiKey: tempKb.apiKey
+      })
+
+      // 删除RAGFlow知识库（带超时和错误处理）
+      try {
+        const deleteResult = await tempClient.deleteDataset(tempKb.ragflowKbId)
+        if (!deleteResult.success) {
+          console.warn('[TempKbService] RAGFlow删除失败，但继续删除本地记录:', deleteResult.error)
+        } else {
+          console.log('[TempKbService] RAGFlow知识库删除成功')
+        }
+      } catch (ragflowError) {
+        // RAGFlow删除失败不阻塞本地数据库清理
+        console.warn('[TempKbService] RAGFlow删除异常，继续删除本地记录:', ragflowError)
+      }
 
       // 删除数据库记录（级联删除chunks）
       await prisma.userTempKnowledgeBase.delete({

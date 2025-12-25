@@ -9,17 +9,6 @@ import {
   CardContent,
   CardHeader,
 } from "@/components/ui/card"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
 import { Trash2, RefreshCw, Loader2, FileText, Tag } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -203,39 +192,25 @@ export default function SavedChunksList({
                     </span>
                   </div>
 
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                        disabled={deletingId === chunk.id}
-                      >
-                        {deletingId === chunk.id ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-3 w-3 text-red-500" />
-                        )}
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>确认删除</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          确定要删除这条知识片段吗？此操作无法撤销。
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>取消</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleDelete(chunk.id)}
-                          className="bg-red-500 hover:bg-red-600"
-                        >
-                          删除
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                    disabled={deletingId === chunk.id}
+                    onClick={() => {
+                      console.log('[SavedChunksList] 点击删除按钮:', chunk.id)
+                      if (window.confirm('确定要删除这条知识片段吗？此操作无法撤销。')) {
+                        console.log('[SavedChunksList] 确认删除:', chunk.id)
+                        handleDelete(chunk.id)
+                      }
+                    }}
+                  >
+                    {deletingId === chunk.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3 w-3 text-red-500" />
+                    )}
+                  </Button>
                 </div>
               </CardHeader>
 
