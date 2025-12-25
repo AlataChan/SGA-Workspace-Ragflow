@@ -83,17 +83,18 @@ export default function TempKbDialog({
       <DialogTrigger asChild>
         {renderTrigger()}
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col bg-slate-900 border border-slate-600">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl h-[92vh] flex flex-col bg-slate-900 border border-slate-600 p-0">
+        <DialogHeader className="flex-shrink-0 px-5 pt-4 pb-2">
           <DialogTitle className="flex items-center gap-2 text-white">
             <Database className="w-5 h-5 text-blue-400" />
             我的知识库
           </DialogTitle>
         </DialogHeader>
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 min-h-0 overflow-hidden px-5 pb-4">
           <TempKbPanel
-            className="border-0 shadow-none"
+            className="border-0 shadow-none h-full"
             onKbChange={handleKbChange}
+            compact
           />
         </div>
       </DialogContent>

@@ -34,16 +34,15 @@ interface SavedChunk {
 
 interface SavedChunksListProps {
   className?: string
-  maxHeight?: string
   onChunkDeleted?: (chunkId: string) => void
 }
 
 /**
  * 已保存知识片段列表组件
+ * 使用 flex 布局自适应父容器高度
  */
 export default function SavedChunksList({
   className,
-  maxHeight = "400px",
   onChunkDeleted
 }: SavedChunksListProps) {
   const [chunks, setChunks] = useState<SavedChunk[]>([])
@@ -179,8 +178,8 @@ export default function SavedChunksList({
   }
 
   return (
-    <div className={className}>
-      <div className="flex items-center justify-between mb-3">
+    <div className={cn("flex flex-col", className)}>
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
         <span className="text-sm text-muted-foreground">
           共 {chunks.length} 条知识片段
         </span>
@@ -189,7 +188,7 @@ export default function SavedChunksList({
         </Button>
       </div>
 
-      <ScrollArea style={{ maxHeight }} className="pr-4">
+      <ScrollArea className="flex-1 min-h-0 pr-4">
         <div className="space-y-3">
           {chunks.map((chunk) => (
             <Card key={chunk.id} className="relative group">

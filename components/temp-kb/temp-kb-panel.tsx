@@ -52,6 +52,8 @@ interface TempKbInfo {
 
 interface TempKbPanelProps {
   className?: string
+  /** 紧凑模式，隐藏标题并减少间距 */
+  compact?: boolean
   onGraphReady?: () => void
   onKbChange?: (info: { chunkCount: number; nodeCount: number; edgeCount: number }) => void
 }
@@ -62,6 +64,7 @@ interface TempKbPanelProps {
  */
 export default function TempKbPanel({
   className,
+  compact = false,
   onGraphReady,
   onKbChange
 }: TempKbPanelProps) {
@@ -227,77 +230,95 @@ export default function TempKbPanel({
   }
 
   return (
-    <Card className={cn("bg-slate-900 border border-slate-600 text-white", className)}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center gap-2 text-white">
-            <Database className="h-5 w-5 text-blue-400" />
-            我的知识库
-          </CardTitle>
+    <Card className={cn("bg-slate-900 border border-slate-600 text-white flex flex-col", className)}>
+      {/* 紧凑模式下隐藏标题栏 */}
+      {!compact && (
+        <CardHeader className="pb-2 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2 text-white">
+              <Database className="h-5 w-5 text-blue-400" />
+              我的知识库
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {kbInfo && getStatusBadge(kbInfo.status)}
+              <Button variant="ghost" size="icon" onClick={fetchKbInfo} className="text-white hover:bg-slate-700">
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+              {kbInfo && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="icon" disabled={isClearing}>
+                      {isClearing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-red-500" />}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>清空知识库</AlertDialogTitle>
+                      <AlertDialogDescription>确定要清空所有保存的知识片段吗？此操作无法撤销。</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>取消</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleClear} className="bg-red-500 hover:bg-red-600">清空</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+      )}
 
-          <div className="flex items-center gap-2">
+      <CardContent className={cn("flex-1 min-h-0 flex flex-col overflow-hidden", compact && "pt-0")}>
+        {/* 紧凑模式下的工具栏 */}
+        {compact && (
+          <div className="flex items-center justify-end gap-2 mb-2 flex-shrink-0">
             {kbInfo && getStatusBadge(kbInfo.status)}
-
-            <Button variant="ghost" size="icon" onClick={fetchKbInfo} className="text-white hover:bg-slate-700">
-              <RefreshCw className="h-4 w-4" />
+            <Button variant="ghost" size="sm" onClick={fetchKbInfo} className="text-white hover:bg-slate-700 h-7 px-2">
+              <RefreshCw className="h-3.5 w-3.5" />
             </Button>
-
             {kbInfo && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="ghost" size="icon" disabled={isClearing}>
-                    {isClearing ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-4 w-4 text-red-500" />
-                    )}
+                  <Button variant="ghost" size="sm" disabled={isClearing} className="h-7 px-2">
+                    {isClearing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5 text-red-500" />}
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>清空知识库</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      确定要清空所有保存的知识片段吗？此操作无法撤销。
-                    </AlertDialogDescription>
+                    <AlertDialogDescription>确定要清空所有保存的知识片段吗？此操作无法撤销。</AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>取消</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={handleClear}
-                      className="bg-red-500 hover:bg-red-600"
-                    >
-                      清空
-                    </AlertDialogAction>
+                    <AlertDialogAction onClick={handleClear} className="bg-red-500 hover:bg-red-600">清空</AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
             )}
           </div>
-        </div>
-      </CardHeader>
+        )}
 
-      <CardContent>
         {error && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+          <div className="mb-2 p-2 bg-red-500/10 border border-red-500/30 rounded-lg flex-shrink-0">
             <p className="text-sm text-red-500">{error}</p>
           </div>
         )}
 
-        {/* 统计信息 */}
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          <div className="text-center p-3 bg-slate-800 border border-slate-600 rounded-lg">
-            <FileText className="h-5 w-5 mx-auto mb-1 text-blue-400" />
-            <div className="text-2xl font-bold text-white">{kbInfo?.chunkCount || 0}</div>
+        {/* 统计信息 - 紧凑布局 */}
+        <div className={cn("grid grid-cols-3 gap-2 flex-shrink-0", compact ? "mb-2" : "mb-4")}>
+          <div className={cn("text-center bg-slate-800 border border-slate-600 rounded-lg", compact ? "p-2" : "p-3")}>
+            <FileText className={cn("mx-auto text-blue-400", compact ? "h-4 w-4" : "h-5 w-5 mb-1")} />
+            <div className={cn("font-bold text-white", compact ? "text-xl" : "text-2xl")}>{kbInfo?.chunkCount || 0}</div>
             <div className="text-xs text-slate-400">知识片段</div>
           </div>
-          <div className="text-center p-3 bg-slate-800 border border-slate-600 rounded-lg">
-            <Network className="h-5 w-5 mx-auto mb-1 text-green-400" />
-            <div className="text-2xl font-bold text-white">{kbInfo?.nodeCount || 0}</div>
+          <div className={cn("text-center bg-slate-800 border border-slate-600 rounded-lg", compact ? "p-2" : "p-3")}>
+            <Network className={cn("mx-auto text-green-400", compact ? "h-4 w-4" : "h-5 w-5 mb-1")} />
+            <div className={cn("font-bold text-white", compact ? "text-xl" : "text-2xl")}>{kbInfo?.nodeCount || 0}</div>
             <div className="text-xs text-slate-400">图谱节点</div>
           </div>
-          <div className="text-center p-3 bg-slate-800 border border-slate-600 rounded-lg">
-            <Network className="h-5 w-5 mx-auto mb-1 text-purple-400" />
-            <div className="text-2xl font-bold text-white">{kbInfo?.edgeCount || 0}</div>
+          <div className={cn("text-center bg-slate-800 border border-slate-600 rounded-lg", compact ? "p-2" : "p-3")}>
+            <Network className={cn("mx-auto text-purple-400", compact ? "h-4 w-4" : "h-5 w-5 mb-1")} />
+            <div className={cn("font-bold text-white", compact ? "text-xl" : "text-2xl")}>{kbInfo?.edgeCount || 0}</div>
             <div className="text-xs text-slate-400">图谱关系</div>
           </div>
         </div>
@@ -307,26 +328,21 @@ export default function TempKbPanel({
           <Button
             onClick={handleBuildGraph}
             disabled={isBuilding}
-            className="w-full mb-4"
+            className={cn("w-full flex-shrink-0", compact ? "mb-2 h-8 text-sm" : "mb-4")}
             variant="outline"
+            size={compact ? "sm" : "default"}
           >
             {isBuilding ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                构建中...
-              </>
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />构建中...</>
             ) : (
-              <>
-                <Play className="h-4 w-4 mr-2" />
-                构建知识图谱
-              </>
+              <><Play className="h-4 w-4 mr-2" />构建知识图谱</>
             )}
           </Button>
         )}
 
-        {/* 标签页 - 始终显示 */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="w-full grid grid-cols-2 bg-slate-800 border border-slate-600">
+        {/* 标签页 - 使用 flex 布局填充剩余空间 */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col">
+          <TabsList className="w-full grid grid-cols-2 bg-slate-800 border border-slate-600 flex-shrink-0">
             <TabsTrigger
               value="chunks"
               className="text-slate-300 data-[state=active]:bg-blue-600 data-[state=active]:text-white"
@@ -343,14 +359,14 @@ export default function TempKbPanel({
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="chunks" className="mt-4 min-h-[200px]">
+          <TabsContent value="chunks" className="mt-4 flex-1 min-h-0 overflow-hidden">
             <SavedChunksList
-              maxHeight="300px"
+              className="h-full"
               onChunkDeleted={() => fetchKbInfo()}
             />
           </TabsContent>
 
-          <TabsContent value="graph" className="mt-4 min-h-[200px]">
+          <TabsContent value="graph" className="mt-4 flex-1 min-h-0 overflow-hidden">
             {kbInfo && kbInfo.chunkCount > 0 ? (
               <KnowledgeGraphView />
             ) : (
