@@ -1,5 +1,11 @@
 import { z } from "zod"
 
+function emptyStringToUndefined(value: unknown) {
+  return value === "" ? undefined : value
+}
+
+const optionalEmail = z.preprocess(emptyStringToUndefined, z.string().email().optional())
+
 // 环境变量验证模式
 const envSchema = z.object({
   // 应用配置
@@ -53,9 +59,9 @@ const envSchema = z.object({
   // 邮件配置
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().min(1).max(65535).optional(),
-  SMTP_USER: z.string().email().optional(),
+  SMTP_USER: optionalEmail,
   SMTP_PASSWORD: z.string().optional(),
-  SMTP_FROM: z.string().email().optional(),
+  SMTP_FROM: optionalEmail,
   
   // 企业默认配置
   DEFAULT_COMPANY_NAME: z.string().default("示例企业"),

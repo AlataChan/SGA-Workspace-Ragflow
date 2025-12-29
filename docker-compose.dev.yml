@@ -1,0 +1,100 @@
+# 🐳 开发模式 Docker 编排 - 支持热重载
+# 用法: docker-compose -f docker-compose.dev.yml up -d
+
+services:
+  # Next.js 开发服务器 (热重载)
+  app:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm install && npx prisma generate && npm run dev"
+    ports:
+      - "3000:3000"  # 直接暴露开发端口
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - NODE_ENV=development
+      - NEXT_TELEMETRY_DISABLED=1
+      - WATCHPACK_POLLING=true  # 启用文件轮询（Docker 内必需）
+      - CHOKIDAR_USEPOLLING=true
+      
+      # 安全密钥
+      - JWT_SECRET=${JWT_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      
+      # 数据库连接
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      
+      # Redis
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+
+      # RAGFlow 配置
+      - RAGFLOW_URL=${RAGFLOW_URL}
+      - RAGFLOW_API_KEY=${RAGFLOW_API_KEY}
+      - RAGFLOW_CHAT_ID=${RAGFLOW_CHAT_ID}
+      - RAGFLOW_AGENT_ID=${RAGFLOW_AGENT_ID}
+      - RAGFLOW_KB_ID=${RAGFLOW_KB_ID}
+
+      # 业务配置
+      - DEFAULT_ADMIN_EMAIL=${DEFAULT_ADMIN_EMAIL}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD}
+      
+    volumes:
+      # 挂载源代码 - 实现热重载
+      - .:/app
+      # 排除 node_modules，使用容器内的
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./database/lightweight-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app-network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_dev_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app-network
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
+
+networks:
+  app-network:
+    driver: bridge
+

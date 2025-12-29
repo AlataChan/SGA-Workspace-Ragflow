@@ -70,13 +70,13 @@ if ! curl -s --connect-timeout 5 https://registry-1.docker.io/v2/ > /dev/null; t
     echo "⚠️  Docker Hub连接可能有问题，如果构建失败，请检查网络或使用代理"
 fi
 
-# 停止现有服务
+# 停止现有服务（仅停止本项目的服务）
 echo "🛑 停止现有服务..."
 docker compose down 2>/dev/null || true
 
-# 清理旧的镜像和容器
-echo "🧹 清理旧资源..."
-docker system prune -f 2>/dev/null || true
+# ⚠️ 注意：不再使用 docker system prune，避免影响其他项目
+# 如需清理，请手动执行: docker system prune -f
+echo "ℹ️  跳过全局清理，仅重启本项目服务"
 
 # 构建和启动服务
 echo "🏗️  构建和启动服务..."

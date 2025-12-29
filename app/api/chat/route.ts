@@ -6,6 +6,7 @@ import { ErrorHandler, AuthorizationError, ValidationError, NotFoundError } from
 import { validateAndSanitize, chatSchemas } from "@/lib/security/validation"
 import { checkRateLimit, chatRateLimiter } from "@/lib/security/rate-limiter"
 import { extractRequestMeta, logger } from "@/lib/utils/logger"
+import { verifyToken, extractTokenFromHeader } from "@/lib/auth/jwt"
 
 export async function POST(request: NextRequest) {
   const meta = extractRequestMeta(request)
@@ -18,9 +19,30 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { message, agentId, sessionId, files } = validateAndSanitize(chatSchemas.sendMessage, body)
 
-    // 简化认证 - 临时实现
-    const user = { id: 'temp-user-id', email: 'temp@example.com' }
-    // TODO: 实现真正的JWT认证
+    // JWT 认证 - 从 Cookie 或 Authorization 头获取 token
+    const cookieToken = request.cookies.get('auth-token')?.value
+    const headerToken = extractTokenFromHeader(request.headers.get('authorization'))
+    const token = cookieToken || headerToken
+
+    if (!token) {
+      throw new AuthorizationError("未提供认证令牌，请先登录")
+    }
+
+    // 验证 JWT token
+    const payload = verifyToken(token)
+    if (!payload) {
+      throw new AuthorizationError("无效的认证令牌，请重新登录")
+    }
+
+    // 从 JWT payload 中获取用户信息
+    const user = {
+      id: payload.userId,
+      email: `${payload.userId}@company.com`,  // 如果需要 email，可以从数据库查询
+      companyId: payload.companyId,
+      role: payload.role
+    }
+
+    logger.info("用户认证成功", { userId: user.id, companyId: user.companyId, agentId })
 
     // 聊天速率限制
     const chatIdentifier = `chat:${user.id}`
@@ -100,6 +122,66 @@ export async function POST(request: NextRequest) {
           conversationId,
           userIdentifier
         )
+      } else if (agent.platform === "ragflow") {
+        // RAGFlow 专用处理逻辑
+        const conversationId = session.conversation_id
+
+        // 动态导入以避免循环依赖或按需加载
+        const { RAGFlowClient } = await import("@/lib/ragflow-client")
+
+        // 尝试从配置获取 RAGFlow Agent ID，如果没设置则使用本地 Agent ID
+        // 注意：这里是一个假设，如果 RAGFlow 需要的 ID 与本地 ID 不一致，必须在 modelConfig 中配置
+        const ragflowAgentId = agent.model_config?.agent_id || agent.id
+
+        const client = new RAGFlowClient({
+          baseUrl: agent.api_url,
+          apiKey: agent.api_key,
+          agentId: ragflowAgentId,
+          userId: userIdentifier
+        })
+
+        // 使用 Promise 包装回调式的 sendMessage
+        response = await new Promise<any>((resolve, reject) => {
+          let answer = ''
+          let ref = null
+          let finalConvId = conversationId
+          let finalMsgId = ''
+
+          client.setConversationId(conversationId)
+
+          client.sendMessage(
+            message,
+            (msg) => {
+              if (msg.type === 'content') {
+                answer = msg.content || ''
+                if (msg.reference) ref = msg.reference
+                if (msg.conversationId) finalConvId = msg.conversationId
+                if (msg.messageId) finalMsgId = msg.messageId
+              } else if (msg.type === 'complete') {
+                // 完成时返回
+                resolve({
+                  answer: msg.content || answer,
+                  conversation_id: msg.conversationId || finalConvId,
+                  message_id: finalMsgId, // RAGFlow 可能不返回 msgId，暂空
+                  reference: msg.reference || ref // 传递引用信息
+                })
+              } else if (msg.type === 'error') {
+                reject(new Error(msg.content))
+              }
+            },
+            (err) => reject(err),
+            () => {
+              // completion callback (redundant with 'complete' message type usually)
+            },
+            true // quote = true
+          ).catch(reject)
+        })
+
+        // 将引用信息附加到 metadata 或 answer 中？
+        // 为了前端展示，我们可以选择将引用作为 extra data 返回
+        // 下面的 return NextResponse.json 会包含 response 对象的所有属性吗？
+        // 查看 174 行： response: response.answer
+        // 我需要修改返回值结构来包含 reference
       } else {
         response = await sendToCustomAPI(
           agent.api_url,
@@ -174,10 +256,12 @@ export async function POST(request: NextRequest) {
       response: response.answer,
       conversationId: response.conversation_id,
       messageId: response.message_id,
+      // @ts-ignore
+      reference: response.reference, // 传递引用信息
       metadata: {
         agentName: agent.name,
         platform: agent.platform
       }
     })
-  }, meta.requestId, user?.id, meta.ip)
+  }, meta.requestId, user.id, meta.ip)
 }

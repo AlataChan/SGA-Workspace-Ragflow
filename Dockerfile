@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 # ===========================================
 # 🐳 企业AI工作空间 - 多阶段Docker构建
 # ===========================================
@@ -5,25 +6,26 @@
 # 基础镜像 - Node.js 20 Alpine
 FROM node:20-alpine AS base
 
-# 安装系统依赖
-RUN apk add --no-cache libc6-compat curl
 WORKDIR /app
 
-# 复制package文件
-COPY package.json package-lock.json* ./
+# 复制package文件和npm配置
+COPY package.json package-lock.json* .npmrc* ./
 
 # ===========================================
-# 依赖安装阶段
+# 依赖安装阶段（生产依赖）
 # ===========================================
 FROM base AS deps
-RUN npm ci --only=production && npm cache clean --force
+# 使用 BuildKit 缓存挂载，所有项目共享 npm 缓存
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    npm ci --only=production
 
 # ===========================================
 # 开发依赖安装阶段
 # ===========================================
 FROM base AS dev-deps
-# 使用 --frozen-lockfile 确保使用锁定的版本
-RUN npm ci --frozen-lockfile || npm ci
+# 使用 BuildKit 缓存挂载，所有项目共享 npm 缓存
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    npm ci
 
 # ===========================================
 # 构建阶段
@@ -94,7 +96,7 @@ EXPOSE 3000
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD curl -f http://localhost:3000/api/health || exit 1
+  CMD node -e 'require("http").get("http://localhost:3000/api/health",(r)=>process.exit(r.statusCode===200?0:1)).on("error",()=>process.exit(1))'
 
 # 启动应用
 ENTRYPOINT ["./entrypoint.sh"]

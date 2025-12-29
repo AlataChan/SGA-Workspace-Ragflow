@@ -58,7 +58,7 @@ services:
       - DEFAULT_ADMIN_EMAIL=${DEFAULT_ADMIN_EMAIL}
       - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD}
       - DEFAULT_DIFY_BASE_URL=${DEFAULT_DIFY_BASE_URL}
-      
+    
       # i国贸 SSO 配置
       - YUNZHIJIA_APP_ID=${YUNZHIJIA_APP_ID}
       - YUNZHIJIA_APP_SECRET=${YUNZHIJIA_APP_SECRET}
@@ -67,6 +67,14 @@ services:
       - ENABLE_SSO=${ENABLE_SSO}
       - TOKEN_ENCRYPTION_KEY=${TOKEN_ENCRYPTION_KEY}
       
+
+      # RAGFlow配置
+      - RAGFLOW_URL=${RAGFLOW_URL}
+      - RAGFLOW_API_KEY=${RAGFLOW_API_KEY}
+      - RAGFLOW_CHAT_ID=${RAGFLOW_CHAT_ID}
+      - RAGFLOW_AGENT_ID=${RAGFLOW_AGENT_ID}
+      - RAGFLOW_KB_ID=${RAGFLOW_KB_ID}
+
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,7 +88,7 @@ services:
       - app-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://$$(hostname):3000/api/health"]
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/api/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 30s
       timeout: 15s
       retries: 5
@@ -249,7 +257,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.25.0.0/16
+        - subnet: 172.28.0.0/16
 
 # ===========================================
 # 部署配置说明

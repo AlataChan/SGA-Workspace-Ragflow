@@ -233,10 +233,10 @@ const KnowledgeGraphVisualization: React.FC<KnowledgeGraphVisualizationProps> = 
   // 如果没有数据，显示加载状态
   if (!graphData) {
     return (
-      <div className={`flex items-center justify-center h-full ${className}`}>
+      <div className={`flex items-center justify-center h-full bg-[#0d1117] ${className}`}>
         <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">加载知识图谱中...</p>
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-400 mx-auto"></div>
+          <p className="mt-4 text-gray-400">加载知识图谱中...</p>
         </div>
       </div>
     );
@@ -350,47 +350,47 @@ const KnowledgeGraphVisualization: React.FC<KnowledgeGraphVisualizationProps> = 
   }, [filteredNodes, edges]);
 
   return (
-    <div className={`flex h-full ${className}`}>
+    <div className={`flex h-full bg-[#0d1117] ${className}`}>
       {/* 控制面板 */}
       <motion.div
         initial={{ x: -300 }}
         animate={{ x: 0 }}
-        className="w-80 bg-white border-r border-gray-200 p-6 overflow-y-auto"
+        className="w-80 bg-[#161b22] border-r border-gray-700/50 p-6 overflow-y-auto"
       >
         <div className="space-y-6">
           {/* Header */}
           <div>
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center mb-2">
-              <Network className="w-6 h-6 mr-2 text-blue-500" />
+            <h2 className="text-xl font-semibold text-white flex items-center mb-2">
+              <Network className="w-6 h-6 mr-2 text-blue-400" />
               知识图谱
             </h2>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-400">
               探索知识实体关系
             </p>
           </div>
 
           {/* Search */}
           <div>
-            <h3 className="text-sm font-medium text-gray-700 mb-3">搜索节点</h3>
+            <h3 className="text-sm font-medium text-gray-300 mb-3">搜索节点</h3>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
               <input
                 type="text"
                 placeholder="搜索节点..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                className="w-full pl-10 pr-4 py-2 bg-[#21262d] border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm text-white placeholder-gray-500"
               />
             </div>
           </div>
 
           {/* Filter */}
           <div>
-            <h3 className="text-sm font-medium text-gray-700 mb-3">节点类型</h3>
+            <h3 className="text-sm font-medium text-gray-300 mb-3">节点类型</h3>
             <select
               value={selectedNodeType}
               onChange={(e) => setSelectedNodeType(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              className="w-full px-3 py-2 bg-[#21262d] border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm text-white"
             >
               <option value="all">全部类型</option>
               <option value="PERSON">人员</option>
@@ -402,15 +402,15 @@ const KnowledgeGraphVisualization: React.FC<KnowledgeGraphVisualizationProps> = 
 
           {/* Statistics */}
           <div>
-            <h3 className="text-sm font-medium text-gray-700 mb-3">图谱统计</h3>
+            <h3 className="text-sm font-medium text-gray-300 mb-3">图谱统计</h3>
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">节点数量</span>
-                <span className="font-medium">{filteredNodes.length}</span>
+                <span className="text-gray-400">节点数量</span>
+                <span className="font-medium text-gray-200">{filteredNodes.length}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">关系数量</span>
-                <span className="font-medium">{edges.length}</span>
+                <span className="text-gray-400">关系数量</span>
+                <span className="font-medium text-gray-200">{edges.length}</span>
               </div>
             </div>
           </div>
@@ -429,7 +429,7 @@ const KnowledgeGraphVisualization: React.FC<KnowledgeGraphVisualizationProps> = 
       </motion.div>
 
       {/* 主图谱画布 */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative bg-[#0d1117]">
         {/* D3.js 知识图谱 */}
         <div className="relative w-full h-full">
           <D3ForceGraph
@@ -446,20 +446,20 @@ const KnowledgeGraphVisualization: React.FC<KnowledgeGraphVisualizationProps> = 
             <motion.div
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-white rounded-lg shadow-lg p-4 min-w-[200px]"
+              className="bg-[#161b22] rounded-lg shadow-lg p-4 min-w-[200px] border border-gray-700/50"
             >
               <div className="flex items-center space-x-2 mb-3">
-                <Zap className="w-4 h-4 text-yellow-500" />
-                <span className="font-medium text-gray-900">实时状态</span>
+                <Zap className="w-4 h-4 text-yellow-400" />
+                <span className="font-medium text-white">实时状态</span>
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-600">节点</span>
-                  <span className="font-medium">{filteredNodes.length}</span>
+                  <span className="text-gray-400">节点</span>
+                  <span className="font-medium text-gray-200">{filteredNodes.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-600">关系</span>
-                  <span className="font-medium">{edges.length}</span>
+                  <span className="text-gray-400">关系</span>
+                  <span className="font-medium text-gray-200">{edges.length}</span>
                 </div>
               </div>
             </motion.div>
@@ -473,13 +473,13 @@ const KnowledgeGraphVisualization: React.FC<KnowledgeGraphVisualizationProps> = 
               initial={{ x: 400 }}
               animate={{ x: 0 }}
               exit={{ x: 400 }}
-              className="absolute top-0 right-0 w-80 h-full bg-white border-l border-gray-200 shadow-xl flex flex-col z-10"
+              className="absolute top-0 right-0 w-80 h-full bg-[#161b22] border-l border-gray-700/50 shadow-xl flex flex-col z-10"
             >
-              <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">节点详情</h3>
+              <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-700/50">
+                <h3 className="text-lg font-semibold text-white">节点详情</h3>
                 <button
                   onClick={() => setSelectedNode(null)}
-                  className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                  className="p-1 text-gray-400 hover:text-white transition-colors text-xl"
                 >
                   ×
                 </button>
@@ -487,28 +487,28 @@ const KnowledgeGraphVisualization: React.FC<KnowledgeGraphVisualizationProps> = 
 
               <div className="overflow-y-auto p-4 space-y-4" style={{height: '500px'}}>
                 {/* 基本信息 */}
-                <div className="bg-gray-50 rounded-lg p-3">
+                <div className="bg-[#21262d] rounded-lg p-3 border border-gray-700/50">
                   <div className="flex items-center space-x-2 mb-2">
-                    {selectedNode.type === 'PERSON' && <Users className="w-5 h-5 text-blue-500" />}
-                    {selectedNode.type === 'ORGANIZATION' && <Building className="w-5 h-5 text-green-500" />}
-                    {selectedNode.type === 'CATEGORY' && <Lightbulb className="w-5 h-5 text-purple-500" />}
-                    {selectedNode.type === 'EVENT' && <Clock className="w-5 h-5 text-red-500" />}
-                    <h4 className="font-semibold text-gray-900">基本信息</h4>
+                    {selectedNode.type === 'PERSON' && <Users className="w-5 h-5 text-blue-400" />}
+                    {selectedNode.type === 'ORGANIZATION' && <Building className="w-5 h-5 text-green-400" />}
+                    {selectedNode.type === 'CATEGORY' && <Lightbulb className="w-5 h-5 text-purple-400" />}
+                    {selectedNode.type === 'EVENT' && <Clock className="w-5 h-5 text-red-400" />}
+                    <h4 className="font-semibold text-white">基本信息</h4>
                   </div>
 
                   <div className="space-y-2">
                     <div>
-                      <label className="text-sm font-medium text-gray-700">名称</label>
-                      <p className="text-gray-900 mt-1 font-medium">{selectedNode.name}</p>
+                      <label className="text-sm font-medium text-gray-400">名称</label>
+                      <p className="text-white mt-1 font-medium">{selectedNode.name}</p>
                     </div>
 
                     <div>
-                      <label className="text-sm font-medium text-gray-700">类型</label>
+                      <label className="text-sm font-medium text-gray-400">类型</label>
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-1 ${
-                        selectedNode.type === 'PERSON' ? 'bg-blue-100 text-blue-800' :
-                        selectedNode.type === 'ORGANIZATION' ? 'bg-green-100 text-green-800' :
-                        selectedNode.type === 'CATEGORY' ? 'bg-purple-100 text-purple-800' :
-                        'bg-red-100 text-red-800'
+                        selectedNode.type === 'PERSON' ? 'bg-blue-500/20 text-blue-300' :
+                        selectedNode.type === 'ORGANIZATION' ? 'bg-green-500/20 text-green-300' :
+                        selectedNode.type === 'CATEGORY' ? 'bg-purple-500/20 text-purple-300' :
+                        'bg-red-500/20 text-red-300'
                       }`}>
                         {selectedNode.type === 'PERSON' ? '人员' :
                         selectedNode.type === 'ORGANIZATION' ? '组织' :
@@ -519,15 +519,15 @@ const KnowledgeGraphVisualization: React.FC<KnowledgeGraphVisualizationProps> = 
 
                     {selectedNode.description && (
                       <div>
-                        <label className="text-sm font-medium text-gray-700">描述</label>
-                        <p className="text-gray-600 mt-1">{translateDescription(selectedNode.description)}</p>
+                        <label className="text-sm font-medium text-gray-400">描述</label>
+                        <p className="text-gray-300 mt-1">{translateDescription(selectedNode.description)}</p>
                       </div>
                     )}
 
                     <div>
-                      <label className="text-sm font-medium text-gray-700">状态</label>
+                      <label className="text-sm font-medium text-gray-400">状态</label>
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-1 ${
-                        selectedNode.isTemporary ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'
+                        selectedNode.isTemporary ? 'bg-orange-500/20 text-orange-300' : 'bg-green-500/20 text-green-300'
                       }`}>
                         {selectedNode.isTemporary ? '临时节点' : '核心节点'}
                       </span>
@@ -536,59 +536,59 @@ const KnowledgeGraphVisualization: React.FC<KnowledgeGraphVisualizationProps> = 
                 </div>
 
                 {/* 关联信息 */}
-                <div className="bg-blue-50 rounded-lg p-3">
+                <div className="bg-blue-500/10 rounded-lg p-3 border border-blue-500/30">
                   <div className="flex items-center space-x-2 mb-2">
-                    <LinkIcon className="w-5 h-5 text-blue-500" />
-                    <h4 className="font-semibold text-gray-900">关联信息</h4>
+                    <LinkIcon className="w-5 h-5 text-blue-400" />
+                    <h4 className="font-semibold text-white">关联信息</h4>
                   </div>
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">直接关联</span>
-                      <span className="font-medium text-blue-600">
+                      <span className="text-sm text-gray-400">直接关联</span>
+                      <span className="font-medium text-blue-400">
                         {edges.filter(edge =>
                           edge.source === selectedNode.id || edge.target === selectedNode.id
                         ).length}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">重要性评分</span>
-                      <span className="font-medium text-gray-900">{selectedNode.count || 0}</span>
+                      <span className="text-sm text-gray-400">重要性评分</span>
+                      <span className="font-medium text-gray-200">{selectedNode.count || 0}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* 文件信息 */}
                 {(nodeFiles[selectedNode.id] && nodeFiles[selectedNode.id].length > 0) && (
-                  <div className="bg-green-50 rounded-lg p-3">
+                  <div className="bg-green-500/10 rounded-lg p-3 border border-green-500/30">
                     <div className="flex items-center space-x-2 mb-2">
-                      <FileText className="w-5 h-5 text-green-500" />
-                      <h4 className="font-semibold text-gray-900">相关文件</h4>
-                      <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-0.5 rounded-full">
+                      <FileText className="w-5 h-5 text-green-400" />
+                      <h4 className="font-semibold text-white">相关文件</h4>
+                      <span className="bg-green-500/20 text-green-300 text-xs font-medium px-2 py-0.5 rounded-full">
                         {nodeFiles[selectedNode.id].length}
                       </span>
                       {loadingFiles && (
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-500"></div>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-400"></div>
                       )}
                     </div>
 
                     <div className="space-y-2">
                       {nodeFiles[selectedNode.id].map((file: any, index: number) => (
-                        <div key={index} className="flex items-center justify-between p-2 bg-white rounded border border-green-200 hover:border-green-300 transition-colors">
+                        <div key={index} className="flex items-center justify-between p-2 bg-[#21262d] rounded border border-gray-700/50 hover:border-green-500/50 transition-colors">
                           <div className="flex items-center space-x-2">
-                            <FileText className="w-4 h-4 text-gray-500" />
+                            <FileText className="w-4 h-4 text-gray-400" />
                             <div>
-                              <p className="text-sm font-medium text-gray-900">{file.name || file.id}</p>
+                              <p className="text-sm font-medium text-gray-200">{file.name || file.id}</p>
                               <p className="text-xs text-gray-500">{file.type || 'document'}</p>
                               {file.size && (
-                                <p className="text-xs text-gray-400">{(file.size / 1024).toFixed(1)} KB</p>
+                                <p className="text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
                               )}
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">
                             <button
                               onClick={() => downloadDocument(file.id, file.name || `document_${file.id}`)}
-                              className="flex items-center space-x-1 text-blue-600 hover:text-blue-700 transition-colors"
+                              className="flex items-center space-x-1 text-blue-400 hover:text-blue-300 transition-colors"
                             >
                               <Download className="w-4 h-4" />
                               <span className="text-xs">下载</span>
@@ -602,20 +602,20 @@ const KnowledgeGraphVisualization: React.FC<KnowledgeGraphVisualizationProps> = 
 
                 {/* 如果正在加载文件但还没有数据 */}
                 {loadingFiles && !nodeFiles[selectedNode.id] && (
-                  <div className="bg-gray-50 rounded-lg p-3">
+                  <div className="bg-[#21262d] rounded-lg p-3 border border-gray-700/50">
                     <div className="flex items-center space-x-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500"></div>
-                      <span className="text-sm text-gray-600">正在加载文件信息...</span>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
+                      <span className="text-sm text-gray-400">正在加载文件信息...</span>
                     </div>
                   </div>
                 )}
 
                 {/* 如果没有文件且不在加载中 */}
                 {!loadingFiles && selectedNode.id && (!nodeFiles[selectedNode.id] || nodeFiles[selectedNode.id].length === 0) && (
-                  <div className="bg-gray-50 rounded-lg p-3">
+                  <div className="bg-[#21262d] rounded-lg p-3 border border-gray-700/50">
                     <div className="flex items-center space-x-2">
-                      <FileText className="w-5 h-5 text-gray-400" />
-                      <span className="text-sm text-gray-600">暂无关联文件</span>
+                      <FileText className="w-5 h-5 text-gray-500" />
+                      <span className="text-sm text-gray-400">暂无关联文件</span>
                     </div>
                   </div>
                 )}

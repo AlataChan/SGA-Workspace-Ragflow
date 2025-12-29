@@ -238,6 +238,36 @@ async function POST(request: NextRequest) {
   }
 }
 
+/**
+ * 清理 RAGFlow baseUrl，移除错误添加的 API 路径
+ * 例如: http://example.com:9301/api/v1/agents -> http://example.com:9301
+ */
+function cleanRAGFlowBaseUrl(url: string): string {
+  if (!url) return url
+
+  // 移除末尾斜杠
+  let cleaned = url.replace(/\/+$/, '')
+
+  // 移除常见的错误后缀
+  const suffixesToRemove = [
+    '/api/v1/agents',
+    '/api/v1/chats',
+    '/api/v1/datasets',
+    '/api/v1',
+    '/v1'
+  ]
+
+  for (const suffix of suffixesToRemove) {
+    if (cleaned.toLowerCase().endsWith(suffix.toLowerCase())) {
+      cleaned = cleaned.slice(0, -suffix.length)
+      console.log(`[RAGFlow] URL 自动清理: 移除后缀 "${suffix}"`)
+      break
+    }
+  }
+
+  return cleaned
+}
+
 // RAGFlow连接测试函数
 async function testRAGFlowConnection(config: any): Promise<{ success: boolean, message: string }> {
   try {
@@ -250,86 +280,71 @@ async function testRAGFlowConnection(config: any): Promise<{ success: boolean, m
       }
     }
 
-    // 清理URL，确保格式正确
-    const cleanBaseUrl = baseUrl.replace(/\/$/, '')
-
-    // 根据 RAGFlow API 文档，测试聊天助手列表接口
-    const testUrl = `${cleanBaseUrl}/api/v1/chats`
+    // 清理URL，确保格式正确（自动移除错误的 API 路径后缀）
+    const cleanBaseUrl = cleanRAGFlowBaseUrl(baseUrl)
 
     console.log('测试 RAGFlow 连接:', {
-      testUrl,
+      baseUrl: cleanBaseUrl,
       agentId,
       apiKeyLength: apiKey?.length || 0
     })
 
-    const response = await fetch(testUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      signal: AbortSignal.timeout(30000) // 30秒超时
-    })
+    // RAGFlow 有两种类型：Chat Assistant 和 Agent
+    // 需要分别检查 /api/v1/chats 和 /api/v1/agents 端点
+    const endpoints = [
+      { url: `${cleanBaseUrl}/api/v1/agents`, type: 'Agent' },
+      { url: `${cleanBaseUrl}/api/v1/chats`, type: 'Chat Assistant' }
+    ]
 
-    console.log('RAGFlow API 响应:', {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok
-    })
+    for (const endpoint of endpoints) {
+      console.log(`检查 ${endpoint.type} 端点:`, endpoint.url)
 
-    if (response.ok) {
-      const data = await response.json()
-      console.log('RAGFlow API 响应数据:', data)
+      const response = await fetch(endpoint.url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(30000) // 30秒超时
+      })
 
-      // 检查响应格式
-      if (data.code === 0 || data.success === true) {
-        // 检查是否能找到指定的 Agent ID
-        if (data.data && Array.isArray(data.data)) {
-          const foundAgent = data.data.find((chat: any) => chat.id === agentId)
-          if (foundAgent) {
-            return {
-              success: true,
-              message: `RAGFlow 连接成功，找到 Agent "${foundAgent.name}"`
-            }
-          } else {
-            return {
-              success: false,
-              message: `RAGFlow 连接成功，但未找到 Agent ID "${agentId}"`
+      console.log(`${endpoint.type} API 响应:`, {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+
+        // 检查响应格式
+        if (data.code === 0 || data.success === true) {
+          // 检查是否能找到指定的 ID
+          if (data.data && Array.isArray(data.data)) {
+            const found = data.data.find((item: any) => item.id === agentId)
+            if (found) {
+              const name = found.name || found.title || agentId
+              return {
+                success: true,
+                message: `RAGFlow 连接成功，找到 ${endpoint.type} "${name}"`
+              }
             }
           }
-        } else {
-          return {
-            success: true,
-            message: 'RAGFlow 连接成功'
-          }
         }
-      } else {
-        return {
-          success: false,
-          message: `RAGFlow API 返回错误: ${data.message || '未知错误'}`
-        }
-      }
-    } else {
-      const errorText = await response.text()
-      console.error('RAGFlow API 错误响应:', errorText)
-
-      if (response.status === 401) {
+      } else if (response.status === 401) {
         return {
           success: false,
           message: 'RAGFlow API Key 无效或已过期'
         }
-      } else if (response.status === 404) {
-        return {
-          success: false,
-          message: 'RAGFlow API 端点不存在，请检查服务地址'
-        }
-      } else {
-        return {
-          success: false,
-          message: `RAGFlow 连接失败: ${response.status} ${response.statusText}`
-        }
       }
     }
+
+    // 两个端点都没找到
+    return {
+      success: false,
+      message: `RAGFlow 连接成功，但未找到 Agent ID "${agentId}"。请确认：1) ID 是否正确；2) Agent/Chat 是否已发布`
+    }
+
   } catch (error) {
     console.error('RAGFlow 连接测试异常:', error)
 

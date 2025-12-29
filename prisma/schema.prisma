@@ -42,10 +42,10 @@ model User {
   id               String                @id @default(cuid())
   companyId        String                @map("company_id")
   username         String                @map("username")
-  userId           String                @map("user_id")
-  phone            String
+  userId           String                @default("") @map("user_id")
+  phone            String                @default("")
   passwordHash     String                @map("password_hash")
-  chineseName      String                @map("chinese_name")
+  chineseName      String                @default("") @map("chinese_name")
   englishName      String?               @map("english_name")
   email            String?
   displayName      String?               @map("display_name")
@@ -70,6 +70,7 @@ model User {
   uploadedFiles                 UploadedFile[]
   agentPermissions              UserAgentPermission[]
   knowledgeGraphPermissions     UserKnowledgeGraphPermission[]
+  tempKnowledgeBase             UserTempKnowledgeBase?
   company                       Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   department                    Department?                   @relation(fields: [departmentId], references: [id])
 
@@ -216,4 +217,59 @@ enum AgentPlatform {
 enum MessageRole {
   USER
   ASSISTANT
+}
+
+// ============================================
+// 临时知识图谱相关模型
+// ============================================
+
+/// 用户临时知识库 - 存储用户在聊天过程中保存的知识片段
+model UserTempKnowledgeBase {
+  id              String    @id @default(cuid())
+  userId          String    @unique @map("user_id")
+  ragflowKbId     String    @map("ragflow_kb_id")      // RAGFlow dataset ID
+  ragflowDocId    String?   @map("ragflow_doc_id")     // RAGFlow 虚拟文档ID
+  ragflowUrl      String    @map("ragflow_url")        // RAGFlow 服务地址
+  apiKey          String    @map("api_key")            // RAGFlow API Key
+  sessionId       String?   @map("session_id")         // 关联的聊天会话ID
+  chunkCount      Int       @default(0) @map("chunk_count")
+  nodeCount       Int       @default(0) @map("node_count")   // 图谱节点数
+  edgeCount       Int       @default(0) @map("edge_count")   // 图谱边数
+  status          TempKbStatus @default(ACTIVE)        // 状态
+  isPersistent    Boolean   @default(false) @map("is_persistent")
+  lastActiveAt    DateTime  @default(now()) @map("last_active_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  expiresAt       DateTime? @map("expires_at")         // 过期时间
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  savedChunks     UserSavedChunk[]
+
+  @@map("user_temp_knowledge_bases")
+}
+
+/// 用户保存的知识片段记录
+model UserSavedChunk {
+  id              String    @id @default(cuid())
+  tempKbId        String    @map("temp_kb_id")
+  ragflowChunkId  String?   @map("ragflow_chunk_id")   // RAGFlow chunk ID
+  content         String    @db.Text                    // 内容
+  contentSummary  String?   @map("content_summary")     // 内容摘要
+  keywords        String[]                              // 关键词
+  sourceMessageId String?   @map("source_message_id")  // 来源消息ID
+  sourceType      String?   @map("source_type")        // 来源类型: assistant_reply, reference, user_input
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  tempKb          UserTempKnowledgeBase @relation(fields: [tempKbId], references: [id], onDelete: Cascade)
+
+  @@index([tempKbId])
+  @@map("user_saved_chunks")
+}
+
+/// 临时知识库状态枚举
+enum TempKbStatus {
+  ACTIVE          // 活跃中
+  BUILDING        // 图谱构建中
+  EXPIRED         // 已过期
+  PERSISTENT      // 已持久化
 }

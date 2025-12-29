@@ -41,12 +41,10 @@ export const GET = withAuth(async (request) => {
     console.log('API: 获取用户信息，JWT用户:', user)
 
     // 获取用户详细信息
+    // 注意：JWT 中的 userId 实际上存的是 user.id (CUID)，不是 user.userId (用户工号)
     const userProfile = await prisma.user.findUnique({
       where: {
-        unique_user_id: {
-          companyId: user.companyId,
-          userId: user.userId
-        }
+        id: user.userId  // JWT 中的 userId 实际是数据库的 id 字段
       },
       select: {
         id: true,

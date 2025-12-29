@@ -172,7 +172,7 @@ export default function UserProfileDialog({ open, onOpenChange }: UserProfileDia
         const data = await response.json()
         setUserProfile(data.data)
         setMessage({ type: 'success', text: '个人信息更新成功' })
-        
+
         // 清空密码字段
         setFormData(prev => ({
           ...prev,
@@ -185,9 +185,9 @@ export default function UserProfileDialog({ open, onOpenChange }: UserProfileDia
         setTimeout(() => setMessage(null), 3000)
       } else {
         const errorData = await response.json()
-        setMessage({ 
-          type: 'error', 
-          text: errorData.error?.message || '更新失败' 
+        setMessage({
+          type: 'error',
+          text: errorData.error?.message || '更新失败'
         })
       }
     } catch (error) {
@@ -230,224 +230,223 @@ export default function UserProfileDialog({ open, onOpenChange }: UserProfileDia
           </div>
         ) : userProfile ? (
           <div className="space-y-6 mt-6">
-              {/* 头像和基本信息 */}
-              <div className="flex flex-col items-center space-y-4 p-4 border border-[#2d2d2d] rounded-lg">
-                <div className="relative">
-                  <Avatar className="w-20 h-20">
-                    <AvatarImage src={formData.avatarUrl} />
-                    <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xl">
-                      {formData.chineseName ? formData.chineseName[0] : <User className="w-8 h-8" />}
-                    </AvatarFallback>
-                  </Avatar>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full p-0 bg-[#2d2d2d] border-[#3c4043] hover:bg-[#3c4043]"
-                  >
-                    <Camera className="w-4 h-4" />
-                  </Button>
-                </div>
-                
-                <div className="text-center">
-                  <h3 className="text-lg font-semibold">{userProfile.chineseName}</h3>
-                  <p className="text-gray-400">@{userProfile.username}</p>
-                  <div className="flex items-center justify-center gap-2 mt-2">
-                    <span className="px-2 py-1 bg-[#6a5acd]/20 text-[#6a5acd] text-xs rounded-full border border-[#6a5acd]/30">
-                      {userProfile.role === 'ADMIN' ? '管理员' : '用户'}
+            {/* 头像和基本信息 */}
+            <div className="flex flex-col items-center space-y-4 p-4 border border-[#2d2d2d] rounded-lg">
+              <div className="relative">
+                <Avatar className="w-20 h-20">
+                  <AvatarImage src={formData.avatarUrl} />
+                  <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xl">
+                    {formData.chineseName ? formData.chineseName[0] : <User className="w-8 h-8" />}
+                  </AvatarFallback>
+                </Avatar>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full p-0 bg-[#2d2d2d] border-[#3c4043] hover:bg-[#3c4043]"
+                >
+                  <Camera className="w-4 h-4" />
+                </Button>
+              </div>
+
+              <div className="text-center">
+                <h3 className="text-lg font-semibold">{userProfile.chineseName}</h3>
+                <p className="text-gray-400">@{userProfile.username}</p>
+                <div className="flex items-center justify-center gap-2 mt-2">
+                  <span className="px-2 py-1 bg-[#6a5acd]/20 text-[#6a5acd] text-xs rounded-full border border-[#6a5acd]/30">
+                    {userProfile.role === 'ADMIN' ? '管理员' : '用户'}
+                  </span>
+                  {userProfile.department && (
+                    <span className="px-2 py-1 bg-gray-500/20 text-gray-300 text-xs rounded-full border border-gray-500/30">
+                      {userProfile.department.name}
                     </span>
-                    {userProfile.department && (
-                      <span className="px-2 py-1 bg-gray-500/20 text-gray-300 text-xs rounded-full border border-gray-500/30">
-                        {userProfile.department.name}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* 头像URL */}
-              <div className="space-y-2">
-                <Label htmlFor="avatarUrl" className="text-white">头像链接</Label>
-                <Input
-                  id="avatarUrl"
-                  placeholder="请输入头像图片链接"
-                  value={formData.avatarUrl}
-                  onChange={(e) => setFormData(prev => ({ ...prev, avatarUrl: e.target.value }))}
-                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
-                />
-              </div>
-
-              {/* 基本信息表单 */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="chineseName" className="text-white">中文姓名 *</Label>
-                  <Input
-                    id="chineseName"
-                    placeholder="请输入中文姓名"
-                    value={formData.chineseName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, chineseName: e.target.value }))}
-                    className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="englishName" className="text-white">英文姓名</Label>
-                  <Input
-                    id="englishName"
-                    placeholder="请输入英文姓名"
-                    value={formData.englishName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, englishName: e.target.value }))}
-                    className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-white">邮箱</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="请输入邮箱"
-                    value={formData.email}
-                    onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                    className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone" className="text-white">电话</Label>
-                  <Input
-                    id="phone"
-                    placeholder="请输入电话号码"
-                    value={formData.phone}
-                    onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                    className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="position" className="text-white">职位</Label>
-                <Input
-                  id="position"
-                  placeholder="请输入职位"
-                  value={formData.position}
-                  onChange={(e) => setFormData(prev => ({ ...prev, position: e.target.value }))}
-                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
-                />
-              </div>
-
-              {/* 只读信息 */}
-              <div className="border-t border-[#2d2d2d] pt-4"></div>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="space-y-1">
-                  <Label className="text-gray-400">用户名</Label>
-                  <p className="text-white">{userProfile.username}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-gray-400">用户ID</Label>
-                  <p className="text-white">{userProfile.userId}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-gray-400">所属公司</Label>
-                  <p className="text-white">{userProfile.company?.name || '未设置'}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-gray-400">创建时间</Label>
-                  <p className="text-white">{new Date(userProfile.createdAt).toLocaleDateString()}</p>
-                </div>
-              </div>
-
-              {/* 修改密码部分 */}
-              <div className="border-t border-[#2d2d2d] pt-6 space-y-4">
-                <h3 className="text-lg font-semibold flex items-center">
-                  <Lock className="w-5 h-5 mr-2" />
-                  修改密码（可选）
-                </h3>
-
-                <div className="space-y-2">
-                  <Label htmlFor="currentPassword" className="text-white">当前密码</Label>
-                  <div className="relative">
-                    <Input
-                      id="currentPassword"
-                      type={showCurrentPassword ? "text" : "password"}
-                      placeholder="请输入当前密码"
-                      value={formData.currentPassword}
-                      onChange={(e) => setFormData(prev => ({ ...prev, currentPassword: e.target.value }))}
-                      className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500 pr-10"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                    >
-                      {showCurrentPassword ? (
-                        <EyeOff className="h-4 w-4 text-gray-400" />
-                      ) : (
-                        <Eye className="h-4 w-4 text-gray-400" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="newPassword" className="text-white">新密码</Label>
-                  <div className="relative">
-                    <Input
-                      id="newPassword"
-                      type={showNewPassword ? "text" : "password"}
-                      placeholder="请输入新密码（至少6位）"
-                      value={formData.newPassword}
-                      onChange={(e) => setFormData(prev => ({ ...prev, newPassword: e.target.value }))}
-                      className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500 pr-10"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                      onClick={() => setShowNewPassword(!showNewPassword)}
-                    >
-                      {showNewPassword ? (
-                        <EyeOff className="h-4 w-4 text-gray-400" />
-                      ) : (
-                        <Eye className="h-4 w-4 text-gray-400" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword" className="text-white">确认新密码</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    placeholder="请再次输入新密码"
-                    value={formData.confirmPassword}
-                    onChange={(e) => setFormData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                    className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
-                  />
-                </div>
-
-                <div className="text-sm text-gray-400 bg-[#2d2d2d] p-3 rounded-lg">
-                  <p className="font-medium mb-1">密码要求：</p>
-                  <ul className="list-disc list-inside space-y-1">
-                    <li>至少6个字符</li>
-                    <li>建议包含字母、数字和特殊字符</li>
-                    <li>不要使用过于简单的密码</li>
-                  </ul>
+                  )}
                 </div>
               </div>
             </div>
+
+            {/* 头像URL */}
+            <div className="space-y-2">
+              <Label htmlFor="avatarUrl" className="text-white">头像链接</Label>
+              <Input
+                id="avatarUrl"
+                placeholder="请输入头像图片链接"
+                value={formData.avatarUrl}
+                onChange={(e) => setFormData(prev => ({ ...prev, avatarUrl: e.target.value }))}
+                className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+              />
+            </div>
+
+            {/* 基本信息表单 */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="chineseName" className="text-white">中文姓名 *</Label>
+                <Input
+                  id="chineseName"
+                  placeholder="请输入中文姓名"
+                  value={formData.chineseName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, chineseName: e.target.value }))}
+                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="englishName" className="text-white">英文姓名</Label>
+                <Input
+                  id="englishName"
+                  placeholder="请输入英文姓名"
+                  value={formData.englishName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, englishName: e.target.value }))}
+                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-white">邮箱</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="请输入邮箱"
+                  value={formData.email}
+                  onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone" className="text-white">电话</Label>
+                <Input
+                  id="phone"
+                  placeholder="请输入电话号码"
+                  value={formData.phone}
+                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="position" className="text-white">职位</Label>
+              <Input
+                id="position"
+                placeholder="请输入职位"
+                value={formData.position}
+                onChange={(e) => setFormData(prev => ({ ...prev, position: e.target.value }))}
+                className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+              />
+            </div>
+
+            {/* 只读信息 */}
+            <div className="border-t border-[#2d2d2d] pt-4"></div>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="space-y-1">
+                <Label className="text-gray-400">用户名 (登录账号)</Label>
+                <p className="text-white">{userProfile.username}</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-gray-400">用户ID (系统标识)</Label>
+                <p className="text-white">{userProfile.userId}</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-gray-400">所属公司</Label>
+                <p className="text-white">{userProfile.company?.name || '未设置'}</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-gray-400">创建时间</Label>
+                <p className="text-white">{new Date(userProfile.createdAt).toLocaleDateString()}</p>
+              </div>
+            </div>
+
+            {/* 修改密码部分 */}
+            <div className="border-t border-[#2d2d2d] pt-6 space-y-4">
+              <h3 className="text-lg font-semibold flex items-center">
+                <Lock className="w-5 h-5 mr-2" />
+                修改密码（可选）
+              </h3>
+
+              <div className="space-y-2">
+                <Label htmlFor="currentPassword" className="text-white">当前密码</Label>
+                <div className="relative">
+                  <Input
+                    id="currentPassword"
+                    type={showCurrentPassword ? "text" : "password"}
+                    placeholder="请输入当前密码"
+                    value={formData.currentPassword}
+                    onChange={(e) => setFormData(prev => ({ ...prev, currentPassword: e.target.value }))}
+                    className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500 pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  >
+                    {showCurrentPassword ? (
+                      <EyeOff className="h-4 w-4 text-gray-400" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-gray-400" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="newPassword" className="text-white">新密码</Label>
+                <div className="relative">
+                  <Input
+                    id="newPassword"
+                    type={showNewPassword ? "text" : "password"}
+                    placeholder="请输入新密码（至少6位）"
+                    value={formData.newPassword}
+                    onChange={(e) => setFormData(prev => ({ ...prev, newPassword: e.target.value }))}
+                    className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500 pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                  >
+                    {showNewPassword ? (
+                      <EyeOff className="h-4 w-4 text-gray-400" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-gray-400" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword" className="text-white">确认新密码</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  placeholder="请再次输入新密码"
+                  value={formData.confirmPassword}
+                  onChange={(e) => setFormData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+                />
+              </div>
+
+              <div className="text-sm text-gray-400 bg-[#2d2d2d] p-3 rounded-lg">
+                <p className="font-medium mb-1">密码要求：</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>至少6个字符</li>
+                  <li>建议包含字母、数字和特殊字符</li>
+                  <li>不要使用过于简单的密码</li>
+                </ul>
+              </div>
+            </div>
+          </div>
         ) : null}
 
         {/* 消息提示 */}
         {message && (
-          <div className={`flex items-center p-3 rounded-lg ${
-            message.type === 'success' 
-              ? 'bg-green-500/20 border border-green-500/30 text-green-400' 
+          <div className={`flex items-center p-3 rounded-lg ${message.type === 'success'
+              ? 'bg-green-500/20 border border-green-500/30 text-green-400'
               : 'bg-red-500/20 border border-red-500/30 text-red-400'
-          }`}>
+            }`}>
             {message.type === 'success' ? (
               <CheckCircle className="w-4 h-4 mr-2" />
             ) : (

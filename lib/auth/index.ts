@@ -1,10 +1,13 @@
 export * from './simple-auth'
 // export * from './session-manager' // 暂时注释掉，避免Redis依赖问题
 // export * from './permissions' // 暂时注释掉，避免依赖问题
+export * from './user'
+export * from './admin'
+export * from './jwt'
+export * from './middleware'
 
 // 导出常用的认证函数
 import { SimpleAuth } from './simple-auth'
-import { SessionManager } from './session-manager'
 
 // 获取用户信息的便捷函数
 export async function getUserInfo() {

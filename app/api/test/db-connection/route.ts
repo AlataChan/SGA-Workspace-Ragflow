@@ -1,6 +1,8 @@
  import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     console.log('🔍 开始测试数据库连接...')

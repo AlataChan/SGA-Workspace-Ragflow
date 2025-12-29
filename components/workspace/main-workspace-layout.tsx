@@ -366,7 +366,9 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
         baseUrl: agent.platformConfig.baseUrl,
         apiKey: agent.platformConfig.apiKey,
         agentId: agent.platformConfig.agentId,
-        userId: user.user_id || user.id || 'user-123'
+        localAgentId: agent.id,
+        userId: user.user_id || user.id || 'user-123',
+        datasetId: agent.platformConfig.datasetId // 知识库ID，用于PDF预览
       }
     } else {
       console.error('不支持的平台类型:', agent.platform)
@@ -1033,21 +1035,21 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
 
       {/* 知识图谱查看器 */}
       {selectedKnowledgeGraph && graphData && (
-        <div className="fixed inset-0 z-50 bg-white dark:bg-gray-900">
+        <div className="fixed inset-0 z-50 bg-[#0d1117]">
           <div className="h-full flex flex-col">
             {/* 顶部导航栏 */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between p-4 border-b border-gray-700/50 bg-[#161b22]">
               <div className="flex items-center space-x-4">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={handleBackToMain}
-                  className="flex items-center space-x-2"
+                  className="flex items-center space-x-2 text-gray-300 hover:text-white hover:bg-gray-700/50"
                 >
                   <ChevronLeft className="w-4 h-4" />
                   <span>返回</span>
                 </Button>
-                <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                <h1 className="text-lg font-semibold text-white">
                   {selectedKnowledgeGraph.name}
                 </h1>
               </div>

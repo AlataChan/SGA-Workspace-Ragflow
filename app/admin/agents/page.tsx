@@ -139,6 +139,7 @@ const defaultPlatformConfigs = {
     baseUrl: 'https://api.ragflow.io/v1',
     apiKey: '',
     agentId: '',
+    datasetId: '', // 知识库ID，用于PDF预览功能
   },
   HIAGENT: { baseUrl: 'https://api.hiagent.com/v1', apiKey: '', agentId: '' },
   OPENAI: { apiKey: '', model: 'gpt-3.5-turbo', baseUrl: 'https://api.openai.com/v1' },
@@ -1225,6 +1226,21 @@ export default function AgentsPage() {
                         className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                       />
                     </div>
+                    <div className="space-y-2">
+                      <Label className="text-white">知识库 ID (可选)</Label>
+                      <Input
+                        placeholder="用于 PDF 预览功能，可从知识库管理页面获取"
+                        value={formData.platformConfig.datasetId || ''}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          platformConfig: { ...prev.platformConfig, datasetId: e.target.value }
+                        }))}
+                        className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+                      />
+                      <p className="text-xs text-gray-400">
+                        配置后可在聊天时直接预览引用的 PDF 原文
+                      </p>
+                    </div>
                     <ConnectionTest
                       platform={formData.platform}
                       config={formData.platformConfig}
@@ -1573,6 +1589,21 @@ export default function AgentsPage() {
                           }))}
                           className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                         />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-white">知识库 ID (可选)</Label>
+                        <Input
+                          placeholder="用于 PDF 预览功能，可从知识库管理页面获取"
+                          value={formData.platformConfig.datasetId || ''}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            platformConfig: { ...prev.platformConfig, datasetId: e.target.value }
+                          }))}
+                          className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+                        />
+                        <p className="text-xs text-gray-400">
+                          配置后可在聊天时直接预览引用的 PDF 原文
+                        </p>
                       </div>
                       <ConnectionTest
                         platform={formData.platform}
