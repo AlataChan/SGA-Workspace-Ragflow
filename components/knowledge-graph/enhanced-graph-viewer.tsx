@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import D3ForceGraphComponent from './d3-force-graph-component'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { getEntityColor } from '@/lib/utils/entity-colors'
 import {
   Search,
   Filter,
@@ -140,7 +141,7 @@ const convertToD3Data = (nodes: any[], edges: any[]) => {
     type: node.type || 'Entity',
     isTemporary: node.isTemporary || false,
     value: Math.max(15, Math.min(40, (node.pagerank || 0.1) * 200)), // 更大的节点，基于pagerank
-    color: getNodeColor(node.type || 'Entity', node.isTemporary || false),
+    color: getEntityColor(node.type || 'Entity', node.isTemporary || false),
     description: node.description || '',
     files: node.files || []
   }))
@@ -155,22 +156,6 @@ const convertToD3Data = (nodes: any[], edges: any[]) => {
   return { nodes: d3Nodes, links: d3Links }
 }
 
-// 获取节点颜色
-const getNodeColor = (type: string, isTemporary?: boolean) => {
-  if (isTemporary) return '#facc15' // 亮黄色
-  
-  switch (type.toLowerCase()) {
-    case 'person': return '#60a5fa' // 蓝色
-    case 'organization': return '#34d399' // 绿色
-    case 'concept': return '#a78bfa' // 紫色
-    case 'document': return '#6366f1' // 靛蓝色
-    case 'department': return '#059669' // 深绿色
-    case 'project': return '#0891b2' // 深青色
-    case 'technology': return '#7c3aed' // 深紫色
-    case 'event': return '#dc2626' // 深红色
-    default: return '#9ca3af' // 灰色
-  }
-}
 
 export default function EnhancedGraphViewer({ knowledgeGraphId, onBack }: EnhancedGraphViewerProps) {
   const [graphData, setGraphData] = useState<{ nodes: D3Node[], links: D3Link[] } | null>(null)

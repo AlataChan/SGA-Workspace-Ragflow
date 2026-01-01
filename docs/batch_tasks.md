@@ -1174,7 +1174,1465 @@ Phase 4: 集成测试与优化 (4 天)
 
 ---
 
-## 📝 变更记录
+## � 多后端适配器层设计（v1.1 新增）
+
+> **背景**: 批量任务需要支持 RAGFlow、Dify、Default 等多个后端，原设计直接耦合 RAGFlow API，需要引入适配器层实现解耦。
+
+### 📊 后端能力对比
+
+| 能力 | RAGFlow | Dify | Default |
+|------|---------|------|---------|
+| **文档上传** | ✅ `/v1/document/upload` | ✅ `/v1/datasets/{id}/document/create_by_file` | ✅ 本地存储 |
+| **触发解析** | ✅ `/v1/document/run` | ⚠️ 上传时自动解析（`indexing_technique`） | ✅ 本地处理 |
+| **删除文档** | ✅ `/v1/document/rm` | ✅ `/v1/datasets/{id}/documents/{doc_id}` | ✅ 本地删除 |
+| **状态查询** | ✅ `/v1/document/list` | ✅ `/v1/datasets/{id}/documents` | ✅ 本地状态 |
+| **批量操作** | ⚠️ 单文档循环 | ⚠️ 单文档循环 | ✅ 批量处理 |
+| **解析进度** | ✅ `progress` 字段 | ⚠️ 仅有 `indexing_status` | ✅ 自定义 |
+
+### Dify Knowledge API 关键信息
+
+根据 [Dify 官方文档](https://docs.dify.ai/en/guides/knowledge-base/knowledge-and-documents-maintenance/maintain-dataset-via-api)，Dify 提供完整的 Knowledge Base API：
+
+#### 1. 创建文档（文本方式）
+```bash
+POST /v1/datasets/{dataset_id}/document/create_by_text
+Authorization: Bearer {api_key}
+
+{
+  "name": "文档名称",
+  "text": "文档内容",
+  "indexing_technique": "high_quality",  # 或 "economy"
+  "process_rule": {
+    "mode": "automatic"  # 或 "custom"
+  }
+}
+```
+
+#### 2. 创建文档（文件上传）
+```bash
+POST /v1/datasets/{dataset_id}/document/create_by_file
+Authorization: Bearer {api_key}
+Content-Type: multipart/form-data
+
+file: <binary>
+data: {
+  "indexing_technique": "high_quality",
+  "process_rule": {"mode": "automatic"}
+}
+```
+
+#### 3. 查询文档列表
+```bash
+GET /v1/datasets/{dataset_id}/documents?page=1&limit=20
+Authorization: Bearer {api_key}
+
+# 响应
+{
+  "data": [{
+    "id": "doc_id",
+    "position": 1,
+    "data_source_type": "upload_file",
+    "indexing_status": "completed",  # waiting | parsing | indexing | completed | error
+    "enabled": true,
+    "tokens": 1234,
+    "word_count": 567
+  }]
+}
+```
+
+#### 4. 删除文档
+```bash
+DELETE /v1/datasets/{dataset_id}/documents/{document_id}
+Authorization: Bearer {api_key}
+```
+
+### 🏗️ 适配器架构设计
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        前端层                                    │
+├──────────────────┬──────────────────┬───────────────────────────┤
+│   TaskQueue      │   TaskStore      │   DocumentStatusPoller    │
+└────────┬─────────┴────────┬─────────┴─────────────┬─────────────┘
+         │                  │                       │
+         └──────────────────┼───────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              KnowledgeBaseAdapterFactory                        │
+│    create(platform: 'ragflow' | 'dify' | 'default')            │
+└────────┬──────────────────┬──────────────────┬──────────────────┘
+         │                  │                  │
+         ▼                  ▼                  ▼
+┌────────────────┐ ┌────────────────┐ ┌────────────────┐
+│ RAGFlowAdapter │ │  DifyAdapter   │ │ DefaultAdapter │
+├────────────────┤ ├────────────────┤ ├────────────────┤
+│ uploadDocument │ │ uploadDocument │ │ uploadDocument │
+│ parseDocument  │ │ parseDocument  │ │ parseDocument  │
+│ deleteDocument │ │ deleteDocument │ │ deleteDocument │
+│ getDocStatuses │ │ getDocStatuses │ │ getDocStatuses │
+│ mapStatus      │ │ mapStatus      │ │ mapStatus      │
+└────────┬───────┘ └────────┬───────┘ └────────┬───────┘
+         │                  │                  │
+         ▼                  ▼                  ▼
+┌────────────────┐ ┌────────────────┐ ┌────────────────┐
+│  RAGFlow API   │ │   Dify API     │ │  Local Storage │
+└────────────────┘ └────────────────┘ └────────────────┘
+```
+
+### 📐 适配器接口定义
+
+```typescript
+// lib/adapters/knowledge-base-adapter.ts
+
+/**
+ * 知识库后端平台类型
+ */
+export type KBPlatform = 'ragflow' | 'dify' | 'default';
+
+/**
+ * 统一文档状态（与平台无关）
+ */
+export enum UnifiedDocStatus {
+  PENDING = 'pending',      // 等待处理
+  PROCESSING = 'processing', // 处理中
+  COMPLETED = 'completed',   // 完成
+  FAILED = 'failed'          // 失败
+}
+
+/**
+ * 上传文档参数
+ */
+export interface UploadDocumentParams {
+  kbId: string;              // 知识库 ID
+  file: File;                // 文件对象
+  autoRun?: boolean;         // 是否自动解析（RAGFlow）
+  indexingTechnique?: 'high_quality' | 'economy'; // 索引质量（Dify）
+  processRule?: {            // 处理规则（Dify）
+    mode: 'automatic' | 'custom';
+    rules?: any;
+  };
+}
+
+/**
+ * 上传结果
+ */
+export interface UploadDocumentResult {
+  success: boolean;
+  docId?: string;
+  error?: string;
+  rawResponse?: any;
+}
+
+/**
+ * 解析结果
+ */
+export interface ParseDocumentResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * 删除结果
+ */
+export interface DeleteDocumentResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * 文档状态信息（统一格式）
+ */
+export interface UnifiedDocumentStatus {
+  docId: string;
+  name: string;
+  status: UnifiedDocStatus;
+  progress: number;         // 0-100，Dify 无精确进度时估算
+  chunkNum?: number;
+  tokenNum?: number;
+  size?: number;
+  createTime?: string;
+  errorMsg?: string;
+}
+
+/**
+ * 知识库适配器接口
+ */
+export interface KnowledgeBaseAdapter {
+  /** 平台标识 */
+  readonly platform: KBPlatform;
+
+  /**
+   * 上传文档
+   */
+  uploadDocument(params: UploadDocumentParams): Promise<UploadDocumentResult>;
+
+  /**
+   * 触发文档解析（部分平台上传时自动解析）
+   */
+  parseDocument(kbId: string, docId: string): Promise<ParseDocumentResult>;
+
+  /**
+   * 删除文档
+   */
+  deleteDocument(kbId: string, docId: string): Promise<DeleteDocumentResult>;
+
+  /**
+   * 批量获取文档状态
+   */
+  getDocumentStatuses(kbId: string, docIds: string[]): Promise<UnifiedDocumentStatus[]>;
+
+  /**
+   * 将平台原始状态映射为统一状态
+   */
+  mapPlatformStatus(rawStatus: any): UnifiedDocStatus;
+
+  /**
+   * 检查平台是否支持手动触发解析
+   * （Dify 上传时自动解析，不需要手动触发）
+   */
+  supportsManualParse(): boolean;
+}
+```
+
+### 🔧 RAGFlow 适配器实现
+
+```typescript
+// lib/adapters/ragflow-kb-adapter.ts
+
+export class RAGFlowKBAdapter implements KnowledgeBaseAdapter {
+  readonly platform: KBPlatform = 'ragflow';
+
+  constructor(
+    private baseUrl: string,
+    private apiKey: string
+  ) {}
+
+  async uploadDocument(params: UploadDocumentParams): Promise<UploadDocumentResult> {
+    const url = `${this.baseUrl}/v1/document/upload`;
+
+    const formData = new FormData();
+    formData.append('file', params.file);
+    formData.append('kb_id', params.kbId);
+    formData.append('run', params.autoRun ? '1' : '0');
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': this.apiKey },
+      body: formData
+    });
+
+    const result = await response.json();
+
+    if (result.retcode === 0 && result.data) {
+      return {
+        success: true,
+        docId: result.data.id || result.data[0]?.id,
+        rawResponse: result
+      };
+    }
+
+    return {
+      success: false,
+      error: result.retmsg || '上传失败'
+    };
+  }
+
+  async parseDocument(kbId: string, docId: string): Promise<ParseDocumentResult> {
+    const url = `${this.baseUrl}/v1/document/run`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': this.apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ doc_ids: [docId] })
+    });
+
+    const result = await response.json();
+    return {
+      success: result.retcode === 0,
+      error: result.retcode !== 0 ? result.retmsg : undefined
+    };
+  }
+
+  async deleteDocument(kbId: string, docId: string): Promise<DeleteDocumentResult> {
+    const url = `${this.baseUrl}/v1/document/rm`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': this.apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ doc_ids: [docId] })
+    });
+
+    const result = await response.json();
+    return {
+      success: result.retcode === 0,
+      error: result.retcode !== 0 ? result.retmsg : undefined
+    };
+  }
+
+  async getDocumentStatuses(kbId: string, docIds: string[]): Promise<UnifiedDocumentStatus[]> {
+    const url = `${this.baseUrl}/v1/document/list?kb_id=${kbId}`;
+
+    const response = await fetch(url, {
+      headers: { 'Authorization': this.apiKey }
+    });
+
+    const result = await response.json();
+    const allDocs = result.data?.docs || [];
+
+    return allDocs
+      .filter((doc: any) => docIds.includes(doc.id))
+      .map((doc: any) => ({
+        docId: doc.id,
+        name: doc.name,
+        status: this.mapPlatformStatus(doc.status),
+        progress: doc.progress || 0,
+        chunkNum: doc.chunk_num,
+        tokenNum: doc.token_num,
+        size: doc.size,
+        createTime: doc.create_time,
+        errorMsg: doc.error_msg
+      }));
+  }
+
+  mapPlatformStatus(rawStatus: any): UnifiedDocStatus {
+    // RAGFlow: '0' = 解析中, '1' = 完成, '2' = 失败
+    switch (rawStatus) {
+      case '1': return UnifiedDocStatus.COMPLETED;
+      case '2': return UnifiedDocStatus.FAILED;
+      default: return UnifiedDocStatus.PROCESSING;
+    }
+  }
+
+  supportsManualParse(): boolean {
+    return true; // RAGFlow 支持手动触发解析
+  }
+}
+```
+
+### 🔧 Dify 适配器实现
+
+```typescript
+// lib/adapters/dify-kb-adapter.ts
+
+export class DifyKBAdapter implements KnowledgeBaseAdapter {
+  readonly platform: KBPlatform = 'dify';
+
+  constructor(
+    private baseUrl: string,
+    private apiKey: string
+  ) {}
+
+  async uploadDocument(params: UploadDocumentParams): Promise<UploadDocumentResult> {
+    const url = `${this.baseUrl}/v1/datasets/${params.kbId}/document/create_by_file`;
+
+    const formData = new FormData();
+    formData.append('file', params.file);
+    formData.append('data', JSON.stringify({
+      indexing_technique: params.indexingTechnique || 'high_quality',
+      process_rule: params.processRule || { mode: 'automatic' }
+    }));
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${this.apiKey}` },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      return {
+        success: false,
+        error: error.message || `上传失败: ${response.status}`
+      };
+    }
+
+    const result = await response.json();
+    return {
+      success: true,
+      docId: result.document?.id,
+      rawResponse: result
+    };
+  }
+
+  async parseDocument(kbId: string, docId: string): Promise<ParseDocumentResult> {
+    // Dify 上传时自动解析，无需手动触发
+    // 返回成功，但实际不执行任何操作
+    console.log('[DifyAdapter] Dify 自动解析，无需手动触发');
+    return { success: true };
+  }
+
+  async deleteDocument(kbId: string, docId: string): Promise<DeleteDocumentResult> {
+    const url = `${this.baseUrl}/v1/datasets/${kbId}/documents/${docId}`;
+
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${this.apiKey}` }
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      return {
+        success: false,
+        error: error.message || `删除失败: ${response.status}`
+      };
+    }
+
+    return { success: true };
+  }
+
+  async getDocumentStatuses(kbId: string, docIds: string[]): Promise<UnifiedDocumentStatus[]> {
+    const url = `${this.baseUrl}/v1/datasets/${kbId}/documents?page=1&limit=100`;
+
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${this.apiKey}` }
+    });
+
+    if (!response.ok) {
+      throw new Error(`获取文档状态失败: ${response.status}`);
+    }
+
+    const result = await response.json();
+    const allDocs = result.data || [];
+
+    return allDocs
+      .filter((doc: any) => docIds.includes(doc.id))
+      .map((doc: any) => ({
+        docId: doc.id,
+        name: doc.name,
+        status: this.mapPlatformStatus(doc.indexing_status),
+        // Dify 没有精确进度，根据状态估算
+        progress: this.estimateProgress(doc.indexing_status),
+        tokenNum: doc.tokens,
+        createTime: doc.created_at,
+        errorMsg: doc.error
+      }));
+  }
+
+  mapPlatformStatus(rawStatus: any): UnifiedDocStatus {
+    // Dify: waiting | parsing | indexing | completed | error
+    switch (rawStatus) {
+      case 'completed': return UnifiedDocStatus.COMPLETED;
+      case 'error': return UnifiedDocStatus.FAILED;
+      case 'waiting': return UnifiedDocStatus.PENDING;
+      case 'parsing':
+      case 'indexing':
+      default:
+        return UnifiedDocStatus.PROCESSING;
+    }
+  }
+
+  /**
+   * Dify 没有精确进度，根据状态估算
+   */
+  private estimateProgress(status: string): number {
+    switch (status) {
+      case 'waiting': return 0;
+      case 'parsing': return 30;
+      case 'indexing': return 70;
+      case 'completed': return 100;
+      case 'error': return 0;
+      default: return 50;
+    }
+  }
+
+  supportsManualParse(): boolean {
+    return false; // Dify 上传时自动解析
+  }
+}
+```
+
+### 🏭 适配器工厂
+
+```typescript
+// lib/adapters/kb-adapter-factory.ts
+
+import { KnowledgeBaseAdapter, KBPlatform } from './knowledge-base-adapter';
+import { RAGFlowKBAdapter } from './ragflow-kb-adapter';
+import { DifyKBAdapter } from './dify-kb-adapter';
+import { DefaultKBAdapter } from './default-kb-adapter';
+
+export interface AdapterConfig {
+  platform: KBPlatform;
+  baseUrl: string;
+  apiKey: string;
+}
+
+export class KBAdapterFactory {
+  private static adapters = new Map<string, KnowledgeBaseAdapter>();
+
+  /**
+   * 创建或获取适配器实例
+   */
+  static getAdapter(config: AdapterConfig): KnowledgeBaseAdapter {
+    const key = `${config.platform}:${config.baseUrl}`;
+
+    if (!this.adapters.has(key)) {
+      const adapter = this.createAdapter(config);
+      this.adapters.set(key, adapter);
+    }
+
+    return this.adapters.get(key)!;
+  }
+
+  private static createAdapter(config: AdapterConfig): KnowledgeBaseAdapter {
+    switch (config.platform) {
+      case 'ragflow':
+        return new RAGFlowKBAdapter(config.baseUrl, config.apiKey);
+      case 'dify':
+        return new DifyKBAdapter(config.baseUrl, config.apiKey);
+      case 'default':
+        return new DefaultKBAdapter();
+      default:
+        throw new Error(`不支持的平台: ${config.platform}`);
+    }
+  }
+
+  /**
+   * 清除缓存的适配器
+   */
+  static clearCache() {
+    this.adapters.clear();
+  }
+}
+```
+
+### �📝 TaskQueue 集成适配器
+
+```typescript
+// lib/task-queue.ts (修改后)
+
+import { KBAdapterFactory, AdapterConfig } from './adapters/kb-adapter-factory';
+import { KnowledgeBaseAdapter, UnifiedDocStatus } from './adapters/knowledge-base-adapter';
+
+export class TaskQueue {
+  private adapter: KnowledgeBaseAdapter;
+
+  constructor(adapterConfig: AdapterConfig) {
+    this.adapter = KBAdapterFactory.getAdapter(adapterConfig);
+  }
+
+  async executeUploadTask(task: Task): Promise<void> {
+    const file = this.fileMap.get(task.id);
+    if (!file) throw new Error('File object not found');
+
+    const result = await this.adapter.uploadDocument({
+      kbId: task.input.kbId,
+      file,
+      autoRun: task.input.autoRun,
+      indexingTechnique: task.input.indexingTechnique
+    });
+
+    if (!result.success) {
+      throw new Error(result.error);
+    }
+
+    // 更新任务输出
+    this.updateTask(task.id, {
+      output: { docId: result.docId }
+    });
+
+    // 如果平台支持手动解析且用户选择了自动解析
+    if (task.input.autoRun && this.adapter.supportsManualParse()) {
+      // RAGFlow 已在上传时通过 run 参数触发
+      // 此处可添加额外的解析逻辑
+    }
+  }
+
+  async executeParseTask(task: Task): Promise<void> {
+    if (!this.adapter.supportsManualParse()) {
+      // Dify 等平台自动解析，直接标记成功
+      this.updateTask(task.id, { status: 'succeeded' });
+      return;
+    }
+
+    const result = await this.adapter.parseDocument(
+      task.input.kbId,
+      task.input.docId
+    );
+
+    if (!result.success) {
+      throw new Error(result.error);
+    }
+  }
+
+  async executeDeleteTask(task: Task): Promise<void> {
+    const result = await this.adapter.deleteDocument(
+      task.input.kbId,
+      task.input.docId
+    );
+
+    if (!result.success) {
+      throw new Error(result.error);
+    }
+  }
+}
+```
+
+### 📝 DocumentStatusPoller 集成适配器
+
+```typescript
+// lib/document-status-poller.ts (修改后)
+
+import { KBAdapterFactory, AdapterConfig } from './adapters/kb-adapter-factory';
+import { UnifiedDocStatus } from './adapters/knowledge-base-adapter';
+
+export class DocumentStatusPoller {
+  private adapter: KnowledgeBaseAdapter;
+
+  constructor(adapterConfig: AdapterConfig) {
+    this.adapter = KBAdapterFactory.getAdapter(adapterConfig);
+  }
+
+  private async fetchDocumentStatuses(kbId: string, docIds: string[]) {
+    const statuses = await this.adapter.getDocumentStatuses(kbId, docIds);
+
+    statuses.forEach((statusInfo) => {
+      // 使用统一状态更新任务
+      useTaskStore.getState().updateTaskByDocId(kbId, statusInfo.docId, {
+        status: this.mapToTaskStatus(statusInfo.status),
+        progress: statusInfo.progress,
+        output: {
+          chunkNum: statusInfo.chunkNum,
+          tokenNum: statusInfo.tokenNum,
+        },
+        error: statusInfo.status === UnifiedDocStatus.FAILED
+          ? { message: statusInfo.errorMsg || '处理失败' }
+          : undefined,
+      });
+
+      // 终态文档停止跟踪
+      if (statusInfo.status === UnifiedDocStatus.COMPLETED ||
+          statusInfo.status === UnifiedDocStatus.FAILED) {
+        this.stopTracking(kbId, statusInfo.docId);
+      }
+    });
+  }
+
+  private mapToTaskStatus(unifiedStatus: UnifiedDocStatus): TaskStatus {
+    switch (unifiedStatus) {
+      case UnifiedDocStatus.PENDING: return 'pending';
+      case UnifiedDocStatus.PROCESSING: return 'running';
+      case UnifiedDocStatus.COMPLETED: return 'succeeded';
+      case UnifiedDocStatus.FAILED: return 'failed';
+    }
+  }
+}
+```
+
+### 📅 更新后的实施路线图
+
+```
+Phase 0: 基础设施对齐 (4 天) ⚠️ 必须先完成
+├─ 0.1 创建类型定义文件 (lib/types/document.ts, lib/types/task.ts) ✅ 已完成
+├─ 0.2 创建适配器目录结构 (lib/adapters/)
+├─ 0.3 实现 KnowledgeBaseAdapter 接口定义
+├─ 0.4 实现 RAGFlowKBAdapter
+├─ 0.5 实现 DifyKBAdapter
+├─ 0.6 实现 KBAdapterFactory
+└─ 0.7 适配器单元测试
+
+Phase 1: 核心队列实现 (5 天) - 无变化
+Phase 2: 状态同步系统 (3 天) - 集成适配器
+Phase 3: UI 组件重构 (5 天) - 无变化
+Phase 4: 集成测试与优化 (4 天) - 新增多后端测试
+
+总计: 21 工作日（约 4.5 周）
+```
+
+---
+
+## 🤖 Chat 和 Agent 适配器设计（v1.2 新增）
+
+> **扩展说明**: 批量任务系统不仅支持知识库操作，还需支持 Chat 和 Agent API 的批量调用，用于批量测试、批量对话生成、API 压测等场景。
+
+### � Chat/Agent API 能力对比
+
+| 能力 | RAGFlow | Dify | Default |
+| ---- | ------- | ---- | ------- |
+| **Chat API** | ✅ `/api/v1/chats/{id}/completions` | ✅ `/v1/chat-messages` | ✅ 本地模型 |
+| **Agent API** | ✅ `/api/v1/agents/{id}/completions` | ✅ `/v1/chat-messages` (agent) | ⚠️ 自定义 |
+| **Workflow API** | ❌ | ✅ `/v1/workflows/run` | ❌ |
+| **流式响应** | ✅ SSE `stream=true` | ✅ `response_mode=streaming` | ✅ 可配置 |
+| **阻塞响应** | ✅ `stream=false` | ✅ `response_mode=blocking` | ✅ 可配置 |
+| **会话管理** | ✅ `session_id` | ✅ `conversation_id` | ✅ 自定义 |
+| **批量并发** | ⚠️ 需限流 | ⚠️ 需限流 | ✅ 无限制 |
+
+### 🔄 扩展后的任务类型
+
+```typescript
+// lib/types/task.ts (扩展后)
+
+/**
+ * 任务类型枚举 - 扩展支持 Chat 和 Agent
+ */
+export type TaskType =
+  // 知识库操作
+  | "kb.uploadDocument"    // 上传文档
+  | "kb.parseDocument"     // 触发解析
+  | "kb.deleteDocument"    // 删除文档
+  // Chat 操作
+  | "chat.sendMessage"     // 发送单条消息
+  | "chat.batchTest"       // 批量测试对话
+  // Agent 操作
+  | "agent.invoke"         // 调用 Agent
+  | "agent.batchTest"      // 批量测试 Agent
+  // Workflow 操作（Dify 专属）
+  | "workflow.run";        // 运行工作流
+```
+
+### 📐 Chat 适配器接口定义
+
+```typescript
+// lib/adapters/chat-adapter.ts
+
+/**
+ * 统一聊天消息格式
+ */
+export interface UnifiedChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  metadata?: Record<string, any>;
+}
+
+/**
+ * 聊天请求参数
+ */
+export interface ChatRequestParams {
+  /** Agent/Chat ID */
+  agentId: string;
+  /** 用户消息 */
+  message: string;
+  /** 会话 ID（可选，用于多轮对话） */
+  conversationId?: string;
+  /** 用户标识 */
+  userId?: string;
+  /** 是否流式响应 */
+  stream?: boolean;
+  /** 额外输入参数 */
+  inputs?: Record<string, any>;
+}
+
+/**
+ * 聊天响应结果
+ */
+export interface ChatResponse {
+  success: boolean;
+  /** AI 回复内容 */
+  answer?: string;
+  /** 会话 ID（用于后续对话） */
+  conversationId?: string;
+  /** 消息 ID */
+  messageId?: string;
+  /** 引用信息 */
+  references?: any[];
+  /** Token 使用量 */
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  /** 错误信息 */
+  error?: string;
+  /** 原始响应 */
+  rawResponse?: any;
+}
+
+/**
+ * 流式响应消息
+ */
+export interface StreamMessage {
+  type: 'thinking' | 'content' | 'step' | 'reference' | 'complete' | 'error';
+  content?: string;
+  step?: string;
+  reference?: any;
+  conversationId?: string;
+}
+
+/**
+ * Chat 适配器接口
+ */
+export interface ChatAdapter {
+  /** 平台标识 */
+  readonly platform: KBPlatform;
+
+  /**
+   * 发送消息（阻塞模式）
+   */
+  sendMessage(params: ChatRequestParams): Promise<ChatResponse>;
+
+  /**
+   * 发送消息（流式模式）
+   */
+  sendMessageStream(
+    params: ChatRequestParams,
+    onMessage: (msg: StreamMessage) => void,
+    onError?: (error: Error) => void,
+    onComplete?: () => void
+  ): Promise<void>;
+
+  /**
+   * 获取会话历史
+   */
+  getConversationHistory(
+    agentId: string,
+    conversationId: string
+  ): Promise<UnifiedChatMessage[]>;
+
+  /**
+   * 取消正在进行的请求
+   */
+  abort(): void;
+}
+```
+
+### 🔧 RAGFlow Chat 适配器实现
+
+```typescript
+// lib/adapters/ragflow-chat-adapter.ts
+
+export class RAGFlowChatAdapter implements ChatAdapter {
+  readonly platform: KBPlatform = 'ragflow';
+  private controller: AbortController | null = null;
+
+  constructor(
+    private baseUrl: string,
+    private apiKey: string
+  ) {}
+
+  async sendMessage(params: ChatRequestParams): Promise<ChatResponse> {
+    const url = `${this.baseUrl}/api/v1/chats/${params.agentId}/completions`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        question: params.message,
+        stream: false,
+        session_id: params.conversationId,
+        user_id: params.userId
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      return { success: false, error };
+    }
+
+    const result = await response.json();
+
+    // RAGFlow 非流式响应格式
+    if (result.code === 0) {
+      return {
+        success: true,
+        answer: result.data?.answer,
+        conversationId: result.data?.session_id,
+        references: result.data?.reference,
+        rawResponse: result
+      };
+    }
+
+    return {
+      success: false,
+      error: result.message || '请求失败'
+    };
+  }
+
+  async sendMessageStream(
+    params: ChatRequestParams,
+    onMessage: (msg: StreamMessage) => void,
+    onError?: (error: Error) => void,
+    onComplete?: () => void
+  ): Promise<void> {
+    this.controller = new AbortController();
+
+    const url = `${this.baseUrl}/api/v1/chats/${params.agentId}/completions`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
+        },
+        body: JSON.stringify({
+          question: params.message,
+          stream: true,
+          session_id: params.conversationId,
+          user_id: params.userId
+        }),
+        signal: this.controller.signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`请求失败: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('无法读取响应流');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullContent = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          const data = line.slice(5).trim();
+          if (data === '[DONE]') continue;
+
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.data?.answer) {
+              const chunk = parsed.data.answer.slice(fullContent.length);
+              fullContent = parsed.data.answer;
+              onMessage({ type: 'content', content: chunk });
+            }
+            if (parsed.data?.reference) {
+              onMessage({ type: 'reference', reference: parsed.data.reference });
+            }
+            if (parsed.data?.session_id) {
+              onMessage({ type: 'content', conversationId: parsed.data.session_id });
+            }
+          } catch (e) {
+            // 跳过解析错误
+          }
+        }
+      }
+
+      onMessage({ type: 'complete', content: fullContent });
+      onComplete?.();
+
+    } catch (error: any) {
+      if (error.name === 'AbortError') return;
+      onMessage({ type: 'error', content: error.message });
+      onError?.(error);
+    }
+  }
+
+  async getConversationHistory(
+    agentId: string,
+    conversationId: string
+  ): Promise<UnifiedChatMessage[]> {
+    // RAGFlow 可能需要通过 session API 获取历史
+    // 此处为简化实现
+    return [];
+  }
+
+  abort(): void {
+    this.controller?.abort();
+    this.controller = null;
+  }
+}
+```
+
+### 🔧 Dify Chat 适配器实现
+
+```typescript
+// lib/adapters/dify-chat-adapter.ts
+
+export class DifyChatAdapter implements ChatAdapter {
+  readonly platform: KBPlatform = 'dify';
+  private controller: AbortController | null = null;
+
+  constructor(
+    private baseUrl: string,
+    private apiKey: string
+  ) {}
+
+  async sendMessage(params: ChatRequestParams): Promise<ChatResponse> {
+    const url = `${this.baseUrl}/chat-messages`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        inputs: params.inputs || {},
+        query: params.message,
+        response_mode: 'blocking',
+        conversation_id: params.conversationId,
+        user: params.userId || 'anonymous'
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      return {
+        success: false,
+        error: error.message || `请求失败: ${response.status}`
+      };
+    }
+
+    const result = await response.json();
+
+    return {
+      success: true,
+      answer: result.answer,
+      conversationId: result.conversation_id,
+      messageId: result.message_id,
+      usage: result.metadata?.usage ? {
+        promptTokens: result.metadata.usage.prompt_tokens,
+        completionTokens: result.metadata.usage.completion_tokens,
+        totalTokens: result.metadata.usage.total_tokens
+      } : undefined,
+      rawResponse: result
+    };
+  }
+
+  async sendMessageStream(
+    params: ChatRequestParams,
+    onMessage: (msg: StreamMessage) => void,
+    onError?: (error: Error) => void,
+    onComplete?: () => void
+  ): Promise<void> {
+    this.controller = new AbortController();
+
+    const url = `${this.baseUrl}/chat-messages`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          inputs: params.inputs || {},
+          query: params.message,
+          response_mode: 'streaming',
+          conversation_id: params.conversationId,
+          user: params.userId || 'anonymous'
+        }),
+        signal: this.controller.signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`请求失败: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('无法读取响应流');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullContent = '';
+      let conversationId = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          const data = line.slice(5).trim();
+
+          try {
+            const parsed = JSON.parse(data);
+
+            // Dify 事件类型
+            switch (parsed.event) {
+              case 'message':
+              case 'agent_message':
+                if (parsed.answer) {
+                  fullContent += parsed.answer;
+                  onMessage({ type: 'content', content: parsed.answer });
+                }
+                if (parsed.conversation_id) {
+                  conversationId = parsed.conversation_id;
+                }
+                break;
+
+              case 'agent_thought':
+                onMessage({
+                  type: 'thinking',
+                  content: parsed.thought,
+                  step: parsed.tool
+                });
+                break;
+
+              case 'message_end':
+                onMessage({
+                  type: 'complete',
+                  content: fullContent,
+                  conversationId
+                });
+                break;
+
+              case 'error':
+                throw new Error(parsed.message);
+            }
+          } catch (e) {
+            if (e instanceof Error && e.message !== 'Unexpected end of JSON input') {
+              throw e;
+            }
+          }
+        }
+      }
+
+      onComplete?.();
+
+    } catch (error: any) {
+      if (error.name === 'AbortError') return;
+      onMessage({ type: 'error', content: error.message });
+      onError?.(error);
+    }
+  }
+
+  async getConversationHistory(
+    agentId: string,
+    conversationId: string
+  ): Promise<UnifiedChatMessage[]> {
+    const url = `${this.baseUrl}/messages?conversation_id=${conversationId}&limit=100`;
+
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${this.apiKey}` }
+    });
+
+    if (!response.ok) return [];
+
+    const result = await response.json();
+
+    return (result.data || []).map((msg: any) => ({
+      role: msg.role,
+      content: msg.content,
+      metadata: { messageId: msg.id }
+    }));
+  }
+
+  abort(): void {
+    this.controller?.abort();
+    this.controller = null;
+  }
+}
+```
+
+### 🏭 统一适配器工厂（扩展版）
+
+```typescript
+// lib/adapters/adapter-factory.ts
+
+import { KBAdapterFactory } from './kb-adapter-factory';
+import { ChatAdapterFactory } from './chat-adapter-factory';
+
+/**
+ * 适配器类型
+ */
+export type AdapterType = 'knowledge-base' | 'chat' | 'agent' | 'workflow';
+
+/**
+ * 统一适配器配置
+ */
+export interface UnifiedAdapterConfig {
+  platform: KBPlatform;
+  baseUrl: string;
+  apiKey: string;
+  type: AdapterType;
+  /** Agent/Chat ID（Chat/Agent 适配器需要） */
+  agentId?: string;
+}
+
+/**
+ * 统一适配器工厂
+ * 根据类型创建对应的适配器
+ */
+export class UnifiedAdapterFactory {
+  /**
+   * 获取知识库适配器
+   */
+  static getKBAdapter(config: Omit<UnifiedAdapterConfig, 'type'>) {
+    return KBAdapterFactory.getAdapter({
+      platform: config.platform,
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey
+    });
+  }
+
+  /**
+   * 获取 Chat 适配器
+   */
+  static getChatAdapter(config: Omit<UnifiedAdapterConfig, 'type'>) {
+    return ChatAdapterFactory.getAdapter({
+      platform: config.platform,
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey
+    });
+  }
+
+  /**
+   * 根据任务类型获取适配器
+   */
+  static getAdapterForTaskType(
+    taskType: TaskType,
+    config: Omit<UnifiedAdapterConfig, 'type'>
+  ) {
+    if (taskType.startsWith('kb.')) {
+      return this.getKBAdapter(config);
+    }
+    if (taskType.startsWith('chat.') || taskType.startsWith('agent.')) {
+      return this.getChatAdapter(config);
+    }
+    throw new Error(`未知的任务类型: ${taskType}`);
+  }
+}
+```
+
+### 📝 Chat/Agent 任务执行器
+
+```typescript
+// lib/task-executors/chat-task-executor.ts
+
+import { Task } from '@/lib/types/task';
+import { ChatAdapter, ChatRequestParams } from '@/lib/adapters/chat-adapter';
+
+/**
+ * Chat 任务执行器
+ */
+export class ChatTaskExecutor {
+  constructor(private adapter: ChatAdapter) {}
+
+  /**
+   * 执行单条消息发送任务
+   */
+  async executeSendMessage(task: Task): Promise<void> {
+    const params: ChatRequestParams = {
+      agentId: task.input.agentId,
+      message: task.input.message,
+      conversationId: task.input.conversationId,
+      userId: task.input.userId,
+      stream: false, // 批量任务使用阻塞模式
+      inputs: task.input.inputs
+    };
+
+    const result = await this.adapter.sendMessage(params);
+
+    if (!result.success) {
+      throw new Error(result.error || '发送消息失败');
+    }
+
+    // 更新任务输出
+    task.output = {
+      answer: result.answer,
+      conversationId: result.conversationId,
+      messageId: result.messageId,
+      usage: result.usage
+    };
+  }
+
+  /**
+   * 执行批量测试任务
+   * 输入：测试用例列表
+   * 输出：每个测试用例的结果
+   */
+  async executeBatchTest(task: Task): Promise<void> {
+    const testCases: Array<{
+      id: string;
+      message: string;
+      expectedKeywords?: string[];
+    }> = task.input.testCases;
+
+    const results: Array<{
+      id: string;
+      success: boolean;
+      answer?: string;
+      passed?: boolean;
+      error?: string;
+      latencyMs: number;
+    }> = [];
+
+    for (const testCase of testCases) {
+      const startTime = Date.now();
+
+      try {
+        const response = await this.adapter.sendMessage({
+          agentId: task.input.agentId,
+          message: testCase.message,
+          userId: task.input.userId
+        });
+
+        const latencyMs = Date.now() - startTime;
+
+        // 如果有预期关键词，检查是否包含
+        let passed = response.success;
+        if (passed && testCase.expectedKeywords) {
+          passed = testCase.expectedKeywords.every(
+            kw => response.answer?.includes(kw)
+          );
+        }
+
+        results.push({
+          id: testCase.id,
+          success: response.success,
+          answer: response.answer,
+          passed,
+          latencyMs
+        });
+
+      } catch (error: any) {
+        results.push({
+          id: testCase.id,
+          success: false,
+          error: error.message,
+          latencyMs: Date.now() - startTime
+        });
+      }
+
+      // 计算进度
+      task.progress = Math.round((results.length / testCases.length) * 100);
+    }
+
+    task.output = {
+      results,
+      summary: {
+        total: testCases.length,
+        passed: results.filter(r => r.passed).length,
+        failed: results.filter(r => !r.passed).length,
+        avgLatencyMs: Math.round(
+          results.reduce((sum, r) => sum + r.latencyMs, 0) / results.length
+        )
+      }
+    };
+  }
+}
+```
+
+### 📊 Chat/Agent 批量任务使用场景
+
+| 场景 | 任务类型 | 输入 | 输出 |
+| ---- | -------- | ---- | ---- |
+| **API 功能测试** | `chat.batchTest` | 测试用例列表 | 每条测试结果 + 通过率 |
+| **批量对话生成** | `chat.sendMessage` × N | 问题列表 | 回答列表 |
+| **Agent 压力测试** | `agent.batchTest` | 并发数 + 测试消息 | 响应时间统计 |
+| **知识库问答测试** | `chat.batchTest` | 问题 + 预期答案 | 答案匹配率 |
+| **多 Agent 对比** | `agent.invoke` × N | 同一问题发给多个 Agent | 回答对比 |
+
+### 📝 TaskQueue 集成 Chat 执行器
+
+```typescript
+// lib/task-queue.ts (扩展后)
+
+import { ChatTaskExecutor } from './task-executors/chat-task-executor';
+import { UnifiedAdapterFactory } from './adapters/adapter-factory';
+
+export class TaskQueue {
+  private chatExecutor: ChatTaskExecutor | null = null;
+
+  constructor(adapterConfig: AdapterConfig) {
+    // 知识库适配器
+    this.kbAdapter = KBAdapterFactory.getAdapter(adapterConfig);
+
+    // Chat 适配器（延迟初始化）
+  }
+
+  private getChatExecutor(): ChatTaskExecutor {
+    if (!this.chatExecutor) {
+      const chatAdapter = UnifiedAdapterFactory.getChatAdapter(this.config);
+      this.chatExecutor = new ChatTaskExecutor(chatAdapter);
+    }
+    return this.chatExecutor;
+  }
+
+  async executeTask(task: Task): Promise<void> {
+    switch (task.type) {
+      // 知识库任务
+      case 'kb.uploadDocument':
+        return this.executeUploadTask(task);
+      case 'kb.parseDocument':
+        return this.executeParseTask(task);
+      case 'kb.deleteDocument':
+        return this.executeDeleteTask(task);
+
+      // Chat 任务
+      case 'chat.sendMessage':
+        return this.getChatExecutor().executeSendMessage(task);
+      case 'chat.batchTest':
+        return this.getChatExecutor().executeBatchTest(task);
+
+      // Agent 任务（复用 Chat 执行器）
+      case 'agent.invoke':
+        return this.getChatExecutor().executeSendMessage(task);
+      case 'agent.batchTest':
+        return this.getChatExecutor().executeBatchTest(task);
+
+      default:
+        throw new Error(`未知的任务类型: ${task.type}`);
+    }
+  }
+}
+```
+
+### 📅 更新后的实施路线图（v1.2）
+
+```
+Phase 0: 基础设施对齐 (5 天) ⚠️ 必须先完成
+├─ 0.1 创建类型定义文件 ✅ 已完成
+├─ 0.2 扩展 TaskType 定义（新增 chat/agent 类型）
+├─ 0.3-0.7 知识库适配器层实现
+└─ 0.8-0.9 Chat 适配器层实现 (新增)
+
+Phase 1: 核心队列实现 (5 天)
+├─ 1.1-1.4 TaskQueue 基础功能
+└─ 1.5 ChatTaskExecutor 集成 (新增)
+
+Phase 2: 状态同步系统 (3 天) - 无变化
+
+Phase 3: UI 组件重构 (6 天)
+├─ 3.1-3.4 知识库任务 UI
+└─ 3.5-3.6 Chat/Agent 测试 UI (新增)
+
+Phase 4: 集成测试与优化 (4 天)
+├─ 4.1-4.3 知识库功能测试
+└─ 4.4 Chat/Agent 批量测试验证 (新增)
+
+总计: 23 工作日（约 5 周）
+```
+
+---
+
+## �📝 变更记录
+
+### v1.2 (2025-12-25)
+- ✅ 扩展 TaskType 支持 chat.* 和 agent.* 任务
+- ✅ 定义 ChatAdapter 统一接口
+- ✅ 实现 RAGFlowChatAdapter 设计
+- ✅ 实现 DifyChatAdapter 设计
+- ✅ 设计 ChatTaskExecutor 执行器
+- ✅ 扩展 UnifiedAdapterFactory 工厂
+- ✅ 定义批量测试场景和用例
+- ✅ 更新实施路线图（+2 天用于 Chat 适配器）
+
+### v1.1 (2025-12-25)
+- ✅ 新增多后端适配器层设计
+- ✅ 确认 Dify Knowledge API 能力（上传、删除、状态查询）
+- ✅ 定义 KnowledgeBaseAdapter 统一接口
+- ✅ 实现 RAGFlowKBAdapter 设计
+- ✅ 实现 DifyKBAdapter 设计
+- ✅ 适配器工厂模式设计
+- ✅ TaskQueue 和 DocumentStatusPoller 集成适配器
+- ✅ 更新实施路线图（+1 天用于适配器层）
 
 ### v1.0 (2025-12-19)
 - ✅ 解决状态码格式不一致问题

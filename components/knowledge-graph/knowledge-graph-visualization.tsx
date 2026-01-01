@@ -3,6 +3,7 @@
 import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import D3ForceGraph from './d3-force-graph';
+import { getEntityColor } from '@/lib/utils/entity-colors';
 import {
   Search,
   Filter,
@@ -164,7 +165,7 @@ const convertToD3Data = (nodes: GraphNode[], edges: GraphEdge[]) => {
     type: node.type,
     isTemporary: node.isTemporary || false,
     value: Math.max(15, (node.count || 1) * 2),
-    color: getNodeColor(node.type, node.isTemporary || false),
+    color: getEntityColor(node.type, node.isTemporary || false),
     description: node.description,
     files: node.files || []
   }));
@@ -179,18 +180,6 @@ const convertToD3Data = (nodes: GraphNode[], edges: GraphEdge[]) => {
   return { nodes: d3Nodes, links: d3Links };
 };
 
-// 获取节点颜色
-const getNodeColor = (type: string, isTemporary?: boolean) => {
-  if (isTemporary) return '#facc15';
-
-  switch (type) {
-    case 'PERSON': return '#60a5fa';
-    case 'ORGANIZATION': return '#34d399';
-    case 'CATEGORY': return '#a78bfa';
-    case 'EVENT': return '#f87171';
-    default: return '#9ca3af';
-  }
-};
 
 const KnowledgeGraphVisualization: React.FC<KnowledgeGraphVisualizationProps> = ({
   graphData,

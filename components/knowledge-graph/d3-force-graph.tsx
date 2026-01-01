@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState, memo } from 'react';
 import * as d3 from 'd3';
+import { getEntityColor } from '@/lib/utils/entity-colors';
 
 interface Node {
   id: string;
@@ -35,27 +36,6 @@ interface D3ForceGraphProps {
 }
 
 const NODE_RADIUS = 28;
-
-// 获取节点颜色 - 优化颜色方案
-const getNodeColor = (type: string, isTemporary?: boolean) => {
-  if (isTemporary) {
-    switch (type) {
-      case 'PERSON': return '#f59e0b';
-      case 'ORGANIZATION': return '#ef4444';
-      case 'CATEGORY': return '#ec4899';
-      case 'EVENT': return '#8b5cf6';
-      default: return '#fbbf24';
-    }
-  }
-  
-  switch (type) {
-    case 'PERSON': return '#3b82f6';
-    case 'ORGANIZATION': return '#10b981';
-    case 'CATEGORY': return '#8b5cf6';
-    case 'EVENT': return '#dc2626';
-    default: return '#6b7280';
-  }
-};
 
 // 分析节点关联关系
 const analyzeNodeRelations = (selectedNodeId: string, links: Link[]) => {
@@ -184,7 +164,7 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
       .data(nodes)
       .join("circle")
       .attr("r", NODE_RADIUS)
-      .attr("fill", d => getNodeColor(d.type, d.isTemporary))
+      .attr("fill", d => getEntityColor(d.type, d.isTemporary))
       .attr("stroke", "#fff")
       .attr("stroke-width", 2)
       .style("cursor", "pointer")

@@ -26,6 +26,7 @@ import {
   AlertCircle
 } from "lucide-react"
 import * as d3 from "d3"
+import { getEntityColor } from "@/lib/utils/entity-colors"
 
 interface GraphNode {
   id: string
@@ -192,7 +193,7 @@ export default function KnowledgeGraphViewer({ knowledgeGraphId, onBack }: Knowl
     // 添加节点圆圈
     node.append("circle")
       .attr("r", 20)
-      .attr("fill", d => getNodeColor(d.type))
+      .attr("fill", d => getEntityColor(d.type, false))
       .attr("stroke", "#fff")
       .attr("stroke-width", 2)
 
@@ -222,16 +223,6 @@ export default function KnowledgeGraphViewer({ knowledgeGraphId, onBack }: Knowl
     })
   }
 
-  const getNodeColor = (type: string): string => {
-    const colors: Record<string, string> = {
-      'entity': '#3b82f6',
-      'concept': '#10b981',
-      'relation': '#f59e0b',
-      'document': '#8b5cf6',
-      'default': '#6b7280'
-    }
-    return colors[type] || colors.default
-  }
 
   const handleNodeClick = async (node: GraphNode) => {
     setSelectedNode(node)
@@ -399,7 +390,7 @@ export default function KnowledgeGraphViewer({ knowledgeGraphId, onBack }: Knowl
                       <div className="flex items-center space-x-2">
                         <div
                           className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: getNodeColor(node.type) }}
+                          style={{ backgroundColor: getEntityColor(node.type, false) }}
                         />
                         <span className="text-sm font-medium">{node.name}</span>
                       </div>
@@ -443,7 +434,7 @@ export default function KnowledgeGraphViewer({ knowledgeGraphId, onBack }: Knowl
               <div key={type} className="flex items-center space-x-2">
                 <div
                   className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: getNodeColor(type) }}
+                  style={{ backgroundColor: getEntityColor(type, false) }}
                 />
                 <span className="text-xs capitalize">{type}</span>
               </div>
@@ -459,7 +450,7 @@ export default function KnowledgeGraphViewer({ knowledgeGraphId, onBack }: Knowl
             <DialogTitle className="flex items-center space-x-2">
               <div
                 className="w-4 h-4 rounded-full"
-                style={{ backgroundColor: getNodeColor(selectedNode?.type || '') }}
+                style={{ backgroundColor: getEntityColor(selectedNode?.type || '', false) }}
               />
               <span>{selectedNode?.name}</span>
             </DialogTitle>

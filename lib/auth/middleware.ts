@@ -11,6 +11,19 @@ export interface AuthenticatedRequest extends NextRequest {
 }
 
 /**
+ * 判断 Cookie 是否应该设置 Secure 属性
+ * 优先使用 COOKIE_SECURE 环境变量，否则根据 NODE_ENV 判断
+ */
+function shouldUseSecureCookie(): boolean {
+  // 显式设置的环境变量优先级最高
+  if (process.env.COOKIE_SECURE !== undefined) {
+    return process.env.COOKIE_SECURE === 'true'
+  }
+  // 默认：生产环境使用 secure
+  return process.env.NODE_ENV === 'production'
+}
+
+/**
  * 认证中间件 - 验证用户是否已登录
  */
 export function withAuth(handler: (req: AuthenticatedRequest) => Promise<NextResponse>) {
@@ -105,7 +118,7 @@ export function withOptionalAuth(handler: (req: AuthenticatedRequest) => Promise
 export function setAuthCookie(response: NextResponse, token: string): void {
   response.cookies.set('auth-token', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: shouldUseSecureCookie(),
     sameSite: 'lax',
     maxAge: 7 * 24 * 60 * 60, // 7天
     path: '/',
@@ -118,7 +131,7 @@ export function setAuthCookie(response: NextResponse, token: string): void {
 export function clearAuthCookie(response: NextResponse): void {
   response.cookies.set('auth-token', '', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: shouldUseSecureCookie(),
     sameSite: 'lax',
     maxAge: 0,
     path: '/',

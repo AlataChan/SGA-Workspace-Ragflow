@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import * as d3 from 'd3'
+import { getEntityColor } from '@/lib/utils/entity-colors'
 
 interface Node {
   id: string
@@ -39,35 +40,6 @@ interface D3ForceGraphComponentProps {
 }
 
 const NODE_RADIUS = 8
-
-// 获取节点颜色 - 优化颜色方案
-const getNodeColor = (type: string, isTemporary?: boolean) => {
-  if (isTemporary) {
-    // 临时节点使用更醒目的颜色
-    switch (type.toLowerCase()) {
-      case 'person': return '#f59e0b' // 橙色 - 临时人员
-      case 'organization': return '#ef4444' // 红色 - 临时组织
-      case 'concept': return '#ec4899' // 粉色 - 临时概念
-      case 'document': return '#8b5cf6' // 紫色 - 临时文档
-      case 'department': return '#f97316' // 深橙色 - 临时部门
-      case 'project': return '#06b6d4' // 青色 - 临时项目
-      default: return '#fbbf24' // 默认黄色
-    }
-  }
-
-  // 永久节点使用相对柔和的颜色
-  switch (type.toLowerCase()) {
-    case 'person': return '#3b82f6' // 蓝色 - 人员
-    case 'organization': return '#10b981' // 绿色 - 组织
-    case 'concept': return '#8b5cf6' // 紫色 - 概念
-    case 'document': return '#6366f1' // 靛蓝色 - 文档
-    case 'department': return '#059669' // 深绿色 - 部门
-    case 'project': return '#0891b2' // 深青色 - 项目
-    case 'technology': return '#7c3aed' // 深紫色 - 技术
-    case 'event': return '#dc2626' // 深红色 - 事件
-    default: return '#6b7280' // 默认灰色
-  }
-}
 
 // 分析节点关联关系
 const analyzeNodeRelations = (selectedNodeId: string, links: Link[]) => {
@@ -244,7 +216,7 @@ const D3ForceGraphComponent: React.FC<D3ForceGraphComponentProps> = ({
         const importance = d.value || 1
         return Math.min(baseRadius + importance * 2, baseRadius * 2)
       })
-      .attr("fill", (d: any) => d.color || getNodeColor(d.type, d.isTemporary))
+      .attr("fill", (d: any) => d.color || getEntityColor(d.type, d.isTemporary))
       .attr("stroke", "#fff")
       .attr("stroke-width", 1.5)
       .style("filter", "drop-shadow(0 2px 4px rgba(0,0,0,0.1))")
