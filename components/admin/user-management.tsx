@@ -253,45 +253,6 @@ export default function UserManagement({ companyId }: UserManagementProps) {
     }
   }
 
-  const handleAddUser = async () => {
-    if (!newUser.username || !newUser.password) return
-
-    const supabase = createClient()
-
-    try {
-      // 创建认证用户
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: `${newUser.username}@company.local`,
-        password: newUser.password,
-        user_metadata: {
-          username: newUser.username,
-          display_name: newUser.displayName,
-        },
-      })
-
-      if (authError) throw authError
-
-      // 创建用户档案
-      if (authData.user) {
-        const { error: profileError } = await supabase.from("profiles").insert({
-          id: authData.user.id,
-          username: newUser.username,
-          display_name: newUser.displayName || newUser.username,
-          company_id: companyId,
-          role: newUser.role,
-        })
-
-        if (profileError) throw profileError
-      }
-
-      // 重置表单并刷新列表
-      setNewUser({ username: "", password: "", displayName: "", role: "user" })
-      setIsAddDialogOpen(false)
-      loadUsers()
-    } catch (error) {
-      console.error("添加用户失败:", error)
-    }
-  }
 
   const handleImportUsers = async () => {
     if (!importFile) {

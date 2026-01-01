@@ -181,7 +181,7 @@ export class ErrorHandler {
           break
       }
 
-      logger.error(message, error as Error, { dbError }, meta)
+      logger.error(message, error as unknown as Error, { dbError }, meta)
 
       return NextResponse.json(
         {

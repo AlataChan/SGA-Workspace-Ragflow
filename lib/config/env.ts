@@ -186,7 +186,7 @@ export function isTest() {
 
 // 获取上传文件类型列表
 export function getAllowedFileTypes(): string[] {
-  return env.UPLOAD_ALLOWED_TYPES.split(",").map(type => type.trim())
+  return env.UPLOAD_ALLOWED_TYPES.split(",").map((type: string) => type.trim())
 }
 
 // 检查是否启用功能

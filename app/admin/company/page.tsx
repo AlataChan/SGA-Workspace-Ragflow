@@ -123,11 +123,11 @@ export default function CompanySettingsPage() {
     setMessage(null)
 
     try {
-      let logoUrl = companyInfo?.logoUrl
+      let logoUrl: string | undefined = companyInfo?.logoUrl
 
       // 如果有新的Logo文件，先上传
       if (formData.logoFile) {
-        logoUrl = await uploadLogo()
+        logoUrl = (await uploadLogo()) || undefined
       }
 
       // 更新公司信息

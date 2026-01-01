@@ -81,7 +81,7 @@ export class RAGFlowDialogClient {
       }
 
       this.conversationId = data.data.id
-      return this.conversationId
+      return data.data.id
     } catch (error) {
       console.error('[RAGFlowDialog] 创建会话失败:', error)
       throw error

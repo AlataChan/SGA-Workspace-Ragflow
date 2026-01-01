@@ -574,16 +574,17 @@ export async function POST(req: NextRequest) {
     let errorMessage = "服务暂时不可用，请稍后重试";
     let statusCode = 500;
 
-    if (error.name === 'AbortError') {
+    const err = error as any;
+    if (err.name === 'AbortError') {
       errorMessage = "请求超时，Dify服务响应时间过长。如果您在使用工具功能，请稍后重试";
       statusCode = 408; // Request Timeout
-    } else if (error.message?.includes('fetch')) {
+    } else if (err.message?.includes('fetch')) {
       errorMessage = "无法连接到Dify服务，请检查网络连接";
       statusCode = 503; // Service Unavailable
-    } else if (error.status === 401) {
+    } else if (err.status === 401) {
       errorMessage = "Dify API密钥无效，请检查配置";
       statusCode = 401;
-    } else if (error.status === 429) {
+    } else if (err.status === 429) {
       errorMessage = "请求过于频繁，请稍后重试";
       statusCode = 429;
     }

@@ -297,7 +297,7 @@ export default function RAGFlowMessageRenderer({
       )}
 
       {/* 知识库引用卡片 */}
-      {hasKnowledgeReference && (
+      {hasKnowledgeReference && message.reference && (
         <RAGFlowReferenceCard reference={message.reference} agentId={agentId} />
       )}
 

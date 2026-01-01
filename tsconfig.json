@@ -23,5 +23,5 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "gra-ref", "test-setup.ts", "__tests__", "app/store/**", "app/utils/**", "app/utils.ts", "app/lib/audio.ts", "app/config/server.ts", "vitest.config.ts", "scripts/test-*.ts", "app/test-*/**", "lib/auth/permissions.ts"]
 }

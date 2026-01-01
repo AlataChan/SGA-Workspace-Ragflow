@@ -65,7 +65,7 @@ const FileCard: React.FC<FileCardProps> = ({
   const handleDownload = () => {
     if (onDownload) {
       onDownload()
-    } else {
+    } else if (fileUrl) {
       // 强制下载行为
       const link = document.createElement('a')
       link.href = fileUrl

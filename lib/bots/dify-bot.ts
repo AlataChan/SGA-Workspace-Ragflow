@@ -208,7 +208,7 @@ export class DifyBot {
 
   cancel() {
     if (this.client) {
-      this.client.cancel()
+      this.client.stopCurrentRequest()
     }
   }
 
@@ -239,7 +239,7 @@ export class DifyBot {
     } catch (error) {
       return {
         success: false,
-        error: error.message || '连接测试失败'
+        error: error instanceof Error ? error.message : '连接测试失败'
       }
     }
   }
@@ -251,7 +251,7 @@ export class DifyBot {
 
   destroy() {
     if (this.client) {
-      this.client.cancel()
+      this.client.stopCurrentRequest()
       this.client = null
     }
     this.config = null

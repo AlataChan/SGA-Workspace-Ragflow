@@ -252,7 +252,7 @@ export class DoubleSubmitCSRF {
     const headerToken = request.headers.get(this.headerName)
 
     // 比较两个令牌
-    return cookieToken && headerToken && cookieToken === headerToken
+    return !!(cookieToken && headerToken && cookieToken === headerToken)
   }
 
   private extractTokenFromCookie(cookieHeader: string | null): string | null {

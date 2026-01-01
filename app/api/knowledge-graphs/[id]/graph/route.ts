@@ -112,8 +112,7 @@ export async function GET(
     console.error('获取知识图谱数据失败:', error)
     console.error('错误详情:', {
       message: error instanceof Error ? error.message : '未知错误',
-      stack: error instanceof Error ? error.stack : undefined,
-      knowledgeGraphId: id
+      stack: error instanceof Error ? error.stack : undefined
     })
     return NextResponse.json(
       { error: "服务器内部错误", details: error instanceof Error ? error.message : '未知错误' },

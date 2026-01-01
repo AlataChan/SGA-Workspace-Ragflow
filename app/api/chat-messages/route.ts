@@ -11,9 +11,9 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { session_id, id, role, content, timestamp, attachments } = body
+    const { session_id, role, content, attachments, model, tokenCount } = body
 
-    if (!session_id || !id || !role || !content) {
+    if (!session_id || !role || !content) {
       return NextResponse.json(
         { error: '缺少必要参数' },
         { status: 400 }
@@ -23,15 +23,15 @@ export async function POST(request: NextRequest) {
     const message = await ChatDatabase.addMessage(
       session_id,
       user.userId,
+      role,
+      content,
       {
-        id,
-        role,
-        content,
-        timestamp: timestamp || Date.now(),
+        model,
+        tokenCount,
         attachments
       }
     )
-    
+
     return NextResponse.json({
       success: true,
       data: message
@@ -63,8 +63,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const messages = await ChatDatabase.getSessionMessages(sessionId)
-    
+    const messages = await ChatDatabase.getSessionMessages(sessionId, user.userId)
+
     return NextResponse.json({
       success: true,
       data: messages

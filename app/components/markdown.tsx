@@ -71,7 +71,7 @@ export function Mermaid(props: { code: string }) {
   );
 }
 
-export function PreCode(props: { children: any }) {
+export function PreCode(props: { children?: React.ReactNode; [key: string]: any }) {
   const ref = useRef<HTMLPreElement>(null);
   const previewRef = useRef<HTMLPreviewHandler>(null);
   const [mermaidCode, setMermaidCode] = useState("");
@@ -173,7 +173,7 @@ export function PreCode(props: { children: any }) {
   );
 }
 
-function CustomCode(props: { children: any; className?: string }) {
+function CustomCode(props: { children?: React.ReactNode; className?: string; [key: string]: any }) {
   const chatStore = useChatStore();
   const session = chatStore.currentSession();
   const config = useAppConfig();

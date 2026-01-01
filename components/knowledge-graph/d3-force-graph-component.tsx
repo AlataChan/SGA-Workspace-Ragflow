@@ -230,14 +230,14 @@ const D3ForceGraphComponent: React.FC<D3ForceGraphComponentProps> = ({
         return name.length > 8 ? name.substring(0, 8) + '...' : name
       })
       .attr("x", 0)
-      .attr("y", NODE_RADIUS + 18)
+      .attr("y", NODE_RADIUS + 20)
       .attr("text-anchor", "middle")
       .attr("font-family", "Microsoft YaHei, SimHei, Arial, sans-serif")
-      .attr("font-size", "10px")
-      .attr("fill", "#333")
-      .attr("font-weight", "500")
+      .attr("font-size", "15px")
+      .attr("fill", "#ffffff")
+      .attr("font-weight", "600")
       .attr("pointer-events", "none")
-      .style("text-shadow", "1px 1px 2px rgba(255,255,255,0.8)")
+      .style("text-shadow", "1px 1px 3px rgba(0,0,0,0.8), -1px -1px 3px rgba(0,0,0,0.8)")
 
     // 节点交互
     nodeGroup
@@ -282,7 +282,7 @@ const D3ForceGraphComponent: React.FC<D3ForceGraphComponentProps> = ({
         d.fy = null
       })
 
-    nodeGroup.call(drag)
+    nodeGroup.call(drag as any)
 
     // 更新位置 - 确保所有位置都是有效数字
     let tickCount = 0

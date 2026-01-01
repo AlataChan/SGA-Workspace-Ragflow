@@ -76,7 +76,7 @@ export class RAGFlowBlockingClient {
       }
       this.conversationId = sessionId
       console.log('[RAGFlowBlocking] 创建新会话:', this.conversationId)
-      return this.conversationId
+      return sessionId
     } catch (error) {
       console.error('[RAGFlowBlocking] 创建会话失败:', error)
       throw error
@@ -291,7 +291,7 @@ export class RAGFlowBlockingClient {
           type: 'complete',
           content: content,
           reference: reference,
-          conversationId: sessionId
+          conversationId: sessionId || undefined
         })
 
         onComplete?.()

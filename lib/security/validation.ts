@@ -204,23 +204,23 @@ export function sanitizeInput(input: string): string {
 
 // 清理对象中的所有字符串字段
 export function sanitizeObject<T extends Record<string, any>>(obj: T): T {
-  const sanitized = { ...obj }
-  
+  const sanitized: Record<string, any> = { ...obj }
+
   for (const [key, value] of Object.entries(sanitized)) {
     if (typeof value === "string") {
       sanitized[key] = sanitizeInput(value)
     } else if (typeof value === "object" && value !== null && !Array.isArray(value)) {
       sanitized[key] = sanitizeObject(value)
     } else if (Array.isArray(value)) {
-      sanitized[key] = value.map(item => 
-        typeof item === "string" ? sanitizeInput(item) : 
-        typeof item === "object" && item !== null ? sanitizeObject(item) : 
+      sanitized[key] = value.map(item =>
+        typeof item === "string" ? sanitizeInput(item) :
+        typeof item === "object" && item !== null ? sanitizeObject(item) :
         item
       )
     }
   }
-  
-  return sanitized
+
+  return sanitized as T
 }
 
 // 验证并清理输入的通用函数

@@ -7,6 +7,7 @@ const JWT_EXPIRES_IN = '24h'
 
 export interface AuthUser {
   id: string
+  userId: string  // 别名，与 id 相同
   username: string
   email: string
   displayName?: string
@@ -34,8 +35,9 @@ export class SimpleAuth {
         return { success: false, error: "用户名或密码错误" }
       }
 
-      // 验证密码 (使用真实的bcrypt验证)
-      const isValidPassword = await db.verifyPassword(password, user.password_hash)
+      // 验证密码 (使用bcrypt验证)
+      const bcrypt = await import('bcryptjs')
+      const isValidPassword = await bcrypt.compare(password, user.password)
       if (!isValidPassword) {
         logger.warn("密码错误", { username, userId: user.id })
         return { success: false, error: "用户名或密码错误" }
@@ -49,11 +51,12 @@ export class SimpleAuth {
 
       const authUser: AuthUser = {
         id: user.id,
+        userId: user.id,  // 别名
         username: user.username,
         email: user.email,
-        displayName: user.display_name,
+        displayName: user.displayName,
         role: user.role,
-        companyId: user.company_id
+        companyId: user.companyId
       }
 
       logger.info("用户登录成功", { 
@@ -111,6 +114,7 @@ export class SimpleAuth {
 
       return {
         id: decoded.userId,
+        userId: decoded.userId,  // 别名
         username: decoded.username,
         email: decoded.email,
         displayName: decoded.displayName,
@@ -139,8 +143,8 @@ export class SimpleAuth {
       }
 
       // 验证用户是否仍然存在且活跃
-      const dbUser = await db.getUser(user.id)
-      if (!dbUser || !dbUser.is_active) {
+      const dbUser = await db.findUserById(user.id)
+      if (!dbUser || !dbUser.isActive) {
         return null
       }
 

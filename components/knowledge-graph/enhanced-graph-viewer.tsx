@@ -122,8 +122,8 @@ interface D3Node {
 }
 
 interface D3Link {
-  source: string
-  target: string
+  source: string | { id: string }
+  target: string | { id: string }
   type?: string
   isTemporary?: boolean
 }
@@ -377,7 +377,7 @@ export default function EnhancedGraphViewer({ knowledgeGraphId, onBack }: Enhanc
       <div className="flex-1 relative">
         <D3ForceGraphComponent
           nodes={graphData.nodes}
-          links={graphData.links}
+          links={graphData.links as any}
           onNodeClick={handleNodeClick}
           focusNodeId={focusNodeId}
           searchTerm={searchTerm}

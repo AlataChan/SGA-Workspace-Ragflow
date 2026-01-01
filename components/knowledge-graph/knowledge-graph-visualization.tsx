@@ -60,6 +60,51 @@ interface KnowledgeGraphVisualizationProps {
   className?: string;
 }
 
+// 实体类型中文翻译映射
+const entityTypeTranslations: Record<string, string> = {
+  // 大写类型
+  'PERSON': '人员',
+  'ORGANIZATION': '组织',
+  'CATEGORY': '类别',
+  'EVENT': '事件',
+  'LOCATION': '地点',
+  'DATE': '日期',
+  'TIME': '时间',
+  'CONCEPT': '概念',
+  'DOCUMENT': '文档',
+  'PRODUCT': '产品',
+  'PROJECT': '项目',
+  'DEPARTMENT': '部门',
+  'ROLE': '角色',
+  'PROCESS': '流程',
+  'REGULATION': '规定',
+  'POLICY': '政策',
+  'UNKNOWN': '未知',
+  // 小写类型
+  'person': '人员',
+  'organization': '组织',
+  'category': '类别',
+  'event': '事件',
+  'location': '地点',
+  'date': '日期',
+  'time': '时间',
+  'concept': '概念',
+  'document': '文档',
+  'product': '产品',
+  'project': '项目',
+  'department': '部门',
+  'role': '角色',
+  'process': '流程',
+  'regulation': '规定',
+  'policy': '政策',
+  'unknown': '未知',
+}
+
+// 获取实体类型的中文名称
+const getEntityTypeLabel = (type: string): string => {
+  return entityTypeTranslations[type] || type
+}
+
 // 中文翻译函数
 const translateDescription = (description: string): string => {
   if (!description) return '';
@@ -233,6 +278,12 @@ const KnowledgeGraphVisualization: React.FC<KnowledgeGraphVisualizationProps> = 
 
   const { nodes, edges } = graphData;
 
+  // 动态提取所有唯一的实体类型
+  const uniqueNodeTypes = useMemo(() => {
+    const types = new Set(nodes.map(node => node.type).filter(Boolean))
+    return Array.from(types).sort()
+  }, [nodes])
+
   // 搜索和过滤功能 - 使用useMemo避免不必要的重新计算
   const filteredNodes = useMemo(() => {
     return nodes.filter(node => {
@@ -381,11 +432,15 @@ const KnowledgeGraphVisualization: React.FC<KnowledgeGraphVisualizationProps> = 
               onChange={(e) => setSelectedNodeType(e.target.value)}
               className="w-full px-3 py-2 bg-[#21262d] border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm text-white"
             >
-              <option value="all">全部类型</option>
-              <option value="PERSON">人员</option>
-              <option value="ORGANIZATION">组织</option>
-              <option value="CATEGORY">类别</option>
-              <option value="EVENT">事件</option>
+              <option value="all">全部类型 ({nodes.length})</option>
+              {uniqueNodeTypes.map((type) => {
+                const count = nodes.filter(n => n.type === type).length
+                return (
+                  <option key={type} value={type}>
+                    {getEntityTypeLabel(type)} ({count})
+                  </option>
+                )
+              })}
             </select>
           </div>
 
@@ -426,7 +481,7 @@ const KnowledgeGraphVisualization: React.FC<KnowledgeGraphVisualizationProps> = 
             links={d3Data.links}
             width={800}
             height={600}
-            focusNodeId={focusNodeId}
+            focusNodeId={focusNodeId || undefined}
             onNodeClick={handleNodeClick}
           />
 
@@ -493,16 +548,14 @@ const KnowledgeGraphVisualization: React.FC<KnowledgeGraphVisualizationProps> = 
 
                     <div>
                       <label className="text-sm font-medium text-gray-400">类型</label>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-1 ${
-                        selectedNode.type === 'PERSON' ? 'bg-blue-500/20 text-blue-300' :
-                        selectedNode.type === 'ORGANIZATION' ? 'bg-green-500/20 text-green-300' :
-                        selectedNode.type === 'CATEGORY' ? 'bg-purple-500/20 text-purple-300' :
-                        'bg-red-500/20 text-red-300'
-                      }`}>
-                        {selectedNode.type === 'PERSON' ? '人员' :
-                        selectedNode.type === 'ORGANIZATION' ? '组织' :
-                        selectedNode.type === 'CATEGORY' ? '类别' :
-                        selectedNode.type === 'EVENT' ? '事件' : selectedNode.type}
+                      <span
+                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-1"
+                        style={{
+                          backgroundColor: `${getEntityColor(selectedNode.type, selectedNode.isTemporary || false)}20`,
+                          color: getEntityColor(selectedNode.type, selectedNode.isTemporary || false)
+                        }}
+                      >
+                        {getEntityTypeLabel(selectedNode.type)}
                       </span>
                     </div>
 

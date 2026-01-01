@@ -77,22 +77,22 @@ const avatarStyles = {
 }
 
 function generateAvatarUrl(name: string, style: string, size: number, background?: string, color?: string): string {
-  const styleConfig = avatarStyles[style as keyof typeof avatarStyles]
-  
+  const styleConfig = avatarStyles[style as keyof typeof avatarStyles] as any
+
   if (!styleConfig) {
     throw new Error(`不支持的头像风格: ${style}`)
   }
-  
+
   if (styleConfig.buildUrl) {
     return styleConfig.buildUrl(name, size)
   }
-  
-  if (style === 'initials') {
-    const params = styleConfig.params!(name, size, background, color)
+
+  if (style === 'initials' && styleConfig.params) {
+    const params = styleConfig.params(name, size, background, color)
     const searchParams = new URLSearchParams(params)
     return `${styleConfig.baseUrl}?${searchParams.toString()}`
   }
-  
+
   throw new Error(`头像风格 ${style} 配置错误`)
 }
 

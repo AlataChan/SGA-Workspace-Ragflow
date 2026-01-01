@@ -227,19 +227,21 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
         onNodeClickRef.current?.(d);
       });
 
-    // 创建标签
+    // 创建标签 - 白色字体配合深色背景，添加阴影增强可读性
     const labels = g.append("g")
       .attr("class", "labels")
       .selectAll("text")
       .data(nodes)
       .join("text")
-      .text(d => d.name)
-      .attr("font-size", "12px")
-      .attr("font-family", "Arial, sans-serif")
-      .attr("fill", "#333")
+      .text(d => d.name.length > 10 ? d.name.substring(0, 10) + '...' : d.name)
+      .attr("font-size", "14px")
+      .attr("font-family", "Microsoft YaHei, SimHei, Arial, sans-serif")
+      .attr("fill", "#ffffff")
+      .attr("font-weight", "500")
       .attr("text-anchor", "middle")
       .attr("dy", "0.35em")
-      .style("pointer-events", "none");
+      .style("pointer-events", "none")
+      .style("text-shadow", "0 1px 3px rgba(0,0,0,0.8), 0 -1px 3px rgba(0,0,0,0.8), 1px 0 3px rgba(0,0,0,0.8), -1px 0 3px rgba(0,0,0,0.8)");
 
     // 添加动画完成标志
     let animationCompleted = false;
