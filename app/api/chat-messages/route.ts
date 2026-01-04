@@ -1,36 +1,74 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { ChatDatabase } from '@/lib/database/chat-db'
-import { getUserFromRequest } from '@/lib/auth'
+import prisma from '@/lib/prisma'
+import { verifyUserAuth } from '@/lib/auth/user'
 
 // POST /api/chat-messages - 添加消息到会话
 export async function POST(request: NextRequest) {
   try {
-    const user = await getUserFromRequest(request)
+    const user = await verifyUserAuth(request)
     if (!user) {
       return NextResponse.json({ error: '未授权' }, { status: 401 })
     }
 
     const body = await request.json()
-    const { session_id, role, content, attachments, model, tokenCount } = body
+    const {
+      session_id,
+      sessionId,
+      role,
+      content,
+      attachments,
+      model,
+      tokenCount,
+      metadata
+    } = body as {
+      session_id?: string
+      sessionId?: string
+      role?: 'user' | 'assistant' | 'system' | string
+      content?: string
+      attachments?: any
+      model?: string
+      tokenCount?: number
+      metadata?: any
+    }
 
-    if (!session_id || !role || !content) {
+    const effectiveSessionId = session_id || sessionId
+
+    if (!effectiveSessionId || !role || !content) {
       return NextResponse.json(
         { error: '缺少必要参数' },
         { status: 400 }
       )
     }
 
-    const message = await ChatDatabase.addMessage(
-      session_id,
-      user.userId,
-      role,
-      content,
-      {
-        model,
-        tokenCount,
-        attachments
+    const session = await prisma.chatSession.findFirst({
+      where: { id: String(effectiveSessionId), userId: user.userId }
+    })
+    if (!session) {
+      return NextResponse.json({ error: '会话不存在' }, { status: 404 })
+    }
+
+    const normalizedRole = String(role).toLowerCase()
+    const prismaRole = normalizedRole === 'user' ? 'USER' : 'ASSISTANT'
+
+    const mergedMetadata =
+      metadata !== undefined
+        ? metadata
+        : {
+            model: model ?? null,
+            tokenCount: tokenCount ?? null,
+            attachments: attachments ?? null,
+            originalRole: normalizedRole === 'system' ? 'system' : null
+          }
+
+    const message = await prisma.chatMessage.create({
+      data: {
+        sessionId: session.id,
+        userId: user.userId,
+        role: prismaRole,
+        content: String(content),
+        metadata: mergedMetadata ?? undefined
       }
-    )
+    })
 
     return NextResponse.json({
       success: true,
@@ -48,13 +86,13 @@ export async function POST(request: NextRequest) {
 // GET /api/chat-messages?session_id=xxx - 获取会话的所有消息
 export async function GET(request: NextRequest) {
   try {
-    const user = await getUserFromRequest(request)
+    const user = await verifyUserAuth(request)
     if (!user) {
       return NextResponse.json({ error: '未授权' }, { status: 401 })
     }
 
     const { searchParams } = new URL(request.url)
-    const sessionId = searchParams.get('session_id')
+    const sessionId = searchParams.get('session_id') || searchParams.get('sessionId')
 
     if (!sessionId) {
       return NextResponse.json(
@@ -63,7 +101,17 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const messages = await ChatDatabase.getSessionMessages(sessionId, user.userId)
+    const session = await prisma.chatSession.findFirst({
+      where: { id: sessionId, userId: user.userId }
+    })
+    if (!session) {
+      return NextResponse.json({ error: '会话不存在' }, { status: 404 })
+    }
+
+    const messages = await prisma.chatMessage.findMany({
+      where: { sessionId, userId: user.userId },
+      orderBy: { createdAt: 'asc' }
+    })
 
     return NextResponse.json({
       success: true,

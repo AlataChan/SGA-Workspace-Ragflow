@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { ChatDatabase } from '@/lib/database/chat-db'
-import { getUserFromRequest } from '@/lib/auth'
+import prisma from '@/lib/prisma'
+import { verifyUserAuth } from '@/lib/auth/user'
 
 // GET /api/chat-sessions/[sessionId] - 获取特定会话详情
 export async function GET(
@@ -8,17 +8,28 @@ export async function GET(
   { params }: { params: { sessionId: string } }
 ) {
   try {
-    const user = await getUserFromRequest(request)
+    const user = await verifyUserAuth(request)
     if (!user) {
       return NextResponse.json({ error: '未授权' }, { status: 401 })
     }
 
-    const session = await ChatDatabase.getSession(params.sessionId, user.userId)
+    const session = await prisma.chatSession.findFirst({
+      where: {
+        id: params.sessionId,
+        userId: user.userId
+      }
+    })
     if (!session) {
       return NextResponse.json({ error: '会话不存在' }, { status: 404 })
     }
 
-    const messages = await ChatDatabase.getSessionMessages(params.sessionId, user.userId)
+    const messages = await prisma.chatMessage.findMany({
+      where: {
+        sessionId: params.sessionId,
+        userId: user.userId
+      },
+      orderBy: { createdAt: 'asc' }
+    })
     
     return NextResponse.json({
       success: true,
@@ -42,27 +53,25 @@ export async function PUT(
   { params }: { params: { sessionId: string } }
 ) {
   try {
-    const user = await getUserFromRequest(request)
+    const user = await verifyUserAuth(request)
     if (!user) {
       return NextResponse.json({ error: '未授权' }, { status: 401 })
     }
 
     const body = await request.json()
-    const { topic, conversationId } = body
+    const { sessionName } = body as { sessionName?: string }
 
-    let success = false
-
-    if (topic !== undefined) {
-      success = await ChatDatabase.updateSessionTopic(params.sessionId, user.userId, topic)
+    const session = await prisma.chatSession.findFirst({
+      where: { id: params.sessionId, userId: user.userId }
+    })
+    if (!session) {
+      return NextResponse.json({ error: '会话不存在' }, { status: 404 })
     }
 
-    if (conversationId !== undefined) {
-      success = await ChatDatabase.updateSessionConversationId(params.sessionId, conversationId)
-    }
-
-    if (!success) {
-      return NextResponse.json({ error: '更新失败' }, { status: 400 })
-    }
+    await prisma.chatSession.update({
+      where: { id: params.sessionId },
+      data: { sessionName: sessionName ? String(sessionName) : null }
+    })
     
     return NextResponse.json({
       success: true,
@@ -83,16 +92,19 @@ export async function DELETE(
   { params }: { params: { sessionId: string } }
 ) {
   try {
-    const user = await getUserFromRequest(request)
+    const user = await verifyUserAuth(request)
     if (!user) {
       return NextResponse.json({ error: '未授权' }, { status: 401 })
     }
 
-    const success = await ChatDatabase.deleteSession(params.sessionId, user.userId)
-    
-    if (!success) {
-      return NextResponse.json({ error: '删除失败' }, { status: 400 })
+    const session = await prisma.chatSession.findFirst({
+      where: { id: params.sessionId, userId: user.userId }
+    })
+    if (!session) {
+      return NextResponse.json({ error: '会话不存在' }, { status: 404 })
     }
+
+    await prisma.chatSession.delete({ where: { id: params.sessionId } })
     
     return NextResponse.json({
       success: true,

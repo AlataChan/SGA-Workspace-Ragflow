@@ -150,6 +150,24 @@ export class RAGFlowProxyClient {
       let fullContent = ''
       let finalReference: any = null
       let finalSessionId = this.sessionId
+      const mergeStreamingText = (current: string, incoming: string) => {
+        if (!incoming) return current
+        if (!current) return incoming
+        if (incoming.startsWith(current)) return incoming
+        if (current.startsWith(incoming)) return current
+
+        const compact = (s: string) => s.replace(/\s+/g, '')
+        if (compact(incoming).startsWith(compact(current))) return incoming
+
+        const maxProbe = Math.min(200, current.length, incoming.length)
+        for (let k = maxProbe; k >= 20; k--) {
+          if (current.endsWith(incoming.slice(0, k))) {
+            return current + incoming.slice(k)
+          }
+        }
+
+        return current + incoming
+      }
 
       try {
         while (true) {
@@ -232,12 +250,8 @@ export class RAGFlowProxyClient {
                 if (contentCandidate !== undefined && contentCandidate !== null) {
                   const normalized = normalizeRagflowContent(contentCandidate)
                   if (normalized.length > 0) {
-                    // agent 通常是“增量片段”，这里累积成全文再抛给 UI
-                    if (normalized.startsWith(fullContent)) {
-                      fullContent = normalized
-                    } else {
-                      fullContent += normalized
-                    }
+                    // agent 既可能是“增量片段”，也可能返回“累计全文”；这里做一次去重合并，避免内容翻倍
+                    fullContent = mergeStreamingText(fullContent, normalized)
 
                     onMessage({
                       type: 'content',

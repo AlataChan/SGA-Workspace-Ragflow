@@ -613,7 +613,7 @@ export default function EnhancedChatWithSidebar({
 }: EnhancedChatWithSidebarProps) {
   // 基础状态
   const [sessions, setSessions] = useState<ChatSession[]>([{
-    id: 'default',
+    id: 'draft_default',
     title: '新对话',
     messages: [{
       id: '1',
@@ -624,7 +624,7 @@ export default function EnhancedChatWithSidebar({
     lastUpdate: new Date()
   }])
 
-  const [currentSessionId, setCurrentSessionId] = useState('default')
+  const [currentSessionId, setCurrentSessionId] = useState('draft_default')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -992,15 +992,11 @@ export default function EnhancedChatWithSidebar({
 
   // 创建新会话
   const createNewSession = () => {
+    const newSessionId = `draft_${nanoid()}`
     const newSession: ChatSession = {
-      id: nanoid(),
+      id: newSessionId,
       title: '新对话',
-      messages: [{
-        id: nanoid(),
-        role: 'assistant',
-        content: `你好！我是${agentName}。`,
-        timestamp: Date.now()
-      }],
+      messages: [],
       lastUpdate: new Date(),
       conversationId: '' // 新会话没有conversation_id
     }
@@ -1010,7 +1006,11 @@ export default function EnhancedChatWithSidebar({
       difyClientRef.current.setConversationId(null)
     }
 
-    setSessions(prev => [newSession, ...prev])
+    // 将当前“非历史会话”归档到历史（只保留一个“当前会话”）
+    setSessions(prev => [
+      newSession,
+      ...prev.map(s => (s.isHistory ? s : { ...s, isHistory: true }))
+    ])
     setCurrentSessionId(newSession.id)
     setInput('')
     setAttachments([])
@@ -1173,6 +1173,19 @@ export default function EnhancedChatWithSidebar({
         }
       }
 
+      // RAGFlow：从本地（Prisma）补齐历史引用信息（仅对通过本系统产生的会话有效）
+      if (agentConfig?.platform === 'RAGFLOW') {
+        const refMap = await loadLocalAssistantReferences(historyConv.id)
+        if (refMap.size > 0) {
+          convertedMessages = convertedMessages.map((m) => {
+            if (m.role !== 'assistant') return m
+            if (m.reference) return m
+            const ref = refMap.get(m.content)
+            return ref ? { ...m, reference: ref } : m
+          })
+        }
+      }
+
       // 创建新的会话
       const newSession: ChatSession = {
         id: historyConv.id, // 使用历史会话的ID作为session ID
@@ -1261,6 +1274,18 @@ export default function EnhancedChatWithSidebar({
 
   // 删除历史对话
   const deleteHistoryConversation = async (conversationId: string) => {
+    // 本地会话（draft）直接删除
+    if (conversationId.startsWith('draft_')) {
+      setSessions(prev => prev.filter(session => session.id !== conversationId))
+      if (currentSessionId === conversationId) {
+        const fallback = sessions.find(s => s.id !== conversationId) || null
+        if (fallback) setCurrentSessionId(fallback.id)
+        else createNewSession()
+      }
+      toast.success('会话已删除')
+      return
+    }
+
     if (agentConfig?.platform === 'DIFY' && difyClientRef.current) {
       try {
         await difyClientRef.current.deleteConversation(conversationId)
@@ -1276,6 +1301,10 @@ export default function EnhancedChatWithSidebar({
         if (!ok) {
           throw new Error('RAGFlow 删除失败')
         }
+        // 同步删除本地引用/消息缓存（Prisma），失败不阻断主流程
+        await fetch(`/api/chat-sessions/${encodeURIComponent(conversationId)}`, {
+          method: 'DELETE'
+        }).catch(() => {})
         toast.success('历史对话已删除')
       } catch (error) {
         console.error('删除RAGFlow历史对话失败:', error)
@@ -1309,6 +1338,67 @@ export default function EnhancedChatWithSidebar({
 
     // 从会话列表中移除对应的会话
     setSessions(prev => prev.filter(session => session.difyConversationId !== conversationId && session.id !== conversationId))
+  }
+
+  // 将 RAGFlow 会话与引用信息持久化到本地（Prisma），用于历史回看引用
+  const upsertLocalChatSession = async (sessionId: string, sessionName: string) => {
+    if (!agentConfig?.localAgentId) return
+    try {
+      await fetch('/api/chat-sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: sessionId,
+          agentId: agentConfig.localAgentId,
+          sessionName
+        })
+      })
+    } catch (error) {
+      console.warn('[EnhancedChat] 本地会话持久化失败:', error)
+    }
+  }
+
+  const addLocalChatMessage = async (
+    sessionId: string,
+    role: 'user' | 'assistant',
+    content: string,
+    metadata?: any
+  ) => {
+    if (!agentConfig?.localAgentId) return
+    try {
+      await fetch(`/api/chat-sessions/${encodeURIComponent(sessionId)}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role, content, metadata })
+      })
+    } catch (error) {
+      console.warn('[EnhancedChat] 本地消息持久化失败:', error)
+    }
+  }
+
+  const loadLocalAssistantReferences = async (sessionId: string): Promise<Map<string, any>> => {
+    try {
+      const resp = await fetch(`/api/chat-sessions/${encodeURIComponent(sessionId)}/messages`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      if (!resp.ok) return new Map()
+      const data = await resp.json().catch(() => ({}))
+      const messages = (data.data || []) as Array<any>
+      const map = new Map<string, any>()
+      for (const msg of messages) {
+        const role = String(msg.role || '').toUpperCase()
+        if (role !== 'ASSISTANT') continue
+        const content = String(msg.content || '')
+        const reference = (msg.metadata as any)?.reference ?? (msg.metadata as any)?.data?.reference
+        if (content && reference) {
+          map.set(content, reference)
+        }
+      }
+      return map
+    } catch {
+      return new Map()
+    }
   }
 
   // 重命名历史对话
@@ -1358,6 +1448,12 @@ export default function EnhancedChatWithSidebar({
         if (!ok) {
           throw new Error('RAGFlow 重命名失败（如果该ID为Agent会话则不支持重命名）')
         }
+        // 同步更新本地会话名（Prisma），失败不阻断主流程
+        await fetch(`/api/chat-sessions/${encodeURIComponent(conversationId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionName: newName })
+        }).catch(() => {})
 
         // 更新历史列表
         setHistoryConversations(prev => prev.map(conv =>
@@ -1699,12 +1795,20 @@ export default function EnhancedChatWithSidebar({
     try {
       let fullContent = ''
       let conversationId = currentSession.conversationId || currentSession.difyConversationId
+      const sessionNameForPersist = isFirstUserQuestionInSession ? proposedSessionTitle : currentSession.title
 
       // 根据平台发送消息
       if (agentConfig?.platform === 'DIFY') {
         await sendDifyMessage(messageContent, conversationId || '', assistantMessage, fullContent)
       } else if (agentConfig?.platform === 'RAGFLOW') {
-        await sendRAGFlowMessage(messageContent, conversationId || '', assistantMessage, fullContent)
+        await sendRAGFlowMessage(
+          messageContent,
+          conversationId || '',
+          assistantMessage,
+          fullContent,
+          sessionNameForPersist,
+          userMessage
+        )
       }
     } catch (error) {
       console.error('发送消息失败:', error)
@@ -2008,7 +2112,14 @@ export default function EnhancedChatWithSidebar({
   }
 
   // RAGFlow 消息发送
-  const sendRAGFlowMessage = async (messageContent: string, conversationId: string, assistantMessage: Message, initialFullContent: string) => {
+  const sendRAGFlowMessage = async (
+    messageContent: string,
+    conversationId: string,
+    assistantMessage: Message,
+    initialFullContent: string,
+    sessionNameForPersist: string,
+    userMessageForPersist: Message
+  ) => {
     // 优先使用代理客户端
     const client = ragflowProxyClientRef.current || ragflowClientRef.current
     if (!client) {
@@ -2128,6 +2239,26 @@ export default function EnhancedChatWithSidebar({
                   } :
                   session
               ));
+
+              // 持久化引用信息：仅 RAGFlow 且拿到了 session_id 时才存
+              if (agentConfig?.platform === 'RAGFLOW' && activeConversationId) {
+                void (async () => {
+                  await upsertLocalChatSession(activeConversationId, sessionNameForPersist || '新对话')
+                  await addLocalChatMessage(
+                    activeConversationId,
+                    'user',
+                    safeStringifyContent(userMessageForPersist.content),
+                    { attachments: userMessageForPersist.attachments || null }
+                  )
+                  await addLocalChatMessage(
+                    activeConversationId,
+                    'assistant',
+                    finalContent,
+                    { reference: message.reference || null }
+                  )
+                })()
+              }
+
               setIsStreaming(false);
               break;
 
@@ -2568,19 +2699,18 @@ export default function EnhancedChatWithSidebar({
                               >
                                 <Edit3 className="w-3 h-3" />
                               </Button>
-                              {sessions.filter(s => !s.isHistory).length > 1 && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    // deleteSession(session.id)
-                                  }}
-                                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </Button>
-                              )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const conversationId = session.difyConversationId || session.conversationId || session.id
+                                  deleteHistoryConversation(conversationId)
+                                }}
+                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
                             </div>
                           )}
                         </div>
@@ -2673,17 +2803,31 @@ export default function EnhancedChatWithSidebar({
                             )}
                           </div>
                           {editingSessionId !== session.id && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                startRenaming(session.id, session.title)
-                              }}
-                              className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 ml-2 p-1"
-                            >
-                              <Edit3 className="w-3 h-3" />
-                            </Button>
+                            <div className="flex items-center space-x-1 ml-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  startRenaming(session.id, session.title)
+                                }}
+                                className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 p-1"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const conversationId = session.difyConversationId || session.conversationId || session.id
+                                  deleteHistoryConversation(conversationId)
+                                }}
+                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
                           )}
                         </div>
                       </div>
