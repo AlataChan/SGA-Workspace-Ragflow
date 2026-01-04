@@ -85,7 +85,7 @@ export default function SimpleContentRenderer({ content }: SimpleContentRenderer
         list(token: Tokens.List): string {
           const tag = token.ordered ? 'ol' : 'ul';
           const body = token.items.map(item => this.listitem(item)).join('');
-          return `<${tag} style="margin: 12px 0; padding-left: 24px; color: #e5e7eb;">${body}</${tag}>`;
+          return `<${tag} style="margin: 12px 0; padding-left: 24px; color: inherit;">${body}</${tag}>`;
         },
 
         // 自定义列表项渲染
@@ -100,7 +100,7 @@ export default function SimpleContentRenderer({ content }: SimpleContentRenderer
           const level = token.depth;
           const sizes = ['', '24px', '20px', '18px', '16px', '14px', '12px'];
           const margins = ['', '20px 0 16px 0', '18px 0 14px 0', '16px 0 12px 0', '14px 0 10px 0', '12px 0 8px 0', '10px 0 6px 0'];
-          return `<h${level} style="font-size: ${sizes[level]}; margin: ${margins[level]}; font-weight: 600; color: #f3f4f6;">${text}</h${level}>`;
+          return `<h${level} style="font-size: ${sizes[level]}; margin: ${margins[level]}; font-weight: 600; color: inherit;">${text}</h${level}>`;
         },
       }
     });
@@ -135,7 +135,7 @@ export default function SimpleContentRenderer({ content }: SimpleContentRenderer
       className="simple-content"
       style={{
         lineHeight: 1.7,
-        color: '#e5e7eb',
+        color: 'inherit',
         fontSize: '15px',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
         letterSpacing: '0.01em',

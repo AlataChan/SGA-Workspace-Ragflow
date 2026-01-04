@@ -136,8 +136,9 @@ const platformOptions = [
 const defaultPlatformConfigs = {
   DIFY: { baseUrl: 'https://api.dify.ai/v1', apiKey: '', timeout: 30000 },
   RAGFLOW: {
-    baseUrl: 'https://api.ragflow.io/v1',
+    baseUrl: 'https://api.ragflow.io',
     apiKey: '',
+    idType: 'CHAT',
     agentId: '',
     datasetId: '', // 知识库ID，用于PDF预览功能
   },
@@ -327,7 +328,7 @@ export default function AgentsPage() {
       avatarUrl: agent.avatarUrl || "",
       photoUrl: agent.photoUrl || "",
       platform: agent.platform,
-      platformConfig: agent.platformConfig || defaultPlatformConfigs[agent.platform],
+      platformConfig: { ...defaultPlatformConfigs[agent.platform], ...(agent.platformConfig || {}) },
       sortOrder: agent.sortOrder
     })
     // 重置连接测试状态
@@ -1215,9 +1216,37 @@ export default function AgentsPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-white">Agent ID 或 Chat ID</Label>
+                      <Label className="text-white">RAGFlow ID 类型</Label>
+                      <Select
+                        value={formData.platformConfig.idType || 'CHAT'}
+                        onValueChange={(value) => setFormData(prev => ({
+                          ...prev,
+                          platformConfig: { ...prev.platformConfig, idType: value }
+                        }))}
+                      >
+                        <SelectTrigger className="bg-[#2a2a2a] border-[#3c4043] text-white">
+                          <SelectValue placeholder="请选择 ID 类型" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#2a2a2a] border-[#3c4043]">
+                          <SelectItem value="CHAT" className="text-white hover:bg-[#3c4043]">
+                            Chat Assistant ID（/api/v1/chats）
+                          </SelectItem>
+                          <SelectItem value="AGENT" className="text-white hover:bg-[#3c4043]">
+                            Agent ID（/api/v1/agents）
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-white">
+                        {formData.platformConfig.idType === 'AGENT' ? 'Agent ID' : 'Chat Assistant ID'}
+                      </Label>
                       <Input
-                        placeholder="请输入 RAGFlow 中的 Agent ID 或 Chat ID"
+                        placeholder={
+                          formData.platformConfig.idType === 'AGENT'
+                            ? '请输入 RAGFlow 中的 Agent ID（/api/v1/agents 列表里的 id）'
+                            : '请输入 RAGFlow 中的 Chat Assistant ID（/api/v1/chats 列表里的 id）'
+                        }
                         value={formData.platformConfig.agentId || ''}
                         onChange={(e) => setFormData(prev => ({
                           ...prev,
@@ -1579,9 +1608,37 @@ export default function AgentsPage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-white">Agent ID 或 Chat ID</Label>
+                        <Label className="text-white">RAGFlow ID 类型</Label>
+                        <Select
+                          value={formData.platformConfig.idType || 'CHAT'}
+                          onValueChange={(value) => setFormData(prev => ({
+                            ...prev,
+                            platformConfig: { ...prev.platformConfig, idType: value }
+                          }))}
+                        >
+                          <SelectTrigger className="bg-[#2a2a2a] border-[#3c4043] text-white">
+                            <SelectValue placeholder="请选择 ID 类型" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-[#2a2a2a] border-[#3c4043]">
+                            <SelectItem value="CHAT" className="text-white hover:bg-[#3c4043]">
+                              Chat Assistant ID（/api/v1/chats）
+                            </SelectItem>
+                            <SelectItem value="AGENT" className="text-white hover:bg-[#3c4043]">
+                              Agent ID（/api/v1/agents）
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-white">
+                          {formData.platformConfig.idType === 'AGENT' ? 'Agent ID' : 'Chat Assistant ID'}
+                        </Label>
                         <Input
-                          placeholder="请输入 RAGFlow 中的 Agent ID 或 Chat ID"
+                          placeholder={
+                            formData.platformConfig.idType === 'AGENT'
+                              ? '请输入 RAGFlow 中的 Agent ID（/api/v1/agents 列表里的 id）'
+                              : '请输入 RAGFlow 中的 Chat Assistant ID（/api/v1/chats 列表里的 id）'
+                          }
                           value={formData.platformConfig.agentId || ''}
                           onChange={(e) => setFormData(prev => ({
                             ...prev,

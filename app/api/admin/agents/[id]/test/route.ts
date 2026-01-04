@@ -75,40 +75,129 @@ class DifyTester implements PlatformTester {
   }
 }
 
+function cleanRAGFlowBaseUrl(url: string): string {
+  if (!url) return url
+
+  let cleaned = url.trim().replace(/\/+$/, '')
+  const suffixesToRemove = ['/api/v1/agents', '/api/v1/chats', '/api/v1/datasets', '/api/v1', '/v1']
+
+  for (const suffix of suffixesToRemove) {
+    if (cleaned.toLowerCase().endsWith(suffix.toLowerCase())) {
+      cleaned = cleaned.slice(0, -suffix.length)
+      break
+    }
+  }
+
+  return cleaned.replace(/\/+$/, '')
+}
+
 // RAGFlow平台测试器
 class RAGFlowTester implements PlatformTester {
   async test(config: any): Promise<{ success: boolean; message: string; details?: any }> {
     try {
-      const { baseUrl, apiKey } = config
-      
-      // RAGFlow API测试（根据实际API调整）
-      const testUrl = `${baseUrl.replace(/\/$/, '')}/api/v1/chat`
-      
-      const response = await fetch(testUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: "Hello, this is a connection test."
-        }),
-        signal: AbortSignal.timeout(30000)
-      })
+      const { baseUrl, apiKey, agentId, idType = 'CHAT' } = config
 
-      if (response.ok) {
-        return {
-          success: true,
-          message: 'RAGFlow连接测试成功',
-          details: { status: response.status }
-        }
-      } else {
-        return {
-          success: false,
-          message: `RAGFlow连接失败: ${response.status} ${response.statusText}`,
-          details: { status: response.status }
-        }
+      const cleanBaseUrl = cleanRAGFlowBaseUrl(String(baseUrl || ''))
+      const remoteId = String(agentId || '').trim()
+      const normalizedIdType = String(idType).toUpperCase()
+
+      if (!cleanBaseUrl || !apiKey || !remoteId) {
+        return { success: false, message: '请填写 RAGFlow 的 baseUrl / apiKey / ID' }
       }
+
+      const headers = {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      }
+
+      if (normalizedIdType === 'AGENT') {
+        const listResp = await fetch(`${cleanBaseUrl}/api/v1/agents`, {
+          method: 'GET',
+          headers,
+          signal: AbortSignal.timeout(30000),
+        })
+        const listData = await listResp.json().catch(() => ({} as any))
+        const agents = (listData?.data || []) as any[]
+        const found = agents.find((a) => String(a?.id) === remoteId)
+        if (!found) return { success: false, message: `未找到 Agent ID "${remoteId}"` }
+
+        const completionResp = await fetch(`${cleanBaseUrl}/api/v1/agents/${remoteId}/completions`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ question: 'connection_test', stream: false, user_id: 'connection_test' }),
+          signal: AbortSignal.timeout(30000),
+        })
+        const completionData = await completionResp.json().catch(() => ({} as any))
+        const completionMessage = String(completionData?.message || completionData?.error || '')
+
+        if (!completionResp.ok || completionData?.code !== 0) {
+          const lower = completionMessage.toLowerCase()
+          if (lower.includes("don't own the agent") || lower.includes('do not own the agent')) {
+            return {
+              success: false,
+              message:
+                "该 API Key 无权使用此 Agent（You don't own the agent）。请使用该 Agent 所属账号的 API Key，或在当前账号下创建/复制该 Agent 后再填写 ID。",
+            }
+          }
+          return { success: false, message: `RAGFlow 连接失败（${completionMessage || `HTTP ${completionResp.status}` }）` }
+        }
+
+        const createdSessionId = completionData?.data?.session_id
+        if (createdSessionId) {
+          await fetch(`${cleanBaseUrl}/api/v1/agents/${remoteId}/sessions`, {
+            method: 'DELETE',
+            headers,
+            body: JSON.stringify({ ids: [createdSessionId] }),
+            signal: AbortSignal.timeout(30000),
+          }).catch(() => {})
+        }
+
+        const name = found.name || found.title || remoteId
+        return { success: true, message: `RAGFlow 连接成功（Agent: ${name}）` }
+      }
+
+      const listResp = await fetch(`${cleanBaseUrl}/api/v1/chats`, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(30000),
+      })
+      const listData = await listResp.json().catch(() => ({} as any))
+      const chats = (listData?.data || []) as any[]
+      const found = chats.find((c) => String(c?.id) === remoteId)
+      if (!found) return { success: false, message: `未找到 Chat Assistant ID "${remoteId}"` }
+
+      const sessionResp = await fetch(`${cleanBaseUrl}/api/v1/chats/${remoteId}/sessions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ name: 'connection_test' }),
+        signal: AbortSignal.timeout(30000),
+      })
+      const sessionData = await sessionResp.json().catch(() => ({} as any))
+      const sessionMessage = String(sessionData?.message || sessionData?.error || '')
+      if (!sessionResp.ok || sessionData?.code !== 0) {
+        const lower = sessionMessage.toLowerCase()
+        if (lower.includes("don't own the assistant") || lower.includes('do not own the assistant')) {
+          return {
+            success: false,
+            message:
+              "该 API Key 无权使用此 Chat Assistant（You do not own the assistant）。请使用该 Chat Assistant 所属账号的 API Key，或在当前账号下创建/复制该 Chat Assistant 后再填写 ID。",
+          }
+        }
+        return { success: false, message: `RAGFlow 连接失败（${sessionMessage || `HTTP ${sessionResp.status}` }）` }
+      }
+
+      const createdSessionId = sessionData?.data?.id || sessionData?.data?.session_id
+      if (createdSessionId) {
+        await fetch(`${cleanBaseUrl}/api/v1/chats/${remoteId}/sessions`, {
+          method: 'DELETE',
+          headers,
+          body: JSON.stringify({ ids: [createdSessionId] }),
+          signal: AbortSignal.timeout(30000),
+        }).catch(() => {})
+      }
+
+      const name = found.name || found.title || remoteId
+      return { success: true, message: `RAGFlow 连接成功（Chat Assistant: ${name}）` }
     } catch (error) {
       return {
         success: false,

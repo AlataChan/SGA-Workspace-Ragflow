@@ -32,8 +32,13 @@ import SimpleContentRenderer from './simple-content-renderer'
 import FileCard from './file-card'
 import { EnhancedDifyClient, DifyStreamMessage } from '@/lib/enhanced-dify-client'
 import { RAGFlowBlockingClient, RAGFlowMessage } from '@/lib/ragflow-blocking-client'
+import { RAGFlowProxyClient, RAGFlowProxyMessage } from '@/lib/ragflow-proxy-client'
 import RAGFlowReferenceCard from '@/components/chat/ragflow-reference-card'
-import { normalizeRagflowContent } from '@/lib/ragflow-utils'
+import {
+  hasRagflowInlineReferenceMarkers,
+  normalizeRagflowContent,
+  stripRagflowInlineReferenceMarkers
+} from '@/lib/ragflow-utils'
 import TempKbDialog from '@/components/temp-kb/temp-kb-dialog'
 import SaveKnowledgeButton from '@/components/chat/save-knowledge-button'
 
@@ -653,6 +658,7 @@ export default function EnhancedChatWithSidebar({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const difyClientRef = useRef<EnhancedDifyClient | null>(null)
   const ragflowClientRef = useRef<RAGFlowBlockingClient | null>(null)
+  const ragflowProxyClientRef = useRef<RAGFlowProxyClient | null>(null)
 
   const currentSession = sessions.find(s => s.id === currentSessionId)
   const actualAgentAvatar = agentConfig?.agentAvatar || agentAvatar
@@ -790,7 +796,6 @@ export default function EnhancedChatWithSidebar({
     // RAGFlow 处理逻辑
     if (agentConfig?.platform === 'RAGFLOW' && (agentConfig.localAgentId || agentConfig.agentId)) {
       if (isLoadingHistory) return
-      const backendAgentId = agentConfig.localAgentId || agentConfig.agentId
 
       // 检查缓存
       const now = Date.now()
@@ -806,23 +811,36 @@ export default function EnhancedChatWithSidebar({
         setIsLoadingHistory(true)
         setHistoryError(null)
 
-        const page = loadMore ? Math.ceil(historyCacheRef.current.conversations.length / 20) + 1 : 1
-        const response = await fetch(
-          `/api/ragflow/conversations?agent_id=${backendAgentId}&page=${page}&page_size=20&user_id=${encodeURIComponent(agentConfig.userId)}`
-        )
+        const pageSize = 20
+        const page = loadMore ? Math.ceil(historyCacheRef.current.conversations.length / pageSize) + 1 : 1
 
-        if (response.ok) {
+        let sessions: any[] = []
+        let hasMore = false
+
+        // 优先走服务端统一代理（支持 Chat ID 与 Agent ID）
+        if (ragflowProxyClientRef.current) {
+          sessions = await ragflowProxyClientRef.current.listSessions(page, pageSize)
+          hasMore = sessions.length === pageSize
+        } else {
+          // 回退：老接口（仅 chat sessions 形态可用）
+          const backendAgentId = agentConfig.localAgentId || agentConfig.agentId
+          const response = await fetch(
+            `/api/ragflow/conversations?agent_id=${backendAgentId}&page=${page}&page_size=${pageSize}&user_id=${encodeURIComponent(agentConfig.userId)}`
+          )
+          if (!response.ok) {
+            throw new Error('Failed to fetch RAGFlow conversations')
+          }
           const data = await response.json()
-          const sessions = data.data || []
-          // 映射 RAGFlow 会话到通用格式
-          const newConversations: DifyHistoryConversation[] = sessions.map((s: any) => ({
-            id: s.id,
-            name: s.name || '未命名会话',
-            created_at: s.create_date,
-            inputs: {}
-          }))
+          sessions = data.data || []
+          hasMore = data.has_more || sessions.length === pageSize
+        }
 
-          const hasMore = data.has_more || false
+        const newConversations: DifyHistoryConversation[] = sessions.map((s: any) => ({
+          id: s.id,
+          name: s.name || s.title || '未命名会话',
+          created_at: s.create_time || s.create_date || s.update_time || s.update_date || Date.now(),
+          inputs: {}
+        }))
 
           let allConversations: DifyHistoryConversation[]
           if (loadMore) {
@@ -840,9 +858,6 @@ export default function EnhancedChatWithSidebar({
 
           setHistoryConversations(allConversations)
           setHasMoreHistory(hasMore)
-        } else {
-          throw new Error('Failed to fetch RAGFlow conversations')
-        }
       } catch (error) {
         console.error('获取RAGFlow历史失败:', error)
         if (!loadMore) {
@@ -1044,16 +1059,12 @@ export default function EnhancedChatWithSidebar({
         try {
           if (agentConfig?.platform === 'RAGFLOW' && (agentConfig.localAgentId || agentConfig.agentId)) {
             // RAGFlow 历史消息逻辑
-            const backendAgentId = agentConfig.localAgentId || agentConfig.agentId
-            const response = await fetch(
-              `/api/ragflow/history?agent_id=${backendAgentId}&conversation_id=${historyConv.id}&user_id=${encodeURIComponent(agentConfig.userId)}`
-            )
-            clearTimeout(timeoutId)
+            if (ragflowProxyClientRef.current) {
+              const messages = await ragflowProxyClientRef.current.getHistory(historyConv.id)
+              clearTimeout(timeoutId)
 
-            if (response.ok) {
-              const data = await response.json()
-              convertedMessages = data.messages.map((msg: any) => ({
-                id: msg.id || msg.message_id || nanoid(),
+              convertedMessages = (messages || []).map((msg: any, index: number) => ({
+                id: msg.id || msg.message_id || `${historyConv.id}_${index}` || nanoid(),
                 role: msg.role?.toLowerCase?.() === 'user'
                   ? 'user'
                   : msg.role?.toLowerCase?.() === 'assistant'
@@ -1066,7 +1077,31 @@ export default function EnhancedChatWithSidebar({
                 reference: msg.reference ?? msg.data?.reference
               }))
             } else {
-              throw new Error(`获取RAGFlow历史消息失败: ${response.status}`)
+              // 回退：老接口（仅 chat sessions 形态可用）
+              const backendAgentId = agentConfig.localAgentId || agentConfig.agentId
+              const response = await fetch(
+                `/api/ragflow/history?agent_id=${backendAgentId}&conversation_id=${historyConv.id}&user_id=${encodeURIComponent(agentConfig.userId)}`
+              )
+              clearTimeout(timeoutId)
+
+              if (!response.ok) {
+                throw new Error(`获取RAGFlow历史消息失败: ${response.status}`)
+              }
+
+              const data = await response.json()
+              convertedMessages = (data.messages || []).map((msg: any) => ({
+                id: msg.id || msg.message_id || nanoid(),
+                role: msg.role?.toLowerCase?.() === 'user'
+                  ? 'user'
+                  : msg.role?.toLowerCase?.() === 'assistant'
+                    ? 'assistant'
+                    : (msg.type === 'human' ? 'user' : 'assistant'),
+                content: normalizeRagflowContent(
+                  msg.content ?? msg.data?.content ?? msg.answer ?? msg.outputs?.content ?? msg.output?.content
+                ),
+                timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
+                reference: msg.reference ?? msg.data?.reference
+              }))
             }
           } else if (agentConfig?.platform === 'DIFY' && agentConfig.difyUrl && agentConfig.difyKey) {
             // Dify 历史消息逻辑
@@ -1235,18 +1270,11 @@ export default function EnhancedChatWithSidebar({
         toast.error('删除历史对话失败')
         return
       }
-    } else if (agentConfig?.platform === 'RAGFLOW' && ragflowClientRef.current) {
+    } else if (agentConfig?.platform === 'RAGFLOW' && ragflowProxyClientRef.current) {
       try {
-        // RAGFlow 删除历史对话的API
-        const response = await fetch(`/api/ragflow/conversations/${conversationId}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${agentConfig.apiKey}`,
-            'Content-Type': 'application/json'
-          }
-        })
-        if (!response.ok) {
-          throw new Error(`RAGFlow 删除失败: ${response.status}`)
+        const ok = await ragflowProxyClientRef.current.deleteSession(conversationId)
+        if (!ok) {
+          throw new Error('RAGFlow 删除失败')
         }
         toast.success('历史对话已删除')
       } catch (error) {
@@ -1324,30 +1352,19 @@ export default function EnhancedChatWithSidebar({
         console.error('重命名Dify历史对话失败:', error)
         toast.error('重命名历史对话失败')
       }
-    } else if (agentConfig?.platform === 'RAGFLOW' && ragflowClientRef.current) {
+    } else if (agentConfig?.platform === 'RAGFLOW' && ragflowProxyClientRef.current) {
       try {
-        // RAGFlow 重命名历史对话的API
-        const response = await fetch(`/api/ragflow/conversations/${conversationId}`, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${agentConfig.apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            name: newName
-          })
-        })
-        if (!response.ok) {
-          throw new Error(`RAGFlow 重命名失败: ${response.status}`)
+        const ok = await ragflowProxyClientRef.current.renameSession(conversationId, newName)
+        if (!ok) {
+          throw new Error('RAGFlow 重命名失败（如果该ID为Agent会话则不支持重命名）')
         }
-        const result = await response.json()
 
         // 更新历史列表
         setHistoryConversations(prev => prev.map(conv =>
           conv.id === conversationId ?
             {
               ...conv,
-              name: result.name || newName
+              name: newName
             } :
             conv
         ))
@@ -1357,7 +1374,7 @@ export default function EnhancedChatWithSidebar({
           conv.id === conversationId ?
             {
               ...conv,
-              name: result.name || newName
+              name: newName
             } :
             conv
         )
@@ -1367,7 +1384,7 @@ export default function EnhancedChatWithSidebar({
           session.id === conversationId ?
             {
               ...session,
-              title: result.name || newName
+              title: newName
             } :
             session
         ))
@@ -1511,19 +1528,29 @@ export default function EnhancedChatWithSidebar({
         console.warn('[EnhancedChat] DIFY 配置不完整')
       }
     } else if (agentConfig.platform === 'RAGFLOW') {
-      if (agentConfig.baseUrl && agentConfig.apiKey && agentConfig.agentId) {
-        console.log('[EnhancedChat] 初始化 RAGFlow 客户端')
+      // 优先使用代理客户端（通过本地 Agent ID 走服务端代理，不暴露密钥）
+      if (agentConfig.localAgentId) {
+        console.log('[EnhancedChat] 初始化 RAGFlow 代理客户端（通过服务端）')
+        ragflowProxyClientRef.current = new RAGFlowProxyClient({
+          agentId: agentConfig.localAgentId,
+          userId: agentConfig.userId
+        })
+        ragflowClientRef.current = null // 清除直连客户端
+      } else if (agentConfig.baseUrl && agentConfig.apiKey && agentConfig.agentId) {
+        // 回退到直连模式（仅当没有 localAgentId 时）
+        console.log('[EnhancedChat] 初始化 RAGFlow 直连客户端（回退模式）')
         ragflowClientRef.current = new RAGFlowBlockingClient({
           baseUrl: agentConfig.baseUrl,
           apiKey: agentConfig.apiKey,
           agentId: agentConfig.agentId,
           userId: agentConfig.userId
         })
+        ragflowProxyClientRef.current = null // 清除代理客户端
       } else {
         console.warn('[EnhancedChat] RAGFlow 配置不完整')
       }
     }
-  }, [agentConfig?.platform, agentConfig?.difyUrl, agentConfig?.difyKey, agentConfig?.baseUrl, agentConfig?.apiKey, agentConfig?.agentId, agentConfig?.userId])
+  }, [agentConfig?.platform, agentConfig?.difyUrl, agentConfig?.difyKey, agentConfig?.baseUrl, agentConfig?.apiKey, agentConfig?.agentId, agentConfig?.userId, agentConfig?.localAgentId])
 
   // 上次发送时间
   const lastSendTimeRef = useRef<number>(0)
@@ -1543,9 +1570,13 @@ export default function EnhancedChatWithSidebar({
     }
 
     // 停止 RAGFlow 客户端
+    if (ragflowProxyClientRef.current) {
+      ragflowProxyClientRef.current.cancel()
+      console.log('[EnhancedChat] RAGFlow 代理请求已停止')
+    }
     if (ragflowClientRef.current) {
       ragflowClientRef.current.cancel()
-      console.log('[EnhancedChat] RAGFlow 请求已停止')
+      console.log('[EnhancedChat] RAGFlow 直连请求已停止')
     }
 
     // 更新状态
@@ -1612,7 +1643,7 @@ export default function EnhancedChatWithSidebar({
         return
       }
     } else if (agentConfig?.platform === 'RAGFLOW') {
-      if (!ragflowClientRef.current) {
+      if (!ragflowProxyClientRef.current && !ragflowClientRef.current) {
         console.error('[EnhancedChat] RAGFlow 客户端未初始化')
         toast.error('RAGFlow 聊天服务未初始化，请检查Agent配置')
         return
@@ -1639,6 +1670,14 @@ export default function EnhancedChatWithSidebar({
       isStreaming: true
     }
 
+    // 首次用户提问：用第一条用户问题命名本地会话（与 RAGFlow Chat Assistant 的 session 命名保持一致）
+    const isFirstUserQuestionInSession = currentSession.messages.every(m => m.role !== 'user')
+    const proposedSessionTitle = (() => {
+      const trimmed = input.trim().replace(/\s+/g, ' ')
+      if (!trimmed) return '新对话'
+      return trimmed.length > 20 ? `${trimmed.slice(0, 20)}...` : trimmed
+    })()
+
     // 更新会话
     setSessions(prev => prev.map(session =>
       session.id === currentSessionId ?
@@ -1646,7 +1685,7 @@ export default function EnhancedChatWithSidebar({
           ...session,
           messages: [...session.messages, userMessage, assistantMessage],
           lastUpdate: new Date(),
-          title: session.messages.length === 0 ? input.slice(0, 20) + '...' : session.title
+          title: isFirstUserQuestionInSession ? proposedSessionTitle : session.title
         } :
         session
     ))
@@ -1970,17 +2009,25 @@ export default function EnhancedChatWithSidebar({
 
   // RAGFlow 消息发送
   const sendRAGFlowMessage = async (messageContent: string, conversationId: string, assistantMessage: Message, initialFullContent: string) => {
-    if (!ragflowClientRef.current) {
+    // 优先使用代理客户端
+    const client = ragflowProxyClientRef.current || ragflowClientRef.current
+    if (!client) {
       throw new Error('RAGFlow 客户端未初始化')
     }
 
     let fullContent = initialFullContent // 使用本地变量
+    let activeConversationId = conversationId || ''
+
+    // 切换会话时，将当前会话ID设置到代理客户端（直连客户端不支持显式切换）
+    if (client instanceof RAGFlowProxyClient) {
+      client.setSessionId(activeConversationId || null)
+    }
 
     try {
       // RAGFlow 不需要文件附件处理，直接发送消息
-      await ragflowClientRef.current.sendMessage(
+      await client.sendMessage(
         messageContent,
-        (message: RAGFlowMessage) => {
+        (message: RAGFlowMessage | RAGFlowProxyMessage) => {
           console.log('[EnhancedChat] 收到RAGFlow流式消息:', {
             type: message.type,
             content: message.content,
@@ -1993,6 +2040,9 @@ export default function EnhancedChatWithSidebar({
 
           switch (message.type) {
             case 'content':
+              if (message.conversationId) {
+                activeConversationId = message.conversationId
+              }
               // 累积流式内容 - 确保内容是字符串
               const contentToAdd = normalizeRagflowContent(message.content)
 
@@ -2019,7 +2069,9 @@ export default function EnhancedChatWithSidebar({
                           reference: message.reference
                         } :
                         msg
-                    )
+                    ),
+                    conversationId: activeConversationId || session.conversationId,
+                    difyConversationId: activeConversationId || session.difyConversationId
                   } :
                   session
               ));
@@ -2049,6 +2101,9 @@ export default function EnhancedChatWithSidebar({
             // 移除 reference case，因为新的 blocking 模式不单独发送 reference
 
             case 'complete':
+              if (message.conversationId) {
+                activeConversationId = message.conversationId
+              }
               // 消息完成 - 确保内容是字符串
               const finalContent = message.content
                 ? normalizeRagflowContent(message.content)
@@ -2067,7 +2122,9 @@ export default function EnhancedChatWithSidebar({
                           reference: message.reference
                         } :
                         msg
-                    )
+                    ),
+                    conversationId: activeConversationId || session.conversationId,
+                    difyConversationId: activeConversationId || session.difyConversationId
                   } :
                   session
               ));
@@ -2796,6 +2853,12 @@ export default function EnhancedChatWithSidebar({
             <div className="space-y-6 w-full">
               {currentSession?.messages.map((message) => {
                 const isUser = message.role === 'user'
+                const rawContent = safeStringifyContent(message.content)
+                const shouldStripRagflowIds = !isUser && agentConfig?.platform === 'RAGFLOW'
+                const displayContent = shouldStripRagflowIds
+                  ? stripRagflowInlineReferenceMarkers(rawContent)
+                  : rawContent
+                const hasInlineReferenceMarkers = shouldStripRagflowIds && hasRagflowInlineReferenceMarkers(rawContent)
 
                 return (
                   <div key={message.id} className={`flex w-full ${isUser ? 'justify-end pr-8' : 'justify-start pl-8'} mb-6`}>
@@ -2824,13 +2887,13 @@ export default function EnhancedChatWithSidebar({
                                   messageId: message.id,
                                   contentType: typeof message.content,
                                   content: message.content,
-                                  safeContent: safeStringifyContent(message.content)
+                                  safeContent: rawContent
                                 })}
-                                <TypewriterEffect content={safeStringifyContent(message.content)} speed={20} />
+                                <TypewriterEffect content={displayContent} speed={20} />
                               </>
                             )
                           ) : (
-                            <EnhancedMessageContent content={safeStringifyContent(message.content)} />
+                            <EnhancedMessageContent content={displayContent} />
                           )}
 
                           {message.attachments && message.attachments.length > 0 && (
@@ -2847,7 +2910,7 @@ export default function EnhancedChatWithSidebar({
 
                           {/* 下载链接检测和显示 */}
                           {!isUser && !message.isStreaming && (() => {
-                            const fileLinks = extractFileLinks(safeStringifyContent(message.content))
+                            const fileLinks = extractFileLinks(displayContent)
                             return fileLinks.length > 0 && (
                               <div className="mt-3 space-y-2">
                                 {fileLinks.map((fileLink) => (
@@ -2920,7 +2983,7 @@ export default function EnhancedChatWithSidebar({
                                 className="h-7 px-2 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                                 onClick={async () => {
                                   try {
-                                    await navigator.clipboard.writeText(safeStringifyContent(message.content))
+                                    await navigator.clipboard.writeText(displayContent)
                                     toast.success('已复制到剪贴板')
                                   } catch (err) {
                                     console.error('复制失败:', err)
@@ -2932,7 +2995,7 @@ export default function EnhancedChatWithSidebar({
                                 复制
                               </Button>
                               <SaveKnowledgeButton
-                                content={safeStringifyContent(message.content)}
+                                content={displayContent}
                                 sourceMessageId={message.id}
                                 sourceType="assistant_reply"
                                 size="sm"
@@ -2962,6 +3025,12 @@ export default function EnhancedChatWithSidebar({
                               agentId={agentConfig?.localAgentId || agentConfig?.agentId}
                               datasetId={agentConfig?.datasetId}
                             />
+                          </div>
+                        )}
+                        {/* 检测到引用标记但未返回引用结构化数据时提示（便于排障） */}
+                        {!message.reference && hasInlineReferenceMarkers && (
+                          <div className="mt-2 text-left text-xs text-amber-600">
+                            检测到引用标记，但未返回引用数据（reference）。可检查 RAGFlow 是否开启引用返回、知识库检索是否命中，以及代理解析是否匹配当前接口版本。
                           </div>
                         )}
                       </div>

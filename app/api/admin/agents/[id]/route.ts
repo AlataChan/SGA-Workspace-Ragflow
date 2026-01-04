@@ -42,6 +42,7 @@ const platformConfigSchemas = {
   RAGFLOW: z.object({
     baseUrl: z.string().min(1, "RAGFlow URL不能为空"),
     apiKey: z.string().min(1, "API Key不能为空"),
+    idType: z.enum(['CHAT', 'AGENT']).default('CHAT'),
     agentId: z.string().min(1, "Agent ID或Chat ID不能为空"),
     datasetId: z.string().optional(), // 知识库ID，用于PDF预览功能
   }),
@@ -240,15 +241,17 @@ export const PUT = withAdminAuth(async (request, context) => {
       }
     }
 
-    // 验证平台配置（更新时更宽松，允许空的API Key）
-    if (updateData.platform && updateData.platformConfig) {
-      const platformSchema = platformConfigSchemas[updateData.platform]
+    // 验证平台配置（更新时更宽松，允许空的API Key；同时写回默认值/规范化字段）
+    const platformToValidate = (updateData.platform ?? existingAgent.platform) as AgentPlatform
+    let normalizedPlatformConfig: any = updateData.platformConfig
+    if (updateData.platformConfig) {
+      const platformSchema = platformConfigSchemas[platformToValidate]
       if (platformSchema) {
-        // 检查是否有API Key，如果没有就跳过验证
-        const hasApiKey = updateData.platformConfig.apiKey && updateData.platformConfig.apiKey.trim() !== ''
+        const hasApiKey =
+          typeof updateData.platformConfig.apiKey === 'string' &&
+          updateData.platformConfig.apiKey.trim() !== ''
 
         if (hasApiKey) {
-          // 只有当API Key不为空时才进行完整验证
           const configValidation = platformSchema.safeParse(updateData.platformConfig)
           if (!configValidation.success) {
             return NextResponse.json(
@@ -256,26 +259,30 @@ export const PUT = withAdminAuth(async (request, context) => {
                 error: {
                   code: 'PLATFORM_CONFIG_ERROR',
                   message: '平台配置错误',
-                  details: configValidation.error.flatten().fieldErrors
-                }
+                  details: configValidation.error.flatten().fieldErrors,
+                },
               },
               { status: 400, headers: corsHeaders }
             )
           }
+          normalizedPlatformConfig = configValidation.data
         } else {
-          // API Key为空时，只验证baseUrl
           if (updateData.platformConfig.baseUrl && updateData.platformConfig.baseUrl.trim() === '') {
             return NextResponse.json(
               {
                 error: {
                   code: 'PLATFORM_CONFIG_ERROR',
-                  message: '平台配置错误：Base URL不能为空'
-                }
+                  message: '平台配置错误：Base URL不能为空',
+                },
               },
               { status: 400, headers: corsHeaders }
             )
           }
         }
+      }
+
+      if (platformToValidate === 'RAGFLOW' && normalizedPlatformConfig && !normalizedPlatformConfig.idType) {
+        normalizedPlatformConfig = { ...normalizedPlatformConfig, idType: 'CHAT' }
       }
     }
 
@@ -285,15 +292,19 @@ export const PUT = withAdminAuth(async (request, context) => {
       updatedAt: new Date(),
     }
 
+    if (updateData.platformConfig) {
+      finalUpdateData.platformConfig = normalizedPlatformConfig
+    }
+
     // 处理连接状态字段
     if (updateData.connectionTestedAt) {
       finalUpdateData.connectionTestedAt = new Date(updateData.connectionTestedAt)
     }
 
     // 如果更新了平台配置，同时更新兼容性字段
-    if (updateData.platform === 'DIFY' && updateData.platformConfig) {
-      finalUpdateData.difyUrl = (updateData.platformConfig as any)?.baseUrl
-      finalUpdateData.difyKey = (updateData.platformConfig as any)?.apiKey
+    if (platformToValidate === 'DIFY' && normalizedPlatformConfig) {
+      finalUpdateData.difyUrl = (normalizedPlatformConfig as any)?.baseUrl
+      finalUpdateData.difyKey = (normalizedPlatformConfig as any)?.apiKey
     }
 
     // 更新Agent
