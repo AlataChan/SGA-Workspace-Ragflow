@@ -88,11 +88,24 @@ export default function RAGFlowReferenceCard({
     return null
   }
 
-  // 为 chunks 补全缺失的 dataset_id
-  const chunks = Object.values(reference.chunks).map(chunk => ({
-    ...chunk,
-    dataset_id: chunk.dataset_id || datasetId || ''
-  }))
+  const normalizeChunk = (chunk: any) => {
+    const document_id =
+      chunk.document_id ?? chunk.doc_id ?? chunk.documentId ?? chunk.docId ?? chunk.documentID ?? ''
+    const document_name =
+      chunk.document_name ?? chunk.doc_name ?? chunk.documentName ?? chunk.docName ?? chunk.documentNAME ?? ''
+    const dataset_id = chunk.dataset_id ?? chunk.datasetId ?? datasetId ?? ''
+    return {
+      ...chunk,
+      document_id,
+      document_name,
+      dataset_id,
+      img_id: chunk.img_id ?? chunk.image_id ?? chunk.imgId ?? chunk.imageId,
+      image_id: chunk.image_id ?? chunk.img_id ?? chunk.imageId ?? chunk.imgId,
+    }
+  }
+
+  // 兼容 chunks 为数组或对象，并补全缺失字段（尤其是 dataset_id / doc_id / doc_name）
+  const chunks = Object.values(reference.chunks as any).map((chunk: any) => normalizeChunk(chunk))
   const docAggs = Object.values(reference.doc_aggs || {})
 
   const toggleChunkExpansion = (chunkId: string) => {

@@ -271,7 +271,7 @@ function cleanRAGFlowBaseUrl(url: string): string {
 // RAGFlow连接测试函数
 async function testRAGFlowConnection(config: any): Promise<{ success: boolean, message: string }> {
   try {
-    const { baseUrl, apiKey, agentId } = config
+    const { baseUrl, apiKey, agentId, idType = 'CHAT' } = config
 
     if (!baseUrl || !apiKey || !agentId) {
       return {
@@ -286,64 +286,178 @@ async function testRAGFlowConnection(config: any): Promise<{ success: boolean, m
     console.log('测试 RAGFlow 连接:', {
       baseUrl: cleanBaseUrl,
       agentId,
+      idType,
       apiKeyLength: apiKey?.length || 0
     })
 
-    // RAGFlow 有两种类型：Chat Assistant 和 Agent
-    // 需要分别检查 /api/v1/chats 和 /api/v1/agents 端点
-    const endpoints = [
-      { url: `${cleanBaseUrl}/api/v1/agents`, type: 'Agent' },
-      { url: `${cleanBaseUrl}/api/v1/chats`, type: 'Chat Assistant' }
-    ]
+    const isAgentMode = String(idType).toUpperCase() === 'AGENT'
 
-    for (const endpoint of endpoints) {
-      console.log(`检查 ${endpoint.type} 端点:`, endpoint.url)
-
-      const response = await fetch(endpoint.url, {
+    // 辅助：在另一个列表中存在时给出更明确提示
+    const lookupInOtherList = async () => {
+      const otherUrl = isAgentMode ? `${cleanBaseUrl}/api/v1/chats` : `${cleanBaseUrl}/api/v1/agents`
+      const resp = await fetch(otherUrl, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
-        signal: AbortSignal.timeout(30000) // 30秒超时
+        signal: AbortSignal.timeout(30000)
+      })
+      if (!resp.ok) return null
+      const data = await resp.json().catch(() => ({}))
+      const items = Array.isArray(data.data)
+        ? data.data
+        : (data.data?.chats || data.data?.agents || [])
+      const found = Array.isArray(items) ? items.find((i: any) => i?.id === agentId) : null
+      return found ? (found.name || found.title || agentId) : null
+    }
+
+    if (!isAgentMode) {
+      // Chat Assistant 模式：必须能创建 session（否则后续聊天必报 You do not own the assistant / session mismatch）
+      const listUrl = `${cleanBaseUrl}/api/v1/chats`
+      const listResp = await fetch(listUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(30000)
       })
 
-      console.log(`${endpoint.type} API 响应:`, {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok
+      if (listResp.status === 401) {
+        return { success: false, message: 'RAGFlow API Key 无效或已过期' }
+      }
+      if (!listResp.ok) {
+        return { success: false, message: `获取 Chat Assistant 列表失败: ${listResp.status}` }
+      }
+
+      const listData = await listResp.json().catch(() => ({}))
+      const chats = Array.isArray(listData.data) ? listData.data : (listData.data?.chats || [])
+      const found = Array.isArray(chats) ? chats.find((c: any) => c?.id === agentId) : null
+      if (!found) {
+        const otherName = await lookupInOtherList()
+        if (otherName) {
+          return { success: false, message: `你选择的是 Chat Assistant，但该 ID 实际属于 Agent（${otherName}）。请切换为 Agent ID 类型。` }
+        }
+        return { success: false, message: `未找到 Chat Assistant ID "${agentId}"` }
+      }
+
+      const sessionUrl = `${cleanBaseUrl}/api/v1/chats/${agentId}/sessions`
+      const sessionName = `connection_test_${Date.now()}`
+      const createResp = await fetch(sessionUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: sessionName }),
+        signal: AbortSignal.timeout(30000)
       })
 
-      if (response.ok) {
-        const data = await response.json()
+      const createData = await createResp.json().catch(() => ({} as any))
+      const createMessage = String(createData?.message || createData?.error || '')
 
-        // 检查响应格式
-        if (data.code === 0 || data.success === true) {
-          // 检查是否能找到指定的 ID
-          if (data.data && Array.isArray(data.data)) {
-            const found = data.data.find((item: any) => item.id === agentId)
-            if (found) {
-              const name = found.name || found.title || agentId
-              return {
-                success: true,
-                message: `RAGFlow 连接成功，找到 ${endpoint.type} "${name}"`
-              }
-            }
+      if (!createResp.ok || createData?.code !== 0) {
+        if (createMessage.toLowerCase().includes('you do not own the assistant')) {
+          return {
+            success: false,
+            message: '该 API Key 无权使用此 Chat Assistant（You do not own the assistant）。请使用该助手所属账号的 API Key，或在当前账号下创建/复制该 Chat Assistant 后再填写 ID。'
           }
         }
-      } else if (response.status === 401) {
         return {
           success: false,
-          message: 'RAGFlow API Key 无效或已过期'
+          message: `找到 Chat Assistant，但无法创建会话（${createMessage || `HTTP ${createResp.status}` }）`
         }
       }
+
+      // 清理测试会话
+      const createdSessionId = createData?.data?.id
+      if (createdSessionId) {
+        await fetch(`${cleanBaseUrl}/api/v1/chats/${agentId}/sessions/${createdSessionId}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${apiKey}` },
+          signal: AbortSignal.timeout(30000)
+        }).catch(() => {})
+      }
+
+      const name = found.name || found.title || agentId
+      return { success: true, message: `RAGFlow 连接成功（Chat Assistant: ${name}）` }
     }
 
-    // 两个端点都没找到
-    return {
-      success: false,
-      message: `RAGFlow 连接成功，但未找到 Agent ID "${agentId}"。请确认：1) ID 是否正确；2) Agent/Chat 是否已发布`
+    // Agent 模式：建议直接测 /agents/{agent_id}/completions（stream=false）
+    const listUrl = `${cleanBaseUrl}/api/v1/agents`
+    const listResp = await fetch(listUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(30000)
+    })
+
+    if (listResp.status === 401) {
+      return { success: false, message: 'RAGFlow API Key 无效或已过期' }
     }
+    if (!listResp.ok) {
+      return { success: false, message: `获取 Agent 列表失败: ${listResp.status}` }
+    }
+
+    const listData = await listResp.json().catch(() => ({}))
+    const agents = Array.isArray(listData.data) ? listData.data : (listData.data?.agents || [])
+    const found = Array.isArray(agents) ? agents.find((a: any) => a?.id === agentId) : null
+    if (!found) {
+      const otherName = await lookupInOtherList()
+      if (otherName) {
+        return { success: false, message: `你选择的是 Agent，但该 ID 实际属于 Chat Assistant（${otherName}）。请切换为 Chat Assistant ID 类型。` }
+      }
+      return { success: false, message: `未找到 Agent ID "${agentId}"` }
+    }
+
+    const completionUrl = `${cleanBaseUrl}/api/v1/agents/${agentId}/completions`
+    const completionResp = await fetch(completionUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        question: 'connection_test',
+        stream: false,
+        user_id: 'connection_test'
+      }),
+      signal: AbortSignal.timeout(30000)
+    })
+
+    const completionData = await completionResp.json().catch(() => ({} as any))
+    const completionMessage = String(completionData?.message || completionData?.error || '')
+
+    if (!completionResp.ok || completionData?.code !== 0) {
+      if (completionMessage.toLowerCase().includes("don't own the agent") || completionMessage.toLowerCase().includes('do not own the agent')) {
+        return {
+          success: false,
+          message:
+            "该 API Key 无权使用此 Agent（You don't own the agent）。请使用该 Agent 所属账号的 API Key，或在当前账号下创建/复制该 Agent 后再填写 ID。"
+        }
+      }
+      return { success: false, message: `Agent 对话测试失败（${completionMessage || `HTTP ${completionResp.status}` }）` }
+    }
+
+    // 尽量清理测试会话
+    const createdSessionId = completionData?.data?.session_id
+    if (createdSessionId) {
+      await fetch(`${cleanBaseUrl}/api/v1/agents/${agentId}/sessions`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ids: [createdSessionId] }),
+        signal: AbortSignal.timeout(30000)
+      }).catch(() => {})
+    }
+
+    const name = found.name || found.title || agentId
+    return { success: true, message: `RAGFlow 连接成功（Agent: ${name}）` }
 
   } catch (error) {
     console.error('RAGFlow 连接测试异常:', error)

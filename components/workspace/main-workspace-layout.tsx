@@ -128,6 +128,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
   const [selectedKnowledgeGraph, setSelectedKnowledgeGraph] = useState<KnowledgeGraph | null>(null)
   const [knowledgeGraphsCollapsed, setKnowledgeGraphsCollapsed] = useState(false)
   const [graphData, setGraphData] = useState<{ nodes: any[], edges: any[] } | null>(null)
+  const [kgSearchQuery, setKgSearchQuery] = useState('') // 知识图谱搜索
 
   const router = useRouter()
 
@@ -651,7 +652,10 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
 
           {/* 知识图谱 - 可折叠 */}
           <div className="px-4 py-2">
-            <Collapsible open={!knowledgeGraphsCollapsed} onOpenChange={setKnowledgeGraphsCollapsed}>
+            <Collapsible
+              open={!knowledgeGraphsCollapsed}
+              onOpenChange={(open) => setKnowledgeGraphsCollapsed(!open)}
+            >
               <CollapsibleTrigger asChild>
                 <Button
                   variant="ghost"
@@ -671,10 +675,10 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                   )}
                 </Button>
               </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-3 mt-3">
+              <CollapsibleContent className="mt-2">
                 {knowledgeGraphs.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Network className="w-12 h-12 mx-auto text-gray-400 mb-2" />
+                  <div className="text-center py-6">
+                    <Network className="w-10 h-10 mx-auto text-gray-500 mb-2" />
                     <p className="text-sm text-gray-500 mb-2">暂无知识图谱</p>
                     {user.role === "ADMIN" && (
                       <Button variant="outline" size="sm" onClick={goToAdmin}>
@@ -683,51 +687,55 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                     )}
                   </div>
                 ) : (
-                  knowledgeGraphs.map((kg) => (
-                    <Card
-                      key={kg.id}
-                      className="group cursor-pointer hover:shadow-lg hover:scale-[1.02] transition-all duration-200 border-gray-200/50 dark:border-gray-700/50 bg-[#2d2d2d]/50 backdrop-blur-sm"
-                      onClick={() => handleSelectKnowledgeGraph(kg)}
-                    >
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start space-x-3">
-                          <div className="relative">
-                            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                              <Network className="w-6 h-6 text-white" />
+                  <>
+                    {/* 搜索框 - 仅当数量超过5个时显示 */}
+                    {knowledgeGraphs.length > 5 && (
+                      <div className="relative mb-2">
+                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+                        <Input
+                          type="text"
+                          placeholder="搜索图谱..."
+                          value={kgSearchQuery}
+                          onChange={(e) => setKgSearchQuery(e.target.value)}
+                          className="pl-7 h-7 text-xs bg-[#1f1f1f] border-[#3d3d3d] text-gray-200 placeholder-gray-500"
+                        />
+                      </div>
+                    )}
+                    {/* 紧凑列表 - 带内部滚动 */}
+                    <div className="max-h-[240px] overflow-y-auto space-y-0.5 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
+                      {knowledgeGraphs
+                        .filter(kg => !kgSearchQuery || kg.name.toLowerCase().includes(kgSearchQuery.toLowerCase()))
+                        .map((kg) => (
+                          <div
+                            key={kg.id}
+                            className="group flex items-center px-2 py-1.5 rounded-md cursor-pointer hover:bg-[#3d3d3d] transition-colors"
+                            onClick={() => handleSelectKnowledgeGraph(kg)}
+                          >
+                            {/* 左侧小图标 */}
+                            <div className="w-5 h-5 rounded bg-gradient-to-br from-purple-500/80 to-pink-500/80 flex items-center justify-center flex-shrink-0">
+                              <Network className="w-3 h-3 text-white" />
                             </div>
-                            {kg.isActive && (
-                              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-800 flex items-center justify-center">
-                                <div className="w-2 h-2 bg-white rounded-full" />
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <CardTitle className="text-sm font-semibold text-gray-100 truncate">
+                            {/* 中间名称 */}
+                            <span className="flex-1 ml-2 text-sm text-gray-200 truncate" title={kg.name}>
                               {kg.name}
-                            </CardTitle>
-                            <div className="flex items-center space-x-2 mt-1">
-                              <Badge
-                                variant="secondary"
-                                className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
-                              >
-                                图谱
-                              </Badge>
-                              <span className="text-xs text-gray-400">
-                                {kg.nodeCount} 节点
-                              </span>
+                            </span>
+                            {/* 右侧节点数和活跃状态 */}
+                            <div className="flex items-center space-x-1 flex-shrink-0">
+                              <span className="text-xs text-gray-500">{kg.nodeCount}</span>
+                              {kg.isActive && (
+                                <div className="w-1.5 h-1.5 rounded-full bg-green-500" title="活跃" />
+                              )}
                             </div>
                           </div>
+                        ))}
+                      {/* 搜索无结果提示 */}
+                      {kgSearchQuery && knowledgeGraphs.filter(kg => kg.name.toLowerCase().includes(kgSearchQuery.toLowerCase())).length === 0 && (
+                        <div className="text-center py-3 text-xs text-gray-500">
+                          未找到匹配的图谱
                         </div>
-                      </CardHeader>
-                      {kg.description && (
-                        <CardContent className="pt-0 pb-3">
-                          <CardDescription className="text-xs text-gray-400 line-clamp-2">
-                            {kg.description}
-                          </CardDescription>
-                        </CardContent>
                       )}
-                    </Card>
-                  ))
+                    </div>
+                  </>
                 )}
               </CollapsibleContent>
             </Collapsible>
@@ -898,9 +906,9 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
             )}
 
             {realAgents[selectedIndex] && (
-              <div className="flex flex-col flex-1">
+              <div className="flex flex-col flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-thumb-[#3c4043] scrollbar-track-transparent">
                 {/* 上方留空区域 - 减少留空 */}
-                <div className="flex-1 min-h-[40px]"></div>
+                <div className="min-h-[40px]" />
 
                 {/* Agent基本信息 - 稍微往下 */}
                 <div className="p-6 text-center border-b border-[#2d2d2d] mb-6">
@@ -924,7 +932,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                 </div>
 
                 {/* 详细信息区域 - 增加间距 */}
-                <div className="overflow-y-auto scrollbar-thin scrollbar-thumb-[#3c4043] scrollbar-track-transparent px-6 space-y-6 max-h-[280px]">
+                <div className="px-6 space-y-6">
                   {/* 部门信息 */}
                   <div>
                     <h4 className="text-sm font-medium text-[#e8eaed] mb-2 flex items-center">

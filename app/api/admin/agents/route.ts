@@ -41,6 +41,7 @@ const platformConfigSchemas = {
   RAGFLOW: z.object({
     baseUrl: z.string().min(1, "RAGFlow URL不能为空"),
     apiKey: z.string().min(1, "API Key不能为空"),
+    idType: z.enum(['CHAT', 'AGENT']).default('CHAT'),
     agentId: z.string().min(1, "Agent ID或Chat ID不能为空"),
     datasetId: z.string().optional(), // 知识库ID，用于PDF预览功能
   }),
@@ -210,8 +211,9 @@ export const POST = withAdminAuth(async (request) => {
       )
     }
 
-    // 验证平台配置
+    // 验证平台配置（并写回默认值/规范化字段）
     const platformSchema = platformConfigSchemas[platform]
+    let normalizedPlatformConfig: any = platformConfig
     if (platformSchema) {
       const configValidation = platformSchema.safeParse(platformConfig)
       if (!configValidation.success) {
@@ -226,6 +228,7 @@ export const POST = withAdminAuth(async (request) => {
           { status: 400, headers: corsHeaders }
         )
       }
+      normalizedPlatformConfig = configValidation.data
     }
 
     // 检查Agent名称是否已存在
@@ -267,11 +270,11 @@ export const POST = withAdminAuth(async (request) => {
       companyId: user.companyId,
       departmentId,
       platform,
-      platformConfig,
+      platformConfig: normalizedPlatformConfig,
       sortOrder: finalSortOrder,
       // 兼容性字段（如果是Dify平台）
-      difyUrl: platform === 'DIFY' ? (platformConfig as any)?.baseUrl : null,
-      difyKey: platform === 'DIFY' ? (platformConfig as any)?.apiKey : null,
+      difyUrl: platform === 'DIFY' ? (normalizedPlatformConfig as any)?.baseUrl : null,
+      difyKey: platform === 'DIFY' ? (normalizedPlatformConfig as any)?.apiKey : null,
       ...agentData,
     }
 

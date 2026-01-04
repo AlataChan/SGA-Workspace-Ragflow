@@ -61,24 +61,41 @@ export function InlineReference({
     // chunks可能是数组或对象，需要兼容处理
     if (Array.isArray(chunks)) {
       const index = parseInt(referenceId, 10)
-      return chunks[index]
+      const byIndex = Number.isFinite(index) ? chunks[index] : undefined
+      if (byIndex) return byIndex
+      return chunks.find((c: any) => String(c?.id) === referenceId || String(c?.chunk_id) === referenceId)
     }
     // 如果是对象，尝试按索引或ID查找
     return chunks[referenceId] || Object.values(chunks)[parseInt(referenceId, 10)]
   }, [reference, referenceId])
 
+  const normalizedChunk = useMemo(() => {
+    if (!chunk) return null
+    const anyChunk: any = chunk
+    return {
+      ...anyChunk,
+      document_id:
+        anyChunk.document_id ?? anyChunk.doc_id ?? anyChunk.documentId ?? anyChunk.docId ?? anyChunk.documentID ?? '',
+      document_name:
+        anyChunk.document_name ?? anyChunk.doc_name ?? anyChunk.documentName ?? anyChunk.docName ?? anyChunk.documentNAME ?? '',
+      dataset_id: anyChunk.dataset_id ?? anyChunk.datasetId ?? '',
+      img_id: anyChunk.img_id ?? anyChunk.image_id ?? anyChunk.imgId ?? anyChunk.imageId,
+      image_id: anyChunk.image_id ?? anyChunk.img_id ?? anyChunk.imageId ?? anyChunk.imgId,
+    }
+  }, [chunk])
+
   // 获取对应的文档信息
   const docAgg = useMemo(() => {
-    if (!chunk?.document_id || !reference?.doc_aggs) return null
+    if (!normalizedChunk?.document_id || !reference?.doc_aggs) return null
     const docAggs = reference.doc_aggs
     if (Array.isArray(docAggs)) {
-      return docAggs.find(d => d.doc_id === chunk.document_id)
+      return docAggs.find((d: any) => String(d?.doc_id) === String(normalizedChunk.document_id))
     }
-    return Object.values(docAggs).find(d => d.doc_id === chunk.document_id)
-  }, [chunk, reference])
+    return Object.values(docAggs).find((d: any) => String(d?.doc_id) === String(normalizedChunk.document_id))
+  }, [normalizedChunk, reference])
 
   // 如果没有找到chunk，显示占位符
-  if (!chunk) {
+  if (!normalizedChunk) {
     return (
       <span className={cn("text-gray-400 text-xs", className)}>
         [ref:{referenceId}]
@@ -87,9 +104,9 @@ export function InlineReference({
   }
 
   // 截断内容
-  const truncatedContent = chunk.content?.length > 200 
-    ? chunk.content.substring(0, 200) + '...' 
-    : chunk.content
+  const truncatedContent = normalizedChunk.content?.length > 200 
+    ? normalizedChunk.content.substring(0, 200) + '...' 
+    : normalizedChunk.content
 
   // 获取相似度颜色
   const getSimilarityColor = (similarity: number) => {
@@ -118,20 +135,20 @@ export function InlineReference({
           {/* 文档名称 */}
           <div className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-gray-100">
             <FileText className="w-4 h-4 text-blue-500" />
-            <span className="truncate">
-              {chunk.document_name || docAgg?.doc_name || '未知文档'}
+              <span className="truncate">
+              {normalizedChunk.document_name || (docAgg as any)?.doc_name || (docAgg as any)?.docName || '未知文档'}
             </span>
           </div>
           
           {/* 相似度 */}
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <span>相似度:</span>
-            <span className={getSimilarityColor(chunk.similarity || 0)}>
-              {((chunk.similarity || 0) * 100).toFixed(1)}%
+            <span className={getSimilarityColor(normalizedChunk.similarity || 0)}>
+              {((normalizedChunk.similarity || 0) * 100).toFixed(1)}%
             </span>
             <span className="text-gray-400">|</span>
-            <span>向量: {((chunk.vector_similarity || 0) * 100).toFixed(1)}%</span>
-            <span>词汇: {((chunk.term_similarity || 0) * 100).toFixed(1)}%</span>
+            <span>向量: {((normalizedChunk.vector_similarity || 0) * 100).toFixed(1)}%</span>
+            <span>词汇: {((normalizedChunk.term_similarity || 0) * 100).toFixed(1)}%</span>
           </div>
           
           {/* 内容预览 */}
@@ -140,10 +157,10 @@ export function InlineReference({
           </div>
           
           {/* 图片预览 (如果有) */}
-          {(chunk.img_id || chunk.image_id) && agentId && (
+          {(normalizedChunk.img_id || normalizedChunk.image_id) && agentId && (
             <div className="mt-2">
               <img
-                src={`/api/ragflow/image/${chunk.img_id || chunk.image_id}?agent_id=${agentId}`}
+                src={`/api/ragflow/image/${normalizedChunk.img_id || normalizedChunk.image_id}?agent_id=${agentId}`}
                 alt="Reference"
                 className="max-w-full h-auto rounded border border-gray-200 dark:border-gray-700 max-h-32 object-contain"
                 onError={(e) => {
@@ -159,4 +176,3 @@ export function InlineReference({
 }
 
 export default InlineReference
-

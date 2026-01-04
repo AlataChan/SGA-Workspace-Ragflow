@@ -107,3 +107,32 @@ export function normalizeRagflowContent(value: unknown): string {
   }
   return result;
 }
+
+const RAGFLOW_INLINE_REFERENCE_PATTERN = /\s*(?:\[(?:ID:)?\d+\]|##(?:ID:)?\d+##)+(?:\s*[:：])?/g
+
+export function hasRagflowInlineReferenceMarkers(text: string): boolean {
+  return /\[(?:ID:)?\d+\]|##(?:ID:)?\d+##/.test(text)
+}
+
+/**
+ * 移除 RAGFlow 回答中的行内引用标记（如 [ID:105]、##105##），避免直接展示在正文里。
+ * - 保留代码块内容，避免误删示例代码
+ * - 不影响 reference 结构化数据（用于引用卡片展示原文/片段）
+ */
+export function stripRagflowInlineReferenceMarkers(markdown: string): string {
+  if (!markdown) return markdown
+
+  const lines = markdown.split('\n')
+  let inFence = false
+
+  const cleaned = lines.map((line) => {
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence
+      return line
+    }
+    if (inFence) return line
+    return line.replace(RAGFLOW_INLINE_REFERENCE_PATTERN, '')
+  })
+
+  return cleaned.join('\n')
+}
