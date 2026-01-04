@@ -3,7 +3,7 @@
  * 通过服务端代理访问 RAGFlow，不在前端暴露 API 密钥
  */
 
-import { normalizeRagflowContent } from './ragflow-utils'
+import { normalizeRagflowContent, stripRagflowInlineReferenceMarkers } from './ragflow-utils'
 
 export interface RAGFlowProxyConfig {
   agentId: string  // 本地 Agent ID（不是 RAGFlow 的 chatId）
@@ -157,7 +157,29 @@ export class RAGFlowProxyClient {
         if (current.startsWith(incoming)) return current
 
         const compact = (s: string) => s.replace(/\s+/g, '')
-        if (compact(incoming).startsWith(compact(current))) return incoming
+        const canonical = (s: string) => compact(stripRagflowInlineReferenceMarkers(s))
+
+        const canonCurrent = canonical(current)
+        const canonIncoming = canonical(incoming)
+
+        // 有些 RAGFlow 会在流式过程中插入/调整引用标记，导致“看起来不像前缀”，这里用 canonical 做判定
+        if (canonIncoming.startsWith(canonCurrent)) return incoming
+        if (canonCurrent.startsWith(canonIncoming)) return current
+        if (canonIncoming.includes(canonCurrent) && canonIncoming.length >= canonCurrent.length) return incoming
+
+        // 兼容“累计全文但中段轻微改动”（标点/换行等），避免误判为增量而导致全文拼接翻倍
+        if (canonCurrent.length > 0 && canonIncoming.length > 0) {
+          const minLen = Math.min(canonCurrent.length, canonIncoming.length)
+          let commonPrefix = 0
+          for (let i = 0; i < minLen; i++) {
+            if (canonCurrent[i] !== canonIncoming[i]) break
+            commonPrefix++
+          }
+          const ratio = commonPrefix / minLen
+          if (ratio >= 0.85) {
+            return incoming.length >= current.length ? incoming : current
+          }
+        }
 
         const maxProbe = Math.min(200, current.length, incoming.length)
         for (let k = maxProbe; k >= 20; k--) {

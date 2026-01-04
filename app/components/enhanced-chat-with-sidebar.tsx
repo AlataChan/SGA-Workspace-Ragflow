@@ -996,21 +996,27 @@ export default function EnhancedChatWithSidebar({
     const newSession: ChatSession = {
       id: newSessionId,
       title: '新对话',
-      messages: [],
+      messages: [{
+        id: nanoid(),
+        role: 'assistant' as const,
+        content: `你好！我是${agentName}。`,
+        timestamp: Date.now()
+      }],
       lastUpdate: new Date(),
       conversationId: '' // 新会话没有conversation_id
     }
 
-    // 重置DifyClient的conversation_id，确保新会话独立
+    // 重置 Dify 客户端的 conversation_id
     if (difyClientRef.current) {
       difyClientRef.current.setConversationId(null)
     }
+    // 重置 RAGFlow 客户端的 session_id
+    if (ragflowProxyClientRef.current) {
+      ragflowProxyClientRef.current.setSessionId(null)
+    }
 
-    // 将当前“非历史会话”归档到历史（只保留一个“当前会话”）
-    setSessions(prev => [
-      newSession,
-      ...prev.map(s => (s.isHistory ? s : { ...s, isHistory: true }))
-    ])
+    // 简化：直接替换当前会话，不维护 sessions 列表
+    setSessions([newSession])
     setCurrentSessionId(newSession.id)
     setInput('')
     setAttachments([])
@@ -1024,18 +1030,11 @@ export default function EnhancedChatWithSidebar({
       setIsLoadingHistory(true)
       console.log('[EnhancedChat] 加载历史对话:', historyConv.id)
 
-      // 检查是否已经加载过这个历史对话
-      const existingSession = sessions.find(session =>
-        session.difyConversationId === historyConv.id || session.id === historyConv.id // RAGFlow直接用id
-      )
-
-      if (existingSession) {
-        console.log('[EnhancedChat] 历史对话已存在，直接切换:', existingSession.id)
-        setCurrentSessionId(existingSession.id)
-        if (window.innerWidth < 768) {
-          setSidebarCollapsed(true)
-        }
-        return
+      // 设置客户端的会话 ID
+      if (agentConfig?.platform === 'RAGFLOW' && ragflowProxyClientRef.current) {
+        ragflowProxyClientRef.current.setSessionId(historyConv.id)
+      } else if (agentConfig?.platform === 'DIFY' && difyClientRef.current) {
+        difyClientRef.current.setConversationId(historyConv.id)
       }
 
       // 检查消息缓存（10分钟有效期）
@@ -1216,21 +1215,13 @@ export default function EnhancedChatWithSidebar({
           }
         })(),
         difyConversationId: historyConv.id, // 兼容Dify
-        isHistory: true,
+        conversationId: historyConv.id, // RAGFlow 会话 ID
         agentName: agentName,
         agentAvatar: actualAgentAvatar
       }
 
-      // 添加到会话列表并切换到该会话
-      setSessions(prev => {
-        const existing = prev.find(s => s.id === newSession.id)
-        if (existing) {
-          // 如果已存在，则更新
-          return prev.map(s => s.id === newSession.id ? newSession : s)
-        }
-        // 否则添加
-        return [newSession, ...prev]
-      })
+      // 简化：直接设置为当前会话
+      setSessions([newSession])
       setCurrentSessionId(newSession.id)
       if (window.innerWidth < 768) {
         setSidebarCollapsed(true)
@@ -1252,7 +1243,7 @@ export default function EnhancedChatWithSidebar({
     } finally {
       setIsLoadingHistory(false)
     }
-  }, [sessions, agentConfig, agentName, actualAgentAvatar])
+  }, [agentConfig, agentName, actualAgentAvatar])
 
   // 初始化时获取历史对话
   useEffect(() => {
@@ -1272,20 +1263,8 @@ export default function EnhancedChatWithSidebar({
     fetchHistoryConversations
   ])
 
-  // 删除历史对话
+  // 删除历史对话（简化版：只操作 historyConversations）
   const deleteHistoryConversation = async (conversationId: string) => {
-    // 本地会话（draft）直接删除
-    if (conversationId.startsWith('draft_')) {
-      setSessions(prev => prev.filter(session => session.id !== conversationId))
-      if (currentSessionId === conversationId) {
-        const fallback = sessions.find(s => s.id !== conversationId) || null
-        if (fallback) setCurrentSessionId(fallback.id)
-        else createNewSession()
-      }
-      toast.success('会话已删除')
-      return
-    }
-
     if (agentConfig?.platform === 'DIFY' && difyClientRef.current) {
       try {
         await difyClientRef.current.deleteConversation(conversationId)
@@ -1324,20 +1303,15 @@ export default function EnhancedChatWithSidebar({
       conv => conv.id !== conversationId
     )
 
-    // 如果当前会话是被删除的历史会话，切换到默认会话
-    const currentSession = sessions.find(s => s.id === currentSessionId)
-    if (currentSession?.difyConversationId === conversationId || currentSession?.id === conversationId) { // 兼容RAGFlow
-      const defaultSession = sessions.find(s => !s.isHistory) // 找到非历史会话
-      if (defaultSession) {
-        setCurrentSessionId(defaultSession.id)
-      } else {
-        // 如果没有非历史会话，创建一个新的
-        createNewSession()
-      }
-    }
+    // 清除消息缓存
+    delete messageCacheRef.current[conversationId]
 
-    // 从会话列表中移除对应的会话
-    setSessions(prev => prev.filter(session => session.difyConversationId !== conversationId && session.id !== conversationId))
+    // 如果当前会话是被删除的历史会话，创建新会话
+    if (currentSession?.conversationId === conversationId ||
+        currentSession?.difyConversationId === conversationId ||
+        currentSession?.id === conversationId) {
+      createNewSession()
+    }
   }
 
   // 将 RAGFlow 会话与引用信息持久化到本地（Prisma），用于历史回看引用
@@ -2630,96 +2604,7 @@ export default function EnhancedChatWithSidebar({
           {!sidebarCollapsed && (
             <ScrollArea className="flex-1 p-2">
               <div className="space-y-4">
-                {/* 当前会话 */}
-                <div>
-                  <h3 className="text-xs font-medium text-blue-200/70 mb-2 px-2">当前会话</h3>
-                  <div className="space-y-2">
-                    {sessions.filter(session => !session.isHistory).map((session) => (
-                      <div
-                        key={session.id}
-                        className={`p-3 rounded-lg cursor-pointer transition-colors ${session.id === currentSessionId
-                          ? 'bg-blue-600/20 border border-blue-500/30'
-                          : 'bg-slate-800/30 hover:bg-slate-700/30'
-                          }`}
-                        onClick={() => setCurrentSessionId(session.id)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1 min-w-0">
-                            {editingSessionId === session.id ? (
-                              <div className="flex items-center space-x-2">
-                                <input
-                                  type="text"
-                                  value={editingTitle}
-                                  onChange={(e) => setEditingTitle(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') saveRename()
-                                    if (e.key === 'Escape') cancelRename()
-                                  }}
-                                  className="flex-1 bg-slate-700 text-white text-sm px-2 py-1 rounded border border-blue-500/30 focus:outline-none focus:border-blue-400"
-                                  autoFocus
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={saveRename}
-                                  className="text-green-400 hover:text-green-300 hover:bg-green-500/10 p-1"
-                                >
-                                  <Check className="w-3 h-3" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={cancelRename}
-                                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1"
-                                >
-                                  <X className="w-3 h-3" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <>
-                                <h4 className="text-sm font-medium text-white truncate">
-                                  {session.title}
-                                </h4>
-                                <p className="text-xs text-blue-200/70 mt-1">
-                                  {session.messages.length} 条消息 • {new Date(session.lastUpdate).toLocaleDateString()}
-                                </p>
-                              </>
-                            )}
-                          </div>
-                          {editingSessionId !== session.id && (
-                            <div className="flex items-center space-x-1 ml-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  startRenaming(session.id, session.title)
-                                }}
-                                className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 p-1"
-                              >
-                                <Edit3 className="w-3 h-3" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  const conversationId = session.difyConversationId || session.conversationId || session.id
-                                  deleteHistoryConversation(conversationId)
-                                }}
-                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 历史会话 */}
+                {/* 历史会话 - 简化后的唯一会话列表 */}
                 <div>
                   <div className="flex items-center justify-between px-2 mb-2">
                     <h3 className="text-xs font-medium text-blue-200/70">历史会话</h3>
@@ -2749,97 +2634,21 @@ export default function EnhancedChatWithSidebar({
                   )}
 
                   <div className="space-y-2">
-                    {/* 已加载的历史会话 */}
-                    {sessions.filter(session => session.isHistory).map((session) => (
-                      <div
-                        key={session.id}
-                        className={`p-3 rounded-lg cursor-pointer transition-colors ${session.id === currentSessionId
-                          ? 'bg-blue-600/20 border border-blue-500/30'
-                          : 'bg-slate-800/30 hover:bg-slate-700/30'
-                          }`}
-                        onClick={() => setCurrentSessionId(session.id)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1 min-w-0">
-                            {editingSessionId === session.id ? (
-                              <div className="flex items-center space-x-2">
-                                <input
-                                  type="text"
-                                  value={editingTitle}
-                                  onChange={(e) => setEditingTitle(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') saveRename()
-                                    if (e.key === 'Escape') cancelRename()
-                                  }}
-                                  className="flex-1 bg-slate-700 text-white text-sm px-2 py-1 rounded border border-blue-500/30 focus:outline-none focus:border-blue-400"
-                                  autoFocus
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={saveRename}
-                                  className="text-green-400 hover:text-green-300 hover:bg-green-500/10 p-1"
-                                >
-                                  <Check className="w-3 h-3" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={cancelRename}
-                                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1"
-                                >
-                                  <X className="w-3 h-3" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <>
-                                <h4 className="text-sm font-medium text-white truncate">
-                                  {session.title}
-                                </h4>
-                                <p className="text-xs text-blue-200/70 mt-1">
-                                  {session.messages.length} 条消息 • 历史 • {new Date(session.lastUpdate).toLocaleDateString()}
-                                </p>
-                              </>
-                            )}
-                          </div>
-                          {editingSessionId !== session.id && (
-                            <div className="flex items-center space-x-1 ml-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  startRenaming(session.id, session.title)
-                                }}
-                                className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 p-1"
-                              >
-                                <Edit3 className="w-3 h-3" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  const conversationId = session.difyConversationId || session.conversationId || session.id
-                                  deleteHistoryConversation(conversationId)
-                                }}
-                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                    {/* 历史会话列表 - 从 API 获取的唯一数据源 */}
+                    {historyConversations.map((historyConv) => {
+                      // 判断是否是当前正在查看的会话
+                      const isCurrentSession = currentSession?.conversationId === historyConv.id ||
+                        currentSession?.difyConversationId === historyConv.id ||
+                        currentSession?.id === historyConv.id
 
-                    {/* 未加载的历史会话 */}
-                    {historyConversations
-                      .filter(historyConv => !sessions.some(session => session.difyConversationId === historyConv.id || session.id === historyConv.id)) // 兼容RAGFlow
-                      .map((historyConv) => (
+                      return (
                         <div
                           key={`history_${historyConv.id}`}
-                          className="p-3 rounded-lg transition-colors bg-slate-800/20 hover:bg-slate-700/30 border border-slate-600/30 group"
+                          className={`p-3 rounded-lg transition-colors group ${
+                            isCurrentSession
+                              ? 'bg-blue-600/20 border border-blue-500/30'
+                              : 'bg-slate-800/20 hover:bg-slate-700/30 border border-slate-600/30'
+                          }`}
                         >
                           <div className="flex items-center justify-between">
                             <div
@@ -2952,7 +2761,8 @@ export default function EnhancedChatWithSidebar({
                             )}
                           </div>
                         </div>
-                      ))}
+                      )
+                    })}
 
                     {/* 加载更多按钮 */}
                     {hasMoreHistory && !isLoadingHistory && (
