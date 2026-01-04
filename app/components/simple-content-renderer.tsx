@@ -28,8 +28,8 @@ export default function SimpleContentRenderer({ content }: SimpleContentRenderer
       renderer: {
         // 自定义表格渲染 - 深色主题
         table(token: Tokens.Table): string {
-          const header = this.parser.parse(token.header);
-          const body = this.parser.parse(token.rows.flat());
+          const header = this.parser.parse(token.header as any);
+          const body = this.parser.parse(token.rows.flat() as any);
           return `<div class="table-container" style="margin: 15px 0; overflow-x: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); border: 1px solid #374151;">
             <table style="width: 100%; border-collapse: collapse; font-size: 14px; background: rgba(31, 41, 55, 0.8); min-width: 400px;">
               <thead><tr>${header}</tr></thead>

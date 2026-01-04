@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState, memo } from 'react';
 import * as d3 from 'd3';
+import { getEntityColor } from '@/lib/utils/entity-colors';
 
 interface Node {
   id: string;
@@ -35,27 +36,6 @@ interface D3ForceGraphProps {
 }
 
 const NODE_RADIUS = 28;
-
-// 获取节点颜色 - 优化颜色方案
-const getNodeColor = (type: string, isTemporary?: boolean) => {
-  if (isTemporary) {
-    switch (type) {
-      case 'PERSON': return '#f59e0b';
-      case 'ORGANIZATION': return '#ef4444';
-      case 'CATEGORY': return '#ec4899';
-      case 'EVENT': return '#8b5cf6';
-      default: return '#fbbf24';
-    }
-  }
-  
-  switch (type) {
-    case 'PERSON': return '#3b82f6';
-    case 'ORGANIZATION': return '#10b981';
-    case 'CATEGORY': return '#8b5cf6';
-    case 'EVENT': return '#dc2626';
-    default: return '#6b7280';
-  }
-};
 
 // 分析节点关联关系
 const analyzeNodeRelations = (selectedNodeId: string, links: Link[]) => {
@@ -184,7 +164,7 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
       .data(nodes)
       .join("circle")
       .attr("r", NODE_RADIUS)
-      .attr("fill", d => getNodeColor(d.type, d.isTemporary))
+      .attr("fill", d => getEntityColor(d.type, d.isTemporary))
       .attr("stroke", "#fff")
       .attr("stroke-width", 2)
       .style("cursor", "pointer")
@@ -247,19 +227,21 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
         onNodeClickRef.current?.(d);
       });
 
-    // 创建标签
+    // 创建标签 - 白色字体配合深色背景，添加阴影增强可读性
     const labels = g.append("g")
       .attr("class", "labels")
       .selectAll("text")
       .data(nodes)
       .join("text")
-      .text(d => d.name)
-      .attr("font-size", "12px")
-      .attr("font-family", "Arial, sans-serif")
-      .attr("fill", "#333")
+      .text(d => d.name.length > 10 ? d.name.substring(0, 10) + '...' : d.name)
+      .attr("font-size", "14px")
+      .attr("font-family", "Microsoft YaHei, SimHei, Arial, sans-serif")
+      .attr("fill", "#ffffff")
+      .attr("font-weight", "500")
       .attr("text-anchor", "middle")
       .attr("dy", "0.35em")
-      .style("pointer-events", "none");
+      .style("pointer-events", "none")
+      .style("text-shadow", "0 1px 3px rgba(0,0,0,0.8), 0 -1px 3px rgba(0,0,0,0.8), 1px 0 3px rgba(0,0,0,0.8), -1px 0 3px rgba(0,0,0,0.8)");
 
     // 添加动画完成标志
     let animationCompleted = false;

@@ -58,6 +58,7 @@ interface Agent {
   photoUrl?: string
   platform: string
   platformConfig?: any  // 平台配置
+  agentConfig?: any  // Agent配置
   isActive: boolean
   isOnline: boolean
   difyUrl?: string  // Dify API URL (兼容字段)
@@ -76,6 +77,7 @@ interface Agent {
 
 interface UserProfile {
   id: string
+  user_id?: string
   username: string
   display_name?: string
   avatar_url?: string
@@ -125,7 +127,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
   const [knowledgeGraphs, setKnowledgeGraphs] = useState<KnowledgeGraph[]>([])
   const [selectedKnowledgeGraph, setSelectedKnowledgeGraph] = useState<KnowledgeGraph | null>(null)
   const [knowledgeGraphsCollapsed, setKnowledgeGraphsCollapsed] = useState(false)
-  const [graphData, setGraphData] = useState<{ nodes: any[], links: any[] } | null>(null)
+  const [graphData, setGraphData] = useState<{ nodes: any[], edges: any[] } | null>(null)
 
   const router = useRouter()
 
@@ -156,7 +158,31 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
       const response = await fetch('/api/knowledge-graphs')
       if (response.ok) {
         const data = await response.json()
-        setKnowledgeGraphs(data.data || [])
+        const graphs = data.data || []
+        setKnowledgeGraphs(graphs)
+
+        // 异步更新每个图谱的节点数（后台执行，不阻塞UI）
+        graphs.forEach(async (kg: KnowledgeGraph) => {
+          // 如果节点数为0，尝试从图谱API获取真实数据
+          if (kg.nodeCount === 0) {
+            try {
+              const graphResponse = await fetch(`/api/knowledge-graphs/${kg.id}/graph`)
+              if (graphResponse.ok) {
+                const graphData = await graphResponse.json()
+                if (graphData.success && graphData.data) {
+                  const nodeCount = graphData.data.nodes?.length || 0
+                  const edgeCount = graphData.data.links?.length || 0
+                  // 更新本地状态
+                  setKnowledgeGraphs(prev => prev.map(g =>
+                    g.id === kg.id ? { ...g, nodeCount, edgeCount } : g
+                  ))
+                }
+              }
+            } catch (err) {
+              console.log(`获取图谱 ${kg.name} 数据失败:`, err)
+            }
+          }
+        })
       }
     } catch (error) {
       console.error('加载知识图谱失败:', error)

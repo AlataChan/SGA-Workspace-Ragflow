@@ -1,3 +1,4 @@
+// 聊天数据库层 - 使用SimpleDB实现
 import { db } from './simple-db'
 import { nanoid } from 'nanoid'
 
@@ -33,29 +34,17 @@ export interface ChatMessage {
   tools?: any
 }
 
+// 内存存储 - 用于聊天会话和消息
+const chatSessions: Map<string, ChatSession> = new Map()
+const chatMessages: Map<string, ChatMessage[]> = new Map()
+
 export class ChatDatabase {
   // 创建新的聊天会话
   static async createSession(userId: string, topic: string = '新对话'): Promise<ChatSession> {
     const sessionId = nanoid()
     const now = new Date()
 
-    const { data, error } = await db
-      .from('chat_sessions')
-      .insert({
-        id: sessionId,
-        user_id: userId,
-        topic,
-        created_at: now.toISOString(),
-        updated_at: now.toISOString()
-      })
-      .select()
-      .single()
-
-    if (error) {
-      throw new Error(`创建会话失败: ${error.message}`)
-    }
-
-    return {
+    const session: ChatSession = {
       id: sessionId,
       userId,
       topic,
@@ -67,78 +56,70 @@ export class ChatDatabase {
       wordCount: 0,
       charCount: 0
     }
+
+    chatSessions.set(sessionId, session)
+    chatMessages.set(sessionId, [])
+
+    return session
   }
 
   // 获取用户的所有聊天会话
   static async getUserSessions(userId: string): Promise<ChatSession[]> {
-    const { data, error } = await db
-      .from('chat_sessions')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('is_deleted', false)
-      .order('updated_at', { ascending: false })
+    const sessions: ChatSession[] = []
 
-    if (error) {
-      throw new Error(`获取会话列表失败: ${error.message}`)
-    }
+    chatSessions.forEach(session => {
+      if (session.userId === userId && !session.isDeleted) {
+        sessions.push(session)
+      }
+    })
 
-    return (data || []).map(row => ({
-      id: row.id,
-      userId: row.user_id,
-      topic: row.topic,
-      conversationId: row.conversation_id,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at),
-      lastMessageAt: row.last_message_at ? new Date(row.last_message_at) : undefined,
-      messageCount: row.message_count || 0,
-      isDeleted: row.is_deleted || false,
-      modelConfig: row.model_config,
-      maskConfig: row.mask_config,
-      tokenCount: row.token_count || 0,
-      wordCount: row.word_count || 0,
-      charCount: row.char_count || 0
-    }))
+    // 按更新时间倒序排列
+    return sessions.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
   }
 
   // 更新会话主题
   static async updateSessionTopic(sessionId: string, userId: string, topic: string): Promise<boolean> {
-    const { error } = await db
-      .from('chat_sessions')
-      .update({
-        topic,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', sessionId)
-      .eq('user_id', userId)
+    const session = chatSessions.get(sessionId)
 
-    return !error
+    if (!session || session.userId !== userId) {
+      return false
+    }
+
+    session.topic = topic
+    session.updatedAt = new Date()
+    chatSessions.set(sessionId, session)
+
+    return true
   }
 
   // 更新会话的conversation_id
   static async updateSessionConversationId(sessionId: string, conversationId: string): Promise<boolean> {
-    const { error } = await db
-      .from('chat_sessions')
-      .update({
-        conversation_id: conversationId,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', sessionId)
+    const session = chatSessions.get(sessionId)
 
-    return !error
+    if (!session) {
+      return false
+    }
+
+    session.conversationId = conversationId
+    session.updatedAt = new Date()
+    chatSessions.set(sessionId, session)
+
+    return true
   }
 
   // 删除会话（软删除）
   static async deleteSession(sessionId: string, userId: string): Promise<boolean> {
-    const { error } = await db
-      .from('chat_sessions')
-      .update({
-        is_deleted: true,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', sessionId)
-      .eq('user_id', userId)
+    const session = chatSessions.get(sessionId)
 
-    return !error
+    if (!session || session.userId !== userId) {
+      return false
+    }
+
+    session.isDeleted = true
+    session.updatedAt = new Date()
+    chatSessions.set(sessionId, session)
+
+    return true
   }
 
   // 添加消息到会话
@@ -159,30 +140,7 @@ export class ChatDatabase {
     const messageId = nanoid()
     const now = new Date()
 
-    const { data, error } = await db
-      .from('chat_messages')
-      .insert({
-        id: messageId,
-        session_id: sessionId,
-        user_id: userId,
-        role,
-        content,
-        created_at: now.toISOString(),
-        model: options.model || null,
-        token_count: options.tokenCount || 0,
-        streaming: options.streaming || false,
-        is_error: options.isError || false,
-        attachments: options.attachments || null,
-        tools: options.tools || null
-      })
-      .select()
-      .single()
-
-    if (error) {
-      throw new Error(`添加消息失败: ${error.message}`)
-    }
-
-    return {
+    const message: ChatMessage = {
       id: messageId,
       sessionId,
       userId,
@@ -196,64 +154,53 @@ export class ChatDatabase {
       attachments: options.attachments,
       tools: options.tools
     }
+
+    // 获取或创建会话消息数组
+    let messages = chatMessages.get(sessionId)
+    if (!messages) {
+      messages = []
+      chatMessages.set(sessionId, messages)
+    }
+    messages.push(message)
+
+    // 更新会话统计
+    const session = chatSessions.get(sessionId)
+    if (session) {
+      session.messageCount = messages.length
+      session.lastMessageAt = now
+      session.updatedAt = now
+      session.tokenCount += options.tokenCount || 0
+      session.wordCount += content.split(/\s+/).filter(Boolean).length
+      session.charCount += content.length
+      chatSessions.set(sessionId, session)
+    }
+
+    return message
   }
 
   // 获取会话的所有消息
   static async getSessionMessages(sessionId: string, userId: string): Promise<ChatMessage[]> {
-    const { data, error } = await db
-      .from('chat_messages')
-      .select('*')
-      .eq('session_id', sessionId)
-      .eq('user_id', userId)
-      .order('created_at', { ascending: true })
+    const session = chatSessions.get(sessionId)
 
-    if (error) {
-      throw new Error(`获取消息失败: ${error.message}`)
+    // 验证用户权限
+    if (!session || session.userId !== userId) {
+      return []
     }
 
-    return (data || []).map(row => ({
-      id: row.id,
-      sessionId: row.session_id,
-      userId: row.user_id,
-      role: row.role as 'user' | 'assistant' | 'system',
-      content: row.content,
-      createdAt: new Date(row.created_at),
-      model: row.model,
-      tokenCount: row.token_count || 0,
-      streaming: row.streaming || false,
-      isError: row.is_error || false,
-      attachments: row.attachments,
-      tools: row.tools
-    }))
+    const messages = chatMessages.get(sessionId) || []
+
+    // 按创建时间升序排列
+    return messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
   }
 
   // 获取会话详情
   static async getSession(sessionId: string, userId: string): Promise<ChatSession | null> {
-    const { data, error } = await db
-      .from('chat_sessions')
-      .select('*')
-      .eq('id', sessionId)
-      .eq('user_id', userId)
-      .eq('is_deleted', false)
-      .single()
+    const session = chatSessions.get(sessionId)
 
-    if (error || !data) return null
-
-    return {
-      id: data.id,
-      userId: data.user_id,
-      topic: data.topic,
-      conversationId: data.conversation_id,
-      createdAt: new Date(data.created_at),
-      updatedAt: new Date(data.updated_at),
-      lastMessageAt: data.last_message_at ? new Date(data.last_message_at) : undefined,
-      messageCount: data.message_count || 0,
-      isDeleted: data.is_deleted || false,
-      modelConfig: data.model_config,
-      maskConfig: data.mask_config,
-      tokenCount: data.token_count || 0,
-      wordCount: data.word_count || 0,
-      charCount: data.char_count || 0
+    if (!session || session.userId !== userId || session.isDeleted) {
+      return null
     }
+
+    return session
   }
 }

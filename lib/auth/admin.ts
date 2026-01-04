@@ -6,6 +6,7 @@ const prisma = new PrismaClient()
 
 export interface AdminUser {
   id: string
+  userId: string  // 别名，与 id 相同
   username: string
   companyId: string
   role: string
@@ -51,6 +52,7 @@ export async function verifyAdminAuth(request: NextRequest): Promise<AdminUser |
 
     return {
       id: user.id,
+      userId: user.id,  // 别名
       username: user.username,
       companyId: user.companyId,
       role: user.role

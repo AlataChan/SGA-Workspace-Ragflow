@@ -7,6 +7,19 @@ import { logger } from "@/lib/utils/logger"
 const CSRF_TOKEN_LENGTH = 32
 const CSRF_TOKEN_LIFETIME = 24 * 60 * 60 * 1000 // 24小时
 
+/**
+ * 判断 Cookie 是否应该设置 Secure 属性
+ * 优先使用 COOKIE_SECURE 环境变量，否则根据 NODE_ENV 判断
+ */
+function shouldUseSecureCookie(): boolean {
+  // 显式设置的环境变量优先级最高
+  if (process.env.COOKIE_SECURE !== undefined) {
+    return process.env.COOKIE_SECURE === 'true'
+  }
+  // 默认：生产环境使用 secure
+  return process.env.NODE_ENV === 'production'
+}
+
 // CSRF令牌接口
 interface CSRFToken {
   token: string
@@ -177,43 +190,14 @@ export function generateCSRFTokenResponse(sessionId?: string): Response {
       headers: {
         "Content-Type": "application/json",
         // 设置CSRF令牌到Cookie（可选）
-        "Set-Cookie": `csrf-token=${token}; HttpOnly; Secure; SameSite=Strict; Max-Age=${CSRF_TOKEN_LIFETIME / 1000}`,
+        "Set-Cookie": `csrf-token=${token}; HttpOnly;${shouldUseSecureCookie() ? ' Secure;' : ''} SameSite=Strict; Max-Age=${CSRF_TOKEN_LIFETIME / 1000}`,
       },
     }
   )
 }
 
-// React Hook：获取和管理CSRF令牌
-export function useCSRFToken() {
-  const [token, setToken] = React.useState<string | null>(null)
-  const [loading, setLoading] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
-
-  const fetchToken = React.useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    
-    try {
-      const response = await fetch("/api/csrf-token")
-      if (!response.ok) {
-        throw new Error("获取CSRF令牌失败")
-      }
-      
-      const data = await response.json()
-      setToken(data.csrfToken)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "未知错误")
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  React.useEffect(() => {
-    fetchToken()
-  }, [fetchToken])
-
-  return { token, loading, error, refetch: fetchToken }
-}
+// 注意：CSRF token 的客户端管理应该在 React 组件中直接实现
+// 不建议在此服务器端模块中定义 React hooks
 
 // 安全的fetch包装器，自动添加CSRF令牌
 export async function secureFetch(
@@ -268,7 +252,7 @@ export class DoubleSubmitCSRF {
     const headerToken = request.headers.get(this.headerName)
 
     // 比较两个令牌
-    return cookieToken && headerToken && cookieToken === headerToken
+    return !!(cookieToken && headerToken && cookieToken === headerToken)
   }
 
   private extractTokenFromCookie(cookieHeader: string | null): string | null {

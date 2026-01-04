@@ -321,7 +321,7 @@ export default function UsersPage() {
       }
     } catch (error) {
       console.error('添加Agent权限失败:', error)
-      setMessage({ type: 'error', text: error.message || '添加Agent权限失败' })
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : '添加Agent权限失败' })
       setTimeout(() => setMessage(null), 3000)
     }
   }
@@ -346,7 +346,7 @@ export default function UsersPage() {
       }
     } catch (error) {
       console.error('移除Agent权限失败:', error)
-      setMessage({ type: 'error', text: error.message || '移除Agent权限失败' })
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : '移除Agent权限失败' })
       setTimeout(() => setMessage(null), 3000)
     }
   }
@@ -394,7 +394,7 @@ export default function UsersPage() {
       }
     } catch (error) {
       console.error('添加知识图谱权限失败:', error)
-      setMessage({ type: 'error', text: error.message || '添加知识图谱权限失败' })
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : '添加知识图谱权限失败' })
       setTimeout(() => setMessage(null), 3000)
     }
   }
@@ -419,7 +419,7 @@ export default function UsersPage() {
       }
     } catch (error) {
       console.error('移除知识图谱权限失败:', error)
-      setMessage({ type: 'error', text: error.message || '移除知识图谱权限失败' })
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : '移除知识图谱权限失败' })
       setTimeout(() => setMessage(null), 3000)
     }
   }
@@ -532,7 +532,7 @@ export default function UsersPage() {
     setMessage(null)
 
     try {
-      const updateData = { ...formData }
+      const updateData: Record<string, any> = { ...formData }
       // 如果密码为空，则不更新密码
       if (!updateData.password) {
         delete updateData.password

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import * as d3 from 'd3'
+import { getEntityColor } from '@/lib/utils/entity-colors'
 
 interface Node {
   id: string
@@ -39,35 +40,6 @@ interface D3ForceGraphComponentProps {
 }
 
 const NODE_RADIUS = 8
-
-// 获取节点颜色 - 优化颜色方案
-const getNodeColor = (type: string, isTemporary?: boolean) => {
-  if (isTemporary) {
-    // 临时节点使用更醒目的颜色
-    switch (type.toLowerCase()) {
-      case 'person': return '#f59e0b' // 橙色 - 临时人员
-      case 'organization': return '#ef4444' // 红色 - 临时组织
-      case 'concept': return '#ec4899' // 粉色 - 临时概念
-      case 'document': return '#8b5cf6' // 紫色 - 临时文档
-      case 'department': return '#f97316' // 深橙色 - 临时部门
-      case 'project': return '#06b6d4' // 青色 - 临时项目
-      default: return '#fbbf24' // 默认黄色
-    }
-  }
-
-  // 永久节点使用相对柔和的颜色
-  switch (type.toLowerCase()) {
-    case 'person': return '#3b82f6' // 蓝色 - 人员
-    case 'organization': return '#10b981' // 绿色 - 组织
-    case 'concept': return '#8b5cf6' // 紫色 - 概念
-    case 'document': return '#6366f1' // 靛蓝色 - 文档
-    case 'department': return '#059669' // 深绿色 - 部门
-    case 'project': return '#0891b2' // 深青色 - 项目
-    case 'technology': return '#7c3aed' // 深紫色 - 技术
-    case 'event': return '#dc2626' // 深红色 - 事件
-    default: return '#6b7280' // 默认灰色
-  }
-}
 
 // 分析节点关联关系
 const analyzeNodeRelations = (selectedNodeId: string, links: Link[]) => {
@@ -244,7 +216,7 @@ const D3ForceGraphComponent: React.FC<D3ForceGraphComponentProps> = ({
         const importance = d.value || 1
         return Math.min(baseRadius + importance * 2, baseRadius * 2)
       })
-      .attr("fill", (d: any) => d.color || getNodeColor(d.type, d.isTemporary))
+      .attr("fill", (d: any) => d.color || getEntityColor(d.type, d.isTemporary))
       .attr("stroke", "#fff")
       .attr("stroke-width", 1.5)
       .style("filter", "drop-shadow(0 2px 4px rgba(0,0,0,0.1))")
@@ -258,14 +230,14 @@ const D3ForceGraphComponent: React.FC<D3ForceGraphComponentProps> = ({
         return name.length > 8 ? name.substring(0, 8) + '...' : name
       })
       .attr("x", 0)
-      .attr("y", NODE_RADIUS + 18)
+      .attr("y", NODE_RADIUS + 20)
       .attr("text-anchor", "middle")
       .attr("font-family", "Microsoft YaHei, SimHei, Arial, sans-serif")
-      .attr("font-size", "10px")
-      .attr("fill", "#333")
-      .attr("font-weight", "500")
+      .attr("font-size", "15px")
+      .attr("fill", "#ffffff")
+      .attr("font-weight", "600")
       .attr("pointer-events", "none")
-      .style("text-shadow", "1px 1px 2px rgba(255,255,255,0.8)")
+      .style("text-shadow", "1px 1px 3px rgba(0,0,0,0.8), -1px -1px 3px rgba(0,0,0,0.8)")
 
     // 节点交互
     nodeGroup
@@ -310,7 +282,7 @@ const D3ForceGraphComponent: React.FC<D3ForceGraphComponentProps> = ({
         d.fy = null
       })
 
-    nodeGroup.call(drag)
+    nodeGroup.call(drag as any)
 
     // 更新位置 - 确保所有位置都是有效数字
     let tickCount = 0

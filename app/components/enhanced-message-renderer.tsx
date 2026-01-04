@@ -167,10 +167,14 @@ export default function EnhancedMessageRenderer({
     return (
       <div key={attachment.id} className="my-3">
         <FileCard
-          fileName={attachment.name}
-          fileUrl={attachment.url || attachment.base64 || ''}
-          fileSize={attachment.size}
-          fileType={attachment.type}
+          attachment={{
+            id: attachment.id,
+            name: attachment.name,
+            type: attachment.type,
+            size: attachment.size,
+            url: attachment.url || attachment.base64 || '',
+            source: 'agent'
+          }}
         />
       </div>
     )

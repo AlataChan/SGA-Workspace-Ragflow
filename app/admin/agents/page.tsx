@@ -449,8 +449,8 @@ export default function AgentsPage() {
       } else if (typeof error === 'string') {
         errorMessage = error
         console.log('❌ 使用字符串错误:', errorMessage)
-      } else if (error && typeof error === 'object' && error.message) {
-        errorMessage = error.message
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = (error as { message: string }).message
         console.log('❌ 使用对象错误消息:', errorMessage)
       }
 
@@ -561,8 +561,8 @@ export default function AgentsPage() {
         errorMessage = error.message
       } else if (typeof error === 'string') {
         errorMessage = error
-      } else if (error && typeof error === 'object' && error.message) {
-        errorMessage = error.message
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = (error as { message: string }).message
       }
 
       setMessage({

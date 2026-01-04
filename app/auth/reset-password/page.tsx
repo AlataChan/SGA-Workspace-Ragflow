@@ -3,7 +3,6 @@
 import React, { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-// import { createClient } from "@/lib/supabase/client" // 暂时注释掉
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -39,21 +38,18 @@ export default function ResetPasswordPage() {
       // 验证和清理输入数据
       const cleanData = validateAndSanitize(userSchemas.resetPassword, data)
 
-      const supabase = createClient()
+      // 调用密码重置API
+      const response = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: cleanData.email }),
+      })
 
-      // 发送密码重置邮件
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-        cleanData.email,
-        {
-          redirectTo: `${window.location.origin}/auth/update-password`,
-        }
-      )
-
-      if (resetError) {
-        logger.error("密码重置请求失败", resetError, {
-          email: cleanData.email,
-        })
-        throw new Error("发送重置邮件失败，请检查邮箱地址是否正确")
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.error || "发送重置邮件失败，请检查邮箱地址是否正确")
       }
 
       logger.info("密码重置邮件发送成功", {
@@ -64,7 +60,7 @@ export default function ResetPasswordPage() {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "发送重置邮件失败"
       setError(errorMessage)
-      
+
       logger.error("密码重置处理错误", error as Error, {
         email: data.email,
       })
@@ -96,7 +92,7 @@ export default function ResetPasswordPage() {
                   我们已向您的邮箱发送了密码重置链接。如果您没有收到邮件，请检查垃圾邮件文件夹。
                 </AlertDescription>
               </Alert>
-              
+
               <div className="text-center space-y-2">
                 <p className="text-sm text-blue-200/70">
                   重置链接将在24小时后过期

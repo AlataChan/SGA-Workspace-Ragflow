@@ -111,7 +111,7 @@ async function downloadDocument(
 
     return {
       success: true,
-      fileStream: response.body,
+      fileStream: response.body || undefined,
       contentType: response.headers.get('content-type') || 'application/octet-stream',
       filename
     }

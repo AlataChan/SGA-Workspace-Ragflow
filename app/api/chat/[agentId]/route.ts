@@ -41,7 +41,7 @@ function createStreamResponse(difyResponse: Response) {
           }
         }
       } catch (error) {
-        logger.error('流式响应错误', { error: error.message })
+        logger.error('流式响应错误', { error: error instanceof Error ? error.message : String(error) })
         controller.error(error)
       } finally {
         controller.close()
@@ -228,7 +228,7 @@ export async function POST(
     return createMockStreamResponse(agentConfig.name, message, userId, conversationId)
 
   } catch (error) {
-    logger.error('聊天API错误', { error: error.message })
+    logger.error('聊天API错误', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json(
       { error: '服务器内部错误' },
       { status: 500 }
@@ -273,8 +273,8 @@ async function callDifyAPI(config: any, message: string, userId: string, convers
     if (!response.ok) {
       const errorText = await response.text()
       logger.error('Dify API错误', {
-        status: response.status,
-        error: errorText
+        statusCode: response.status,
+        errorText: errorText
       })
 
       // 如果是Agent Chat不支持streaming的错误，尝试blocking模式
@@ -291,8 +291,8 @@ async function callDifyAPI(config: any, message: string, userId: string, convers
 
   } catch (error) {
     logger.error('Dify API调用失败', {
-      error: error.message,
-      stack: error.stack,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
       config: {
         url: config.apiUrl,
         hasApiKey: !!config.apiKey
@@ -352,7 +352,7 @@ async function callOpenAIAPI(config: any, message: string, userId: string) {
     })
 
   } catch (error) {
-    logger.error('OpenAI API调用失败', { error: error.message })
+    logger.error('OpenAI API调用失败', { error: error instanceof Error ? error.message : String(error) })
     throw error
   }
 }
@@ -381,7 +381,7 @@ export async function GET(
     })
 
   } catch (error) {
-    logger.error('获取智能体信息失败', { error: error.message })
+    logger.error('获取智能体信息失败', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json(
       { error: '服务器内部错误' },
       { status: 500 }
@@ -442,8 +442,8 @@ async function callDifyBlocking(config: any, message: string, userId: string, co
 
   } catch (error) {
     logger.error('Dify blocking API调用失败', {
-      error: error.message,
-      stack: error.stack
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined
     })
     throw error
   }

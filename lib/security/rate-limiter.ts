@@ -15,6 +15,7 @@ interface RateLimitStore {
   set(key: string, value: number, ttl: number): Promise<void>
   increment(key: string, ttl: number): Promise<number>
   delete(key: string): Promise<void>
+  cleanup?(): void
 }
 
 // 内存存储实现（开发环境使用）
@@ -125,7 +126,7 @@ export class RateLimiter {
     // 如果是内存存储，定期清理过期项
     if (this.store instanceof MemoryStore) {
       setInterval(() => {
-        this.store.cleanup()
+        this.store.cleanup?.()
       }, 60000) // 每分钟清理一次
     }
   }

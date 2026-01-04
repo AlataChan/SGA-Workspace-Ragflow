@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react'
+import { getEntityColor } from '@/lib/utils/entity-colors'
 
 interface GraphNode {
   id: string
@@ -62,7 +63,7 @@ export default function SimpleGraphViewer({ knowledgeGraphId, onBack }: SimpleGr
               type: node.type || 'UNKNOWN',
               description: node.description || '',
               value: Math.max(5, Math.min(20, (node.pagerank || 0.1) * 100)), // 节点大小
-              color: getNodeColor(node.type || 'UNKNOWN')
+              color: getEntityColor(node.type || 'UNKNOWN', false)
             })),
             links: (result.data.links || []).map((link: any) => ({
               source: link.source,
@@ -87,18 +88,6 @@ export default function SimpleGraphViewer({ knowledgeGraphId, onBack }: SimpleGr
     }
   }
 
-  const getNodeColor = (type: string) => {
-    const colors: Record<string, string> = {
-      'PERSON': '#ff6b6b',
-      'ORGANIZATION': '#4ecdc4',
-      'LOCATION': '#45b7d1',
-      'EVENT': '#96ceb4',
-      'CONCEPT': '#ffeaa7',
-      'DOCUMENT': '#dda0dd',
-      'UNKNOWN': '#95a5a6'
-    }
-    return colors[type] || colors['UNKNOWN']
-  }
 
   const initializeGraph = () => {
     if (!graphData || !containerRef.current) return

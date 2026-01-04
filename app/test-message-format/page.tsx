@@ -79,10 +79,8 @@ export default function TestMessageFormatPage() {
                   dangerouslySetInnerHTML={{
                     __html: marked.parse(testMessage, {
                       breaks: true,
-                      gfm: true,
-                      sanitize: false,
-                      smartypants: true
-                    })
+                      gfm: true
+                    }) as string
                   }}
 
                 />

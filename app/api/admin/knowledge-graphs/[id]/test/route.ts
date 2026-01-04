@@ -183,8 +183,7 @@ async function testRAGFlowConnection(
                 statistics = {
                   nodes: 0,
                   edges: 0,
-                  message: '连接成功，但无法解析统计数据',
-                  rawData: data.data
+                  message: '连接成功，但无法解析统计数据'
                 }
               }
             }

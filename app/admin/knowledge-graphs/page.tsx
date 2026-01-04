@@ -88,6 +88,7 @@ export default function KnowledgeGraphsPage() {
   const [isTesting, setIsTesting] = useState<string | null>(null)
   const [selectedKG, setSelectedKG] = useState<KnowledgeGraph | null>(null)
   const [message, setMessage] = useState<Message | null>(null)
+  const [formTestResult, setFormTestResult] = useState<{ type: 'success' | 'error' | 'testing', text: string } | null>(null)
 
   const [formData, setFormData] = useState<KnowledgeGraphFormData>({
     name: "",
@@ -134,6 +135,7 @@ export default function KnowledgeGraphsPage() {
       apiKey: "",
       kbId: "",
     })
+    setFormTestResult(null)
   }
 
   const openCreateDialog = () => {
@@ -299,7 +301,7 @@ export default function KnowledgeGraphsPage() {
         setMessage({
           type: 'success',
           text: `连接测试成功！${data.details?.statistics ?
-            `节点数: ${data.details.statistics.nodes || data.details.statistics.total_nodes || 0}, 边数: ${data.details.statistics.edges || data.details.statistics.total_edges || 0}` :
+            `节点数: ${(data.details.statistics as any).nodes || (data.details.statistics as any).total_nodes || 0}, 边数: ${(data.details.statistics as any).edges || (data.details.statistics as any).total_edges || 0}` :
             ''}`
         })
       } else {
@@ -328,11 +330,13 @@ export default function KnowledgeGraphsPage() {
   // 测试表单中的连接（创建/编辑时）
   const handleTestFormConnection = async () => {
     if (!formData.ragflowUrl.trim() || !formData.apiKey.trim() || !formData.kbId.trim()) {
-      setMessage({ type: 'error', text: '请填写RAGFlow URL、API Key和知识库ID' })
+      setFormTestResult({ type: 'error', text: '请填写RAGFlow URL、API Key和知识库ID' })
       return
     }
 
     setIsTesting('form')
+    setFormTestResult({ type: 'testing', text: '正在测试连接...' })
+
     try {
       console.log('测试表单连接:', {
         ragflowUrl: formData.ragflowUrl,
@@ -348,22 +352,21 @@ export default function KnowledgeGraphsPage() {
       )
 
       if (testResult.success) {
-        setMessage({
+        const stats = testResult.details?.statistics as any
+        setFormTestResult({
           type: 'success',
-          text: `连接测试成功！${testResult.details?.statistics ?
-            `节点数: ${testResult.details.statistics.nodes || testResult.details.statistics.total_nodes || 0}, 边数: ${testResult.details.statistics.edges || testResult.details.statistics.total_edges || 0}` :
-            ''}`
+          text: `✓ 连接成功！${stats ? `节点数: ${stats.nodes || 0}, 边数: ${stats.edges || 0}` : ''}`
         })
       } else {
-        setMessage({
+        setFormTestResult({
           type: 'error',
-          text: `连接测试失败: ${testResult.message || '未知错误'}`
+          text: `✗ 连接失败: ${testResult.message || '未知错误'}`
         })
         console.error('表单连接测试错误:', testResult)
       }
     } catch (error) {
       console.error('表单连接测试网络错误:', error)
-      setMessage({ type: 'error', text: `连接测试失败: ${error instanceof Error ? error.message : '网络错误'}` })
+      setFormTestResult({ type: 'error', text: `✗ 连接失败: ${error instanceof Error ? error.message : '网络错误'}` })
     } finally {
       setIsTesting(null)
     }
@@ -649,7 +652,7 @@ export default function KnowledgeGraphsPage() {
       </div>
 
       {/* 创建对话框 */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+      <Dialog open={isCreateDialogOpen} onOpenChange={(open) => { setIsCreateDialogOpen(open); if (!open) setFormTestResult(null); }}>
         <DialogContent className="bg-[#1f1f1f] border-[#2d2d2d] text-white">
           <DialogHeader>
             <DialogTitle>添加知识图谱</DialogTitle>
@@ -659,9 +662,11 @@ export default function KnowledgeGraphsPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="name" className="text-gray-300">名称 *</Label>
+              <Label htmlFor="create-name" className="text-gray-300">名称 *</Label>
               <Input
-                id="name"
+                id="create-name"
+                name="kg-name"
+                autoComplete="off"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="输入知识图谱名称"
@@ -669,9 +674,11 @@ export default function KnowledgeGraphsPage() {
               />
             </div>
             <div>
-              <Label htmlFor="description" className="text-gray-300">描述</Label>
+              <Label htmlFor="create-description" className="text-gray-300">描述</Label>
               <Textarea
-                id="description"
+                id="create-description"
+                name="kg-description"
+                autoComplete="off"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="输入知识图谱描述"
@@ -679,20 +686,24 @@ export default function KnowledgeGraphsPage() {
               />
             </div>
             <div>
-              <Label htmlFor="ragflowUrl" className="text-gray-300">RAGFlow URL *</Label>
+              <Label htmlFor="create-ragflowUrl" className="text-gray-300">RAGFlow URL *</Label>
               <Input
-                id="ragflowUrl"
+                id="create-ragflowUrl"
+                name="kg-ragflow-url"
+                autoComplete="off"
                 value={formData.ragflowUrl}
                 onChange={(e) => setFormData({ ...formData, ragflowUrl: e.target.value })}
-                placeholder="http://localhost:9380"
+                placeholder="例如: http://192.168.1.100:9380"
                 className="bg-[#2d2d2d] border-[#3c4043] text-white"
               />
             </div>
             <div>
-              <Label htmlFor="apiKey" className="text-gray-300">API Key *</Label>
+              <Label htmlFor="create-apiKey" className="text-gray-300">API Key *</Label>
               <Input
-                id="apiKey"
+                id="create-apiKey"
+                name="kg-api-key"
                 type="password"
+                autoComplete="new-password"
                 value={formData.apiKey}
                 onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
                 placeholder="输入RAGFlow API Key"
@@ -700,37 +711,55 @@ export default function KnowledgeGraphsPage() {
               />
             </div>
             <div>
-              <Label htmlFor="kbId" className="text-gray-300">知识库ID *</Label>
+              <Label htmlFor="create-kbId" className="text-gray-300">知识库ID *</Label>
               <Input
-                id="kbId"
+                id="create-kbId"
+                name="kg-kb-id"
+                autoComplete="off"
                 value={formData.kbId}
                 onChange={(e) => setFormData({ ...formData, kbId: e.target.value })}
-                placeholder="输入知识库ID"
+                placeholder="输入RAGFlow中的知识库ID"
                 className="bg-[#2d2d2d] border-[#3c4043] text-white"
               />
             </div>
 
-            {/* 测试连接按钮 */}
-            <div className="flex justify-center pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleTestFormConnection}
-                disabled={isTesting === 'form' || !formData.ragflowUrl.trim() || !formData.apiKey.trim() || !formData.kbId.trim()}
-                className="border-[#6a5acd] text-[#6a5acd] hover:bg-[#6a5acd] hover:text-white"
-              >
-                {isTesting === 'form' ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    测试连接中...
-                  </>
-                ) : (
-                  <>
-                    <TestTube className="w-4 h-4 mr-2" />
-                    测试连接
-                  </>
-                )}
-              </Button>
+            {/* 测试连接按钮和结果显示 */}
+            <div className="space-y-3 pt-2">
+              <div className="flex justify-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleTestFormConnection}
+                  disabled={isTesting === 'form' || !formData.ragflowUrl.trim() || !formData.apiKey.trim() || !formData.kbId.trim()}
+                  className="border-[#6a5acd] text-[#6a5acd] hover:bg-[#6a5acd] hover:text-white"
+                >
+                  {isTesting === 'form' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      测试连接中...
+                    </>
+                  ) : (
+                    <>
+                      <TestTube className="w-4 h-4 mr-2" />
+                      测试连接
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* 测试结果显示 */}
+              {formTestResult && (
+                <div className={`p-3 rounded-lg text-sm text-center ${
+                  formTestResult.type === 'success'
+                    ? 'bg-green-600/20 text-green-400 border border-green-600/30'
+                    : formTestResult.type === 'error'
+                    ? 'bg-red-600/20 text-red-400 border border-red-600/30'
+                    : 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
+                }`}>
+                  {formTestResult.type === 'testing' && <Loader2 className="w-4 h-4 inline mr-2 animate-spin" />}
+                  {formTestResult.text}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -760,7 +789,7 @@ export default function KnowledgeGraphsPage() {
       </Dialog>
 
       {/* 编辑对话框 */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <Dialog open={isEditDialogOpen} onOpenChange={(open) => { setIsEditDialogOpen(open); if (!open) setFormTestResult(null); }}>
         <DialogContent className="bg-[#1f1f1f] border-[#2d2d2d] text-white">
           <DialogHeader>
             <DialogTitle>编辑知识图谱</DialogTitle>
@@ -773,6 +802,8 @@ export default function KnowledgeGraphsPage() {
               <Label htmlFor="edit-name" className="text-gray-300">名称 *</Label>
               <Input
                 id="edit-name"
+                name="kg-edit-name"
+                autoComplete="off"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="输入知识图谱名称"
@@ -783,6 +814,8 @@ export default function KnowledgeGraphsPage() {
               <Label htmlFor="edit-description" className="text-gray-300">描述</Label>
               <Textarea
                 id="edit-description"
+                name="kg-edit-description"
+                autoComplete="off"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="输入知识图谱描述"
@@ -793,9 +826,11 @@ export default function KnowledgeGraphsPage() {
               <Label htmlFor="edit-ragflowUrl" className="text-gray-300">RAGFlow URL *</Label>
               <Input
                 id="edit-ragflowUrl"
+                name="kg-edit-ragflow-url"
+                autoComplete="off"
                 value={formData.ragflowUrl}
                 onChange={(e) => setFormData({ ...formData, ragflowUrl: e.target.value })}
-                placeholder="http://localhost:9380"
+                placeholder="例如: http://192.168.1.100:9380"
                 className="bg-[#2d2d2d] border-[#3c4043] text-white"
               />
             </div>
@@ -803,7 +838,9 @@ export default function KnowledgeGraphsPage() {
               <Label htmlFor="edit-apiKey" className="text-gray-300">API Key *</Label>
               <Input
                 id="edit-apiKey"
+                name="kg-edit-api-key"
                 type="password"
+                autoComplete="new-password"
                 value={formData.apiKey}
                 onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
                 placeholder="输入RAGFlow API Key"
@@ -814,34 +851,52 @@ export default function KnowledgeGraphsPage() {
               <Label htmlFor="edit-kbId" className="text-gray-300">知识库ID *</Label>
               <Input
                 id="edit-kbId"
+                name="kg-edit-kb-id"
+                autoComplete="off"
                 value={formData.kbId}
                 onChange={(e) => setFormData({ ...formData, kbId: e.target.value })}
-                placeholder="输入知识库ID"
+                placeholder="输入RAGFlow中的知识库ID"
                 className="bg-[#2d2d2d] border-[#3c4043] text-white"
               />
             </div>
 
-            {/* 测试连接按钮 */}
-            <div className="flex justify-center pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleTestFormConnection}
-                disabled={isTesting === 'form' || !formData.ragflowUrl.trim() || !formData.apiKey.trim() || !formData.kbId.trim()}
-                className="border-[#6a5acd] text-[#6a5acd] hover:bg-[#6a5acd] hover:text-white"
-              >
-                {isTesting === 'form' ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    测试连接中...
-                  </>
-                ) : (
-                  <>
-                    <TestTube className="w-4 h-4 mr-2" />
-                    测试连接
-                  </>
-                )}
-              </Button>
+            {/* 测试连接按钮和结果显示 */}
+            <div className="space-y-3 pt-2">
+              <div className="flex justify-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleTestFormConnection}
+                  disabled={isTesting === 'form' || !formData.ragflowUrl.trim() || !formData.apiKey.trim() || !formData.kbId.trim()}
+                  className="border-[#6a5acd] text-[#6a5acd] hover:bg-[#6a5acd] hover:text-white"
+                >
+                  {isTesting === 'form' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      测试连接中...
+                    </>
+                  ) : (
+                    <>
+                      <TestTube className="w-4 h-4 mr-2" />
+                      测试连接
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* 测试结果显示 */}
+              {formTestResult && (
+                <div className={`p-3 rounded-lg text-sm text-center ${
+                  formTestResult.type === 'success'
+                    ? 'bg-green-600/20 text-green-400 border border-green-600/30'
+                    : formTestResult.type === 'error'
+                    ? 'bg-red-600/20 text-red-400 border border-red-600/30'
+                    : 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
+                }`}>
+                  {formTestResult.type === 'testing' && <Loader2 className="w-4 h-4 inline mr-2 animate-spin" />}
+                  {formTestResult.text}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>

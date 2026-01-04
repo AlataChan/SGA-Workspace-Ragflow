@@ -44,11 +44,23 @@ export class SimpleLogger {
     }
   }
 
-  static error(message: string, error?: Error, context?: any, meta?: any) {
+  static error(message: string, errorOrContext?: Error | Record<string, any>, context?: any, meta?: any) {
+    // 支持两种调用方式:
+    // 1. logger.error(message, error, context)
+    // 2. logger.error(message, { error: ..., ... })
+    let error: Error | undefined
+    let ctx = context
+
+    if (errorOrContext instanceof Error) {
+      error = errorOrContext
+    } else if (errorOrContext && typeof errorOrContext === 'object') {
+      ctx = errorOrContext
+    }
+
     if (typeof window !== 'undefined') {
-      console.error(`[ERROR] ${message}`, error || {}, context || {})
+      console.error(`[ERROR] ${message}`, error || ctx || {})
     } else {
-      console.error(this.formatMessage('error', message, context, error))
+      console.error(this.formatMessage('error', message, ctx, error))
     }
   }
 

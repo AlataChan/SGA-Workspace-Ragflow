@@ -1,7 +1,8 @@
 export * from './simple-auth'
 // export * from './session-manager' // 暂时注释掉，避免Redis依赖问题
 // export * from './permissions' // 暂时注释掉，避免依赖问题
-export * from './user'
+// 使用 simple-auth 中的 AuthUser，避免重复导出
+export { verifyUserAuth } from './user'
 export * from './admin'
 export * from './jwt'
 export * from './middleware'

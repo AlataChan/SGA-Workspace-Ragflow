@@ -97,7 +97,6 @@ export const GET = withAuth(async (request) => {
 
   } catch (error) {
     console.error('获取个人信息失败:', error)
-    console.error('用户信息:', user)
     console.error('错误详情:', error instanceof Error ? error.message : error)
     return NextResponse.json(
       {
@@ -140,8 +139,8 @@ export const PUT = withAuth(async (request) => {
     // 如果要修改密码，验证当前密码
     if (updateData.newPassword && updateData.currentPassword) {
       const currentUser = await prisma.user.findUnique({
-        where: { userId: user.userId }, // 使用userId而不是id
-        select: { password: true }
+        where: { id: user.userId }, // 使用id字段
+        select: { passwordHash: true }
       })
 
       if (!currentUser) {
@@ -157,7 +156,7 @@ export const PUT = withAuth(async (request) => {
       }
 
       // 验证当前密码
-      const isCurrentPasswordValid = await bcrypt.compare(updateData.currentPassword, currentUser.password)
+      const isCurrentPasswordValid = await bcrypt.compare(updateData.currentPassword, currentUser.passwordHash)
       if (!isCurrentPasswordValid) {
         return NextResponse.json(
           {
@@ -183,7 +182,7 @@ export const PUT = withAuth(async (request) => {
     if (updateData.phone !== undefined) updateFields.phone = updateData.phone
     if (updateData.position !== undefined) updateFields.position = updateData.position
     if (updateData.avatarUrl !== undefined) updateFields.avatarUrl = updateData.avatarUrl
-    if (updateData.newPassword) updateFields.password = updateData.newPassword
+    if (updateData.newPassword) updateFields.passwordHash = updateData.newPassword
 
     // 更新用户信息
     const updatedUser = await prisma.user.update({

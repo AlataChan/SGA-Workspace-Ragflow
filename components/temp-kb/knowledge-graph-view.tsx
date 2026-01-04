@@ -5,10 +5,11 @@
  * 使用 D3.js 力导向图展示知识图谱的节点和关系
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import * as d3 from 'd3'
 import { Loader2, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { getEntityColor, entityColorManager } from '@/lib/utils/entity-colors'
 
 /**
  * 图谱节点数据结构
@@ -41,25 +42,6 @@ interface GraphData {
 
 interface KnowledgeGraphViewProps {
   className?: string
-}
-
-/**
- * 实体类型对应的颜色
- */
-const ENTITY_COLORS: Record<string, string> = {
-  person: '#3B82F6',       // 蓝色 - 人物
-  organization: '#10B981', // 绿色 - 组织
-  geo: '#F59E0B',          // 橙色 - 地理
-  event: '#8B5CF6',        // 紫色 - 事件
-  category: '#EC4899',     // 粉色 - 分类
-  default: '#6B7280'       // 灰色 - 默认
-}
-
-/**
- * 根据实体类型获取颜色
- */
-function getEntityColor(type: string): string {
-  return ENTITY_COLORS[type.toLowerCase()] || ENTITY_COLORS.default
 }
 
 /**
@@ -210,7 +192,7 @@ export default function KnowledgeGraphView({ className }: KnowledgeGraphViewProp
     // 节点圆形
     nodes.append('circle')
       .attr('r', d => getNodeRadius(d.pagerank))
-      .attr('fill', d => getEntityColor(d.entity_type))
+      .attr('fill', d => getEntityColor(d.entity_type, false))
       .attr('stroke', '#1F2937')
       .attr('stroke-width', 2)
       .style('cursor', 'pointer')
@@ -331,11 +313,11 @@ export default function KnowledgeGraphView({ className }: KnowledgeGraphViewProp
         <svg ref={svgRef} className="w-full h-full" />
       </div>
 
-      {/* 图例 */}
+      {/* 图例 - 动态生成，基于实际存在的实体类型 */}
       <div className="flex flex-wrap gap-3 mt-2 justify-center">
-        {Object.entries(ENTITY_COLORS).filter(([k]) => k !== 'default').map(([type, color]) => (
+        {graphData && [...new Set(graphData.nodes.map(n => n.entity_type))].map(type => (
           <div key={type} className="flex items-center gap-1 text-xs text-slate-400">
-            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: getEntityColor(type, false) }} />
             <span>{type}</span>
           </div>
         ))}

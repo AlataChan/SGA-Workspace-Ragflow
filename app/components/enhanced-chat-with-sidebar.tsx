@@ -588,9 +588,10 @@ interface DifyFile {
   upload_file_id?: string
 }
 
-interface EnhancedChatWithSidebarProps {
+export interface EnhancedChatWithSidebarProps {
   agentName: string
   agentAvatar?: string
+  userAvatar?: string
   onBack: () => void
   initialMessages?: Message[]
   sessionTitle?: string
