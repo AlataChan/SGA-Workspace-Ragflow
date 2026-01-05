@@ -9,7 +9,8 @@
       "Bash(ss:*)",
       "Bash(docker-compose down)",
       "Bash(docker-compose build --no-cache app)",
-      "Bash(docker-compose up -d)"
+      "Bash(docker-compose up -d)",
+      "Bash(git checkout:*)"
     ]
   }
 }

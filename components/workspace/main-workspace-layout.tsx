@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -131,6 +131,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
   const [kgSearchQuery, setKgSearchQuery] = useState('') // 知识图谱搜索
 
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   // 使用传入的真实Agent数据
   const realAgents = agents || []
@@ -413,6 +414,12 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
 
     setSelectedAgent(updatedAgent)
     setShowChat(true)
+
+    // 将当前聊天状态写入 URL，便于刷新后保持在聊天界面
+    const params = new URLSearchParams(Array.from(searchParams.entries()))
+    params.set('chat', '1')
+    params.set('agent_id', agent.id)
+    router.replace(`/workspace?${params.toString()}`)
   }
 
   // 返回主界面
@@ -421,7 +428,29 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
     setSelectedAgent(null)
     setSelectedKnowledgeGraph(null)
     setGraphData(null)
+
+    // 清理 URL 中的聊天状态（保留 session_id 由 localStorage 管理）
+    const params = new URLSearchParams(Array.from(searchParams.entries()))
+    params.delete('chat')
+    params.delete('agent_id')
+    params.delete('session_id') // 也清理 session_id（如果存在）
+    const qs = params.toString()
+    router.replace(qs ? `/workspace?${qs}` : '/workspace')
   }
+
+  // 刷新/直达：根据 URL 自动恢复聊天界面
+  useEffect(() => {
+    const chat = searchParams.get('chat')
+    const agentId = searchParams.get('agent_id')
+    if (chat !== '1' || !agentId) return
+    if (showChat && selectedAgent?.id === agentId) return
+
+    const agent = realAgents.find(a => a.id === agentId)
+    if (!agent) return
+    // 复用启动聊天逻辑（会校验配置）
+    handleStartChat(agent)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, realAgents])
 
   // 知识图谱选择处理函数
   const handleSelectKnowledgeGraph = async (kg: KnowledgeGraph) => {

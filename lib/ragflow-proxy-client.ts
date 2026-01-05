@@ -3,7 +3,7 @@
  * 通过服务端代理访问 RAGFlow，不在前端暴露 API 密钥
  */
 
-import { normalizeRagflowContent } from './ragflow-utils'
+import { normalizeRagflowContent, stripRagflowInlineReferenceMarkers } from './ragflow-utils'
 
 export interface RAGFlowProxyConfig {
   agentId: string  // 本地 Agent ID（不是 RAGFlow 的 chatId）
@@ -150,6 +150,46 @@ export class RAGFlowProxyClient {
       let fullContent = ''
       let finalReference: any = null
       let finalSessionId = this.sessionId
+      const mergeStreamingText = (current: string, incoming: string) => {
+        if (!incoming) return current
+        if (!current) return incoming
+        if (incoming.startsWith(current)) return incoming
+        if (current.startsWith(incoming)) return current
+
+        const compact = (s: string) => s.replace(/\s+/g, '')
+        const canonical = (s: string) => compact(stripRagflowInlineReferenceMarkers(s))
+
+        const canonCurrent = canonical(current)
+        const canonIncoming = canonical(incoming)
+
+        // 有些 RAGFlow 会在流式过程中插入/调整引用标记，导致“看起来不像前缀”，这里用 canonical 做判定
+        if (canonIncoming.startsWith(canonCurrent)) return incoming
+        if (canonCurrent.startsWith(canonIncoming)) return current
+        if (canonIncoming.includes(canonCurrent) && canonIncoming.length >= canonCurrent.length) return incoming
+
+        // 兼容“累计全文但中段轻微改动”（标点/换行等），避免误判为增量而导致全文拼接翻倍
+        if (canonCurrent.length > 0 && canonIncoming.length > 0) {
+          const minLen = Math.min(canonCurrent.length, canonIncoming.length)
+          let commonPrefix = 0
+          for (let i = 0; i < minLen; i++) {
+            if (canonCurrent[i] !== canonIncoming[i]) break
+            commonPrefix++
+          }
+          const ratio = commonPrefix / minLen
+          if (ratio >= 0.85) {
+            return incoming.length >= current.length ? incoming : current
+          }
+        }
+
+        const maxProbe = Math.min(200, current.length, incoming.length)
+        for (let k = maxProbe; k >= 20; k--) {
+          if (current.endsWith(incoming.slice(0, k))) {
+            return current + incoming.slice(k)
+          }
+        }
+
+        return current + incoming
+      }
 
       try {
         while (true) {
@@ -232,12 +272,8 @@ export class RAGFlowProxyClient {
                 if (contentCandidate !== undefined && contentCandidate !== null) {
                   const normalized = normalizeRagflowContent(contentCandidate)
                   if (normalized.length > 0) {
-                    // agent 通常是“增量片段”，这里累积成全文再抛给 UI
-                    if (normalized.startsWith(fullContent)) {
-                      fullContent = normalized
-                    } else {
-                      fullContent += normalized
-                    }
+                    // agent 既可能是“增量片段”，也可能返回“累计全文”；这里做一次去重合并，避免内容翻倍
+                    fullContent = mergeStreamingText(fullContent, normalized)
 
                     onMessage({
                       type: 'content',

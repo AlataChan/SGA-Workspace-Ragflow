@@ -435,7 +435,8 @@ async function handleChatDeleteSession(
   chatId: string,
   sessionId: string
 ) {
-  const url = `${baseUrl}/api/v1/chats/${chatId}/sessions/${sessionId}`
+  // 官方接口：DELETE /api/v1/chats/{chat_id}/sessions，body: { ids: [...] }
+  const url = `${baseUrl}/api/v1/chats/${chatId}/sessions`
 
   console.log('[RAGFlow Agent Proxy] 删除会话:', { url })
 
@@ -445,20 +446,21 @@ async function handleChatDeleteSession(
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
+    body: JSON.stringify({ ids: [sessionId] }),
     signal: AbortSignal.timeout(30000)
   })
 
-  // RAGFlow 删除成功可能返回空响应
-  if (response.status === 204 || response.status === 200) {
+  // 204: 无内容但成功
+  if (response.status === 204) {
     return NextResponse.json({ success: true })
   }
 
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().catch(() => ({} as any))
 
-  if (!response.ok) {
+  if (!response.ok || (typeof data?.code === 'number' && data.code !== 0)) {
     return NextResponse.json(
       { error: data.message || '删除会话失败' },
-      { status: response.status }
+      { status: response.ok ? 400 : response.status }
     )
   }
 
