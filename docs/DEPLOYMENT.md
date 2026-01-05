@@ -199,6 +199,56 @@ LOG_FORMAT=json
 | `DATABASE_POOL_MAX` | 数据库连接池最大连接数 | ❌ | 10 |
 | `DATABASE_TIMEOUT` | 数据库超时时间(ms) | ❌ | 30000 |
 
+### RAGFlow 配置（知识库后端）
+> ⚠️ **重要**: 本项目的知识库功能主要依赖 RAGFlow 作为后端，必须正确配置。
+
+| 变量名 | 描述 | 必需 | 默认值 |
+|--------|------|------|--------|
+| `RAGFLOW_BASE_URL` | RAGFlow 服务地址 | ✅ | - |
+| `RAGFLOW_API_KEY` | RAGFlow API 密钥 | ✅ | - |
+| `RAGFLOW_TIMEOUT` | 请求超时时间(ms) | ❌ | 60000 |
+
+**配置示例**:
+```env
+# RAGFlow 配置
+RAGFLOW_BASE_URL=http://your-ragflow-server:9380
+RAGFLOW_API_KEY=ragflow-xxxxxxxx
+RAGFLOW_TIMEOUT=60000
+```
+
+**获取 RAGFlow API Key**:
+1. 登录 RAGFlow 管理界面
+2. 进入 "设置" → "API 管理"
+3. 创建新的 API Key
+4. 复制 Key 到环境变量
+
+### Dify 配置（可选的对话后端）
+> Dify 用于 AI 对话功能，如果仅使用 RAGFlow 的知识库功能可以不配置。
+
+| 变量名 | 描述 | 必需 | 默认值 |
+|--------|------|------|--------|
+| `DEFAULT_DIFY_BASE_URL` | Dify 服务地址 | ❌ | - |
+| `DEFAULT_DIFY_TIMEOUT` | 请求超时时间(ms) | ❌ | 180000 |
+| `DIFY_MAX_RETRIES` | 最大重试次数 | ❌ | 3 |
+
+**配置示例**:
+```env
+# Dify 配置
+DEFAULT_DIFY_BASE_URL=http://your-dify-server/v1
+DEFAULT_DIFY_TIMEOUT=180000
+DIFY_MAX_RETRIES=3
+```
+
+### 批量任务配置（可选）
+> 用于批量上传文档、批量解析等场景。
+
+| 变量名 | 描述 | 必需 | 默认值 |
+|--------|------|------|--------|
+| `BATCH_TASK_CONCURRENCY` | 批量任务并发数 | ❌ | 3 |
+| `BATCH_TASK_RETRY_MAX` | 最大重试次数 | ❌ | 3 |
+| `BATCH_TASK_POLL_INTERVAL` | 状态轮询间隔(ms) | ❌ | 3000 |
+| `BATCH_TASK_CLEANUP_TTL` | 任务清理时间(ms) | ❌ | 86400000 |
+
 ## 监控和日志
 
 ### 访问监控面板

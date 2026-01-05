@@ -653,6 +653,8 @@ export default function EnhancedChatWithSidebar({
     hasMore: true
   })
   const messageCacheRef = useRef<MessageCache>({})
+  // Used to ignore stale async results when users switch sessions quickly.
+  const sessionSwitchSeqRef = useRef(0)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -992,6 +994,17 @@ export default function EnhancedChatWithSidebar({
 
   // 创建新会话
   const createNewSession = () => {
+    // Invalidate any in-flight history loads / streaming updates.
+    sessionSwitchSeqRef.current += 1
+
+    // Cancel any in-flight requests so nothing from the previous session can leak into the new one.
+    difyClientRef.current?.stopCurrentRequest?.()
+    ragflowProxyClientRef.current?.cancel?.()
+    ragflowClientRef.current?.cancel?.()
+    setIsStreaming(false)
+    setIsLoading(false)
+    setIsLoadingHistory(false)
+
     const newSessionId = `draft_${nanoid()}`
     const newSession: ChatSession = {
       id: newSessionId,
@@ -1025,6 +1038,8 @@ export default function EnhancedChatWithSidebar({
   // 加载历史对话的消息（支持缓存）
   const loadHistoryConversation = useCallback(async (historyConv: DifyHistoryConversation) => {
     if (!agentConfig?.difyUrl && !agentConfig?.baseUrl) return // 确保至少有一个平台配置
+
+    const loadSeq = ++sessionSwitchSeqRef.current
 
     try {
       setIsLoadingHistory(true)
@@ -1220,6 +1235,11 @@ export default function EnhancedChatWithSidebar({
         agentAvatar: actualAgentAvatar
       }
 
+      // If the user has switched sessions while this history load was in-flight, ignore stale results.
+      if (loadSeq !== sessionSwitchSeqRef.current) {
+        return
+      }
+
       // 简化：直接设置为当前会话
       setSessions([newSession])
       setCurrentSessionId(newSession.id)
@@ -1241,7 +1261,9 @@ export default function EnhancedChatWithSidebar({
       setHistoryError(errorMessage)
       toast.error(errorMessage)
     } finally {
-      setIsLoadingHistory(false)
+      if (loadSeq === sessionSwitchSeqRef.current) {
+        setIsLoadingHistory(false)
+      }
     }
   }, [agentConfig, agentName, actualAgentAvatar])
 
@@ -2804,7 +2826,7 @@ export default function EnhancedChatWithSidebar({
           </div>
 
           <ScrollArea className="flex-1 p-6">
-            <div className="space-y-6 w-full">
+            <div key={currentSessionId} className="space-y-6 w-full">
               {currentSession?.messages.map((message) => {
                 const isUser = message.role === 'user'
                 const rawContent = safeStringifyContent(message.content)
