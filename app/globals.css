@@ -3,76 +3,81 @@
 @tailwind utilities;
 
 :root {
-  /* Updated to high-end minimalist design tokens */
-  --background: #ffffff;
-  --foreground: #475569;
-  --card: #ecfeff;
-  --card-foreground: #164e63;
+  /* 浅色主题 - 基于 frontend-light.html 紫色配色方案 */
+  /* 主色：#6c5ce7 (紫色) */
+  --background: #f9fafb;           /* gray-50 页面背景 */
+  --foreground: #374151;           /* gray-700 主要文字 */
+  --card: #ffffff;                 /* 卡片背景 */
+  --card-foreground: #1f2937;      /* gray-800 卡片文字 */
   --popover: #ffffff;
-  --popover-foreground: #475569;
-  --primary: #164e63;
+  --popover-foreground: #374151;
+  --primary: #6c5ce7;              /* 紫色主色 */
   --primary-foreground: #ffffff;
-  --secondary: #ec4899;
-  --secondary-foreground: #ffffff;
-  --muted: #f0f0f0;
-  --muted-foreground: #475569;
-  --accent: #ec4899;
-  --accent-foreground: #ffffff;
-  --destructive: #be123c;
+  --primary-light: #e0dcfc;        /* 主色浅色版 */
+  --primary-hover: #5b4bc4;        /* 主色 hover 状态 */
+  --secondary: #f3f4f6;            /* gray-100 次要背景 */
+  --secondary-foreground: #374151;
+  --muted: #f3f4f6;                /* gray-100 */
+  --muted-foreground: #6b7280;     /* gray-500 */
+  --accent: #ede9fe;               /* 紫色浅色背景 purple-50 */
+  --accent-foreground: #6c5ce7;
+  --destructive: #ef4444;          /* red-500 */
   --destructive-foreground: #ffffff;
-  --border: #e0e0e0;
-  --input: #f9f9f9;
-  --ring: rgba(22, 78, 99, 0.5);
-  --chart-1: #164e63;
-  --chart-2: #ec4899;
-  --chart-3: #a16207;
-  --chart-4: #475569;
-  --chart-5: #ffffff;
+  --border: #e5e7eb;               /* gray-200 */
+  --input: #f9fafb;                /* gray-50 */
+  --ring: rgba(108, 92, 231, 0.5); /* 紫色 ring */
+  --chart-1: #6c5ce7;              /* 紫色 */
+  --chart-2: #10b981;              /* 绿色 */
+  --chart-3: #f59e0b;              /* 橙色 */
+  --chart-4: #6b7280;              /* 灰色 */
+  --chart-5: #ec4899;              /* 粉色 */
   --radius: 0.5rem;
   --sidebar: #ffffff;
-  --sidebar-foreground: #475569;
-  --sidebar-primary: #164e63;
+  --sidebar-foreground: #374151;
+  --sidebar-primary: #6c5ce7;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #ec4899;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #e0e0e0;
-  --sidebar-ring: rgba(22, 78, 99, 0.5);
+  --sidebar-accent: #ede9fe;
+  --sidebar-accent-foreground: #6c5ce7;
+  --sidebar-border: #f3f4f6;       /* gray-100 */
+  --sidebar-ring: rgba(108, 92, 231, 0.5);
 }
 
 .dark {
-  /* Updated dark mode for premium feel */
-  --background: #0f172a;
-  --foreground: #e2e8f0;
-  --card: #1e293b;
+  /* 深色主题 - 紫色主色调保持一致 */
+  --background: #0f172a;           /* slate-900 深色背景 */
+  --foreground: #e2e8f0;           /* slate-200 主要文字 */
+  --card: #1e293b;                 /* slate-800 卡片背景 */
   --card-foreground: #e2e8f0;
-  --popover: #0f172a;
+  --popover: #1e293b;
   --popover-foreground: #e2e8f0;
-  --primary: #0ea5e9;
+  --primary: #a78bfa;              /* 紫色亮色版 violet-400 */
   --primary-foreground: #0f172a;
-  --secondary: #ec4899;
-  --secondary-foreground: #ffffff;
-  --muted: #334155;
-  --muted-foreground: #94a3b8;
-  --accent: #ec4899;
-  --accent-foreground: #ffffff;
+  --primary-light: #4c1d95;        /* 主色深色版 */
+  --primary-hover: #c4b5fd;        /* 主色 hover violet-300 */
+  --secondary: #334155;            /* slate-700 */
+  --secondary-foreground: #e2e8f0;
+  --muted: #334155;                /* slate-700 */
+  --muted-foreground: #94a3b8;     /* slate-400 */
+  --accent: #2e1065;               /* 紫色深色背景 violet-950 */
+  --accent-foreground: #a78bfa;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: #334155;
-  --input: #1e293b;
-  --ring: rgba(14, 165, 233, 0.5);
-  --chart-1: #0ea5e9;
-  --chart-2: #ec4899;
-  --chart-3: #f59e0b;
-  --chart-4: #94a3b8;
-  --chart-5: #1e293b;
+  --border: #334155;               /* slate-700 */
+  --input: #1e293b;                /* slate-800 */
+  --ring: rgba(167, 139, 250, 0.5); /* 紫色 ring */
+  --chart-1: #a78bfa;              /* 紫色 */
+  --chart-2: #34d399;              /* 绿色 */
+  --chart-3: #fbbf24;              /* 橙色 */
+  --chart-4: #94a3b8;              /* 灰色 */
+  --chart-5: #f472b6;              /* 粉色 */
   --sidebar: #0f172a;
   --sidebar-foreground: #e2e8f0;
-  --sidebar-primary: #0ea5e9;
+  --sidebar-primary: #a78bfa;
   --sidebar-primary-foreground: #0f172a;
-  --sidebar-accent: #ec4899;
-  --sidebar-accent-foreground: #ffffff;
+  --sidebar-accent: #2e1065;
+  --sidebar-accent-foreground: #a78bfa;
   --sidebar-border: #334155;
-  --sidebar-ring: rgba(14, 165, 233, 0.5);
+  --sidebar-ring: rgba(167, 139, 250, 0.5);
 }
 
 /* Added subtle premium animations */

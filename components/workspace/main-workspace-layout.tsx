@@ -47,6 +47,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import KnowledgeGraphVisualization from "@/components/knowledge-graph/knowledge-graph-visualization"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 interface Agent {
   id: string
@@ -770,12 +771,16 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
             </Collapsible>
           </div>
 
-          {/* 底部操作区域 - 管理员权限控制 */}
-          <div className="p-4 border-t border-[#2d2d2d]">
+          {/* 底部操作区域 - 主题切换和管理员权限控制 */}
+          <div className="p-4 border-t border-border space-y-2">
+            {/* 主题切换开关 */}
+            <ThemeToggle className="hover:bg-muted/50" />
+
+            {/* 管理员设置 */}
             {isAdmin ? (
               <button
                 onClick={() => router.push('/admin')}
-                className="w-full flex items-center px-3 py-2 rounded-lg hover:bg-[#2d2d2d] transition-colors text-[#8ab4f8] text-sm"
+                className="w-full flex items-center px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-primary text-sm"
               >
                 <Settings className="w-4 h-4 mr-2" />
                 管理员设置
@@ -783,7 +788,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
             ) : (
               <button
                 disabled
-                className="w-full flex items-center px-3 py-2 rounded-lg text-[#5a5a5a] text-sm cursor-not-allowed opacity-50"
+                className="w-full flex items-center px-3 py-2 rounded-lg text-muted-foreground text-sm cursor-not-allowed opacity-50"
               >
                 <Settings className="w-4 h-4 mr-2" />
                 管理员设置
