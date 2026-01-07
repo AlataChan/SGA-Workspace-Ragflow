@@ -26,12 +26,12 @@ export default function SimpleContentRenderer({ content }: SimpleContentRenderer
       gfm: true,
       breaks: true,
       renderer: {
-        // 自定义表格渲染 - 深色主题
+        // 自定义表格渲染 - 跟随主题变量
         table(token: Tokens.Table): string {
           const header = this.parser.parse(token.header as any);
           const body = this.parser.parse(token.rows.flat() as any);
-          return `<div class="table-container" style="margin: 15px 0; overflow-x: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); border: 1px solid #374151;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 14px; background: rgba(31, 41, 55, 0.8); min-width: 400px;">
+          return `<div class="table-container" style="margin: 15px 0; overflow-x: auto; border-radius: 8px; box-shadow: 0 2px 8px hsl(var(--foreground) / 0.08); border: 1px solid hsl(var(--border));">
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px; background: hsl(var(--card)); color: hsl(var(--card-foreground)); min-width: 400px;">
               <thead><tr>${header}</tr></thead>
               <tbody>${body}</tbody>
             </table>
@@ -43,8 +43,8 @@ export default function SimpleContentRenderer({ content }: SimpleContentRenderer
           const cellContent = this.parser.parseInline(token.tokens);
           const type = token.header ? 'th' : 'td';
           const style = token.header
-            ? 'border: 1px solid #4b5563; padding: 12px 8px; background-color: rgba(55, 65, 81, 0.9); text-align: left; font-weight: 600; color: #f3f4f6;'
-            : 'border: 1px solid #4b5563; padding: 10px 8px; color: #d1d5db; background-color: rgba(31, 41, 55, 0.6);';
+            ? 'border: 1px solid hsl(var(--border)); padding: 12px 8px; background-color: hsl(var(--muted)); text-align: left; font-weight: 600; color: hsl(var(--foreground));'
+            : 'border: 1px solid hsl(var(--border)); padding: 10px 8px; color: hsl(var(--foreground)); background-color: hsl(var(--card));';
           return `<${type} style="${style}">${cellContent}</${type}>`;
         },
 
@@ -55,10 +55,10 @@ export default function SimpleContentRenderer({ content }: SimpleContentRenderer
           const title = token.title || '';
           return `<div class="image-container" style="margin: 15px 0; text-align: center;">
             <img src="${href}" alt="${text}" title="${title}"
-                 style="max-width: 400px; max-height: 300px; width: auto; height: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); cursor: pointer;"
+                 style="max-width: 400px; max-height: 300px; width: auto; height: auto; border-radius: 8px; box-shadow: 0 4px 12px hsl(var(--foreground) / 0.15); border: 1px solid hsl(var(--border)); cursor: pointer;"
                  onload="this.style.opacity='1'"
                  onclick="window.open('${href}', '_blank')"
-                 onerror="this.parentElement.innerHTML='<div style=\\'padding: 20px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; color: #fca5a5;\\'>图片加载失败</div>'"
+                 onerror="this.parentElement.innerHTML='<div style=\\'padding: 20px; background: hsl(var(--destructive) / 0.1); border: 1px solid hsl(var(--destructive) / 0.3); border-radius: 8px; color: hsl(var(--destructive));\\'>图片加载失败</div>'"
                  style="opacity: 0; transition: opacity 0.3s;">
           </div>`;
         },
@@ -67,11 +67,11 @@ export default function SimpleContentRenderer({ content }: SimpleContentRenderer
         code(token: Tokens.Code): string {
           const code = token.text || '';
           const lang = token.lang || 'text';
-          return `<div class="code-container" style="margin: 15px 0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
-            <div style="background: rgba(55, 65, 81, 0.8); padding: 8px 16px; font-size: 12px; color: #9ca3af; border-bottom: 1px solid #4b5563;">
-              <span style="color: #60a5fa;">📄</span> ${lang}
+          return `<div class="code-container" style="margin: 15px 0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px hsl(var(--foreground) / 0.12); border: 1px solid hsl(var(--border));">
+            <div style="background: hsl(var(--muted)); padding: 8px 16px; font-size: 12px; color: hsl(var(--muted-foreground)); border-bottom: 1px solid hsl(var(--border));">
+              <span style="color: hsl(var(--primary));">📄</span> ${lang}
             </div>
-            <pre style="margin: 0; padding: 16px; background: rgba(17, 24, 39, 0.9); color: #e5e7eb; overflow-x: auto;"><code class="language-${lang}" style="color: #e5e7eb; font-family: 'Fira Code', 'Consolas', monospace;">${code}</code></pre>
+            <pre style="margin: 0; padding: 16px; background: hsl(var(--secondary)); color: hsl(var(--foreground)); overflow-x: auto;"><code class="language-${lang}" style="color: hsl(var(--foreground)); font-family: 'Fira Code', 'Consolas', monospace;">${code}</code></pre>
           </div>`;
         },
 

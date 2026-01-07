@@ -92,7 +92,6 @@ export function AvatarGenerator({ name, onSelect, className = "" }: AvatarGenera
           variant="outline"
           size="sm"
           onClick={generateQuickAvatar}
-          className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
         >
           <Bot className="w-4 h-4 mr-2" />
           快速生成
@@ -104,13 +103,12 @@ export function AvatarGenerator({ name, onSelect, className = "" }: AvatarGenera
               type="button"
               variant="outline"
               size="sm"
-              className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
             >
               <Palette className="w-4 h-4 mr-2" />
               高级生成
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-[#1a1a1a] border-[#2d2d2d] text-white max-w-2xl">
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>头像生成器</DialogTitle>
             </DialogHeader>
@@ -124,22 +122,21 @@ export function AvatarGenerator({ name, onSelect, className = "" }: AvatarGenera
                     value={customName}
                     onChange={(e) => setCustomName(e.target.value)}
                     placeholder="输入名称"
-                    className="bg-[#2a2a2a] border-[#3c4043] text-white"
                   />
                 </div>
                 
                 <div className="space-y-2">
                   <Label>风格</Label>
                   <Select value={selectedStyle} onValueChange={setSelectedStyle}>
-                    <SelectTrigger className="bg-[#2a2a2a] border-[#3c4043] text-white">
+                    <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#2a2a2a] border-[#3c4043]">
-                      <SelectItem value="initials" className="text-white">字母头像</SelectItem>
-                      <SelectItem value="robohash" className="text-white">机器人风格</SelectItem>
-                      <SelectItem value="identicon" className="text-white">几何图案</SelectItem>
-                      <SelectItem value="bottts" className="text-white">机器人头像</SelectItem>
-                      <SelectItem value="avataaars" className="text-white">卡通头像</SelectItem>
+                    <SelectContent>
+                      <SelectItem value="initials">字母头像</SelectItem>
+                      <SelectItem value="robohash">机器人风格</SelectItem>
+                      <SelectItem value="identicon">几何图案</SelectItem>
+                      <SelectItem value="bottts">机器人头像</SelectItem>
+                      <SelectItem value="avataaars">卡通头像</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -160,7 +157,7 @@ export function AvatarGenerator({ name, onSelect, className = "" }: AvatarGenera
                           setBackground(colorScheme.bg)
                           setColor(colorScheme.color)
                         }}
-                        className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d] h-8"
+                        className="border-border h-8 hover:opacity-90"
                         style={{
                           backgroundColor: `#${colorScheme.bg}`,
                           color: `#${colorScheme.color}`
@@ -179,10 +176,9 @@ export function AvatarGenerator({ name, onSelect, className = "" }: AvatarGenera
                           value={background}
                           onChange={(e) => setBackground(e.target.value.replace('#', ''))}
                           placeholder="6a5acd"
-                          className="bg-[#2a2a2a] border-[#3c4043] text-white"
                         />
                         <div 
-                          className="w-10 h-10 rounded border border-[#3c4043]"
+                          className="w-10 h-10 rounded border border-border"
                           style={{ backgroundColor: `#${background}` }}
                         />
                       </div>
@@ -195,10 +191,9 @@ export function AvatarGenerator({ name, onSelect, className = "" }: AvatarGenera
                           value={color}
                           onChange={(e) => setColor(e.target.value.replace('#', ''))}
                           placeholder="ffffff"
-                          className="bg-[#2a2a2a] border-[#3c4043] text-white"
                         />
                         <div 
-                          className="w-10 h-10 rounded border border-[#3c4043]"
+                          className="w-10 h-10 rounded border border-border"
                           style={{ backgroundColor: `#${color}` }}
                         />
                       </div>
@@ -211,7 +206,7 @@ export function AvatarGenerator({ name, onSelect, className = "" }: AvatarGenera
               <Button
                 onClick={generatePreviews}
                 disabled={isGenerating || !customName.trim()}
-                className="w-full bg-blue-600 hover:bg-blue-700"
+                className="w-full"
               >
                 {isGenerating ? (
                   <>
@@ -235,7 +230,7 @@ export function AvatarGenerator({ name, onSelect, className = "" }: AvatarGenera
                       <div key={index} className="text-center space-y-2">
                         <button
                           onClick={() => handleSelect(preview.url)}
-                          className="w-16 h-16 rounded-full overflow-hidden border-2 border-[#3c4043] hover:border-blue-500 transition-colors"
+                          className="w-16 h-16 rounded-full overflow-hidden border-2 border-border hover:border-primary transition-colors"
                         >
                           <img
                             src={preview.url}
@@ -243,7 +238,7 @@ export function AvatarGenerator({ name, onSelect, className = "" }: AvatarGenera
                             className="w-full h-full object-cover"
                           />
                         </button>
-                        <div className="text-xs text-gray-400">{preview.name}</div>
+                        <div className="text-xs text-muted-foreground">{preview.name}</div>
                       </div>
                     ))}
                   </div>

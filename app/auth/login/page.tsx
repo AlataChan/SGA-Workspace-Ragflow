@@ -119,26 +119,26 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
       {/* 动画背景 */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.1)_1px,transparent_1px)] bg-[size:50px_50px] animate-pulse" />
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-br from-blue-500/10 to-indigo-600/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute inset-0 bg-[linear-gradient(hsl(var(--primary)/0.08)_1px,transparent_1px),linear-gradient(90deg,hsl(var(--primary)/0.08)_1px,transparent_1px)] bg-[size:50px_50px] animate-pulse" />
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-br from-primary/10 to-accent/10 rounded-full blur-3xl animate-pulse" />
         <div
-          className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-tr from-indigo-500/10 to-cyan-600/10 rounded-full blur-3xl animate-pulse"
+          className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-tr from-accent/10 to-secondary/10 rounded-full blur-3xl animate-pulse"
           style={{ animationDelay: "2s" }}
         />
       </div>
 
-      <Card className="w-full max-w-md relative z-10 border border-blue-500/20 shadow-2xl bg-slate-900/80 backdrop-blur-xl">
+      <Card className="w-full max-w-md relative z-10 border border-border shadow-2xl bg-card/80 backdrop-blur-xl">
         {/* 顶部光线效果 */}
-        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-400/50 to-transparent" />
+        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
 
         <CardHeader className="text-center">
           {/* 公司Logo预留位置 - 可在系统设置中上传 */}
-          <div className="mx-auto w-20 h-20 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center mb-4 shadow-xl shadow-blue-500/25">
+          <div className="mx-auto w-20 h-20 bg-gradient-to-br from-primary to-accent rounded-2xl flex items-center justify-center mb-4 shadow-xl shadow-primary/25">
             {/* 这里将来会显示上传的公司Logo，现在显示默认图标 */}
-            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-10 h-10 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -147,10 +147,10 @@ function LoginForm() {
               />
             </svg>
           </div>
-          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
+          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent">
             AI工作空间
           </CardTitle>
-          <CardDescription className="text-blue-200/70">
+          <CardDescription className="text-muted-foreground">
             登录您的账户以开始使用
           </CardDescription>
         </CardHeader>
@@ -160,7 +160,7 @@ function LoginForm() {
             {/* 成功消息 */}
             {successMessage && (
               <Alert className="border-green-500/20 bg-green-500/10">
-                <AlertDescription className="text-green-100">{successMessage}</AlertDescription>
+                <AlertDescription className="text-green-700 dark:text-green-200">{successMessage}</AlertDescription>
               </Alert>
             )}
 
@@ -177,7 +177,7 @@ function LoginForm() {
 
             {/* 用户标识输入 */}
             <div className="space-y-2">
-              <Label htmlFor="identifier" className="text-blue-200">
+              <Label htmlFor="identifier" className="text-foreground">
                 用户名 / 手机号
               </Label>
               <Input
@@ -188,13 +188,13 @@ function LoginForm() {
                 onChange={(e) => handleInputChange("identifier", e.target.value)}
                 disabled={isLoading}
                 required
-                className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
+                className="bg-background/60 border-input text-foreground placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20"
               />
             </div>
 
             {/* 密码输入 */}
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-blue-200">密码</Label>
+              <Label htmlFor="password" className="text-foreground">密码</Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -204,7 +204,7 @@ function LoginForm() {
                   onChange={(e) => handleInputChange("password", e.target.value)}
                   disabled={isLoading}
                   required
-                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
+                  className="bg-background/60 border-input text-foreground placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20"
                 />
                 <Button
                   type="button"
@@ -215,9 +215,9 @@ function LoginForm() {
                   disabled={isLoading}
                 >
                   {showPassword ? (
-                    <EyeOff className="h-4 w-4 text-blue-300" />
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
                   ) : (
-                    <Eye className="h-4 w-4 text-blue-300" />
+                    <Eye className="h-4 w-4 text-muted-foreground" />
                   )}
                 </Button>
               </div>
@@ -230,9 +230,9 @@ function LoginForm() {
                 checked={formData.rememberMe}
                 onCheckedChange={(checked) => handleInputChange("rememberMe", checked as boolean)}
                 disabled={isLoading}
-                className="border-blue-500/30 data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
+                className="border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary"
               />
-              <Label htmlFor="remember" className="text-sm text-blue-200">
+              <Label htmlFor="remember" className="text-sm text-muted-foreground">
                 记住登录信息
               </Label>
             </div>
@@ -240,7 +240,7 @@ function LoginForm() {
             {/* 登录按钮 */}
             <Button
               type="submit"
-              className="w-full h-12 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-medium shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 transition-all duration-300"
+              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all duration-300"
               disabled={isLoading || !formData.identifier || !formData.password}
             >
               {isLoading ? (

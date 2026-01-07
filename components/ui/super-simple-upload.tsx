@@ -129,9 +129,9 @@ export function SuperSimpleUpload({ onUpload, photoUrl, avatarUrl }: SuperSimple
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Label className="text-white text-lg font-semibold">Agent照片上传</Label>
+        <Label className="text-lg font-semibold">Agent照片上传</Label>
         {uploadSuccess && (
-          <div className="flex items-center space-x-2 text-green-400">
+          <div className="flex items-center space-x-2 text-green-700 dark:text-green-400">
             <CheckCircle className="w-5 h-5" />
             <span className="text-sm font-medium">上传成功</span>
           </div>
@@ -144,12 +144,12 @@ export function SuperSimpleUpload({ onUpload, photoUrl, avatarUrl }: SuperSimple
           className={`
             relative border-2 border-dashed rounded-xl p-8 transition-all duration-300 cursor-pointer
             ${isDragOver
-              ? 'border-blue-400 bg-blue-500/10 scale-[1.02]'
+              ? 'border-primary bg-primary/10 scale-[1.02]'
               : error
                 ? 'border-red-400 bg-red-500/5'
                 : uploadSuccess
                   ? 'border-green-400 bg-green-500/5'
-                  : 'border-gray-600 bg-[#1a1a1a] hover:border-blue-500 hover:bg-blue-500/5'
+                  : 'border-border bg-muted/30 hover:border-primary hover:bg-muted/50'
             }
             ${isUploading ? 'pointer-events-none' : ''}
           `}
@@ -183,13 +183,13 @@ export function SuperSimpleUpload({ onUpload, photoUrl, avatarUrl }: SuperSimple
                   <p className="text-blue-400 font-medium">
                     {uploadProgress < 85 ? "正在上传..." : "正在处理图片..."}
                   </p>
-                  <div className="w-48 bg-gray-700 rounded-full h-2">
+                  <div className="w-48 bg-muted rounded-full h-2">
                     <div
                       className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-500 ease-out"
                       style={{ width: `${uploadProgress}%` }}
                     ></div>
                   </div>
-                  <span className="text-gray-400 text-sm">{uploadProgress}%</span>
+                  <span className="text-muted-foreground text-sm">{uploadProgress}%</span>
                 </div>
               </div>
             ) : uploadSuccess ? (
@@ -199,8 +199,8 @@ export function SuperSimpleUpload({ onUpload, photoUrl, avatarUrl }: SuperSimple
                   <CheckCircle className="w-6 h-6 text-white" />
                 </div>
                 <div className="text-center">
-                  <p className="text-green-400 font-medium">上传成功！</p>
-                  <p className="text-gray-400 text-sm">图片已处理完成</p>
+                  <p className="text-green-700 dark:text-green-400 font-medium">上传成功！</p>
+                  <p className="text-muted-foreground text-sm">图片已处理完成</p>
                 </div>
               </div>
             ) : error ? (
@@ -211,7 +211,7 @@ export function SuperSimpleUpload({ onUpload, photoUrl, avatarUrl }: SuperSimple
                 </div>
                 <div className="text-center space-y-2">
                   <p className="text-red-400 font-medium">上传失败</p>
-                  <p className="text-gray-400 text-sm">{error}</p>
+                  <p className="text-muted-foreground text-sm">{error}</p>
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
@@ -228,18 +228,18 @@ export function SuperSimpleUpload({ onUpload, photoUrl, avatarUrl }: SuperSimple
               <div className="flex flex-col items-center space-y-4">
                 <div className={`
                   w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300
-                  ${isDragOver ? 'bg-blue-500 scale-110' : 'bg-gray-700'}
+                  ${isDragOver ? 'bg-primary scale-110' : 'bg-muted'}
                 `}>
-                  <Upload className={`w-8 h-8 transition-colors duration-300 ${isDragOver ? 'text-white' : 'text-gray-400'}`} />
+                  <Upload className={`w-8 h-8 transition-colors duration-300 ${isDragOver ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
                 </div>
                 <div className="text-center space-y-2">
-                  <p className="text-white font-medium">
+                  <p className="text-foreground font-medium">
                     {isDragOver ? '松开鼠标上传图片' : '拖拽图片到此处，或点击选择'}
                   </p>
-                  <p className="text-gray-400 text-sm">
+                  <p className="text-muted-foreground text-sm">
                     支持 JPG、PNG 格式，最大 10MB
                   </p>
-                  <div className="flex items-center justify-center space-x-4 text-xs text-gray-500">
+                  <div className="flex items-center justify-center space-x-4 text-xs text-muted-foreground">
                     <span>• 自动生成展示照片</span>
                     <span>• 智能裁剪头像</span>
                     <span>• 高清优化</span>
@@ -255,10 +255,10 @@ export function SuperSimpleUpload({ onUpload, photoUrl, avatarUrl }: SuperSimple
       {(photoUrl || avatarUrl) && (
         <div className="space-y-6">
           <div className="flex items-center justify-between">
-            <Label className="text-white text-lg font-semibold">预览效果</Label>
+            <Label className="text-lg font-semibold">预览效果</Label>
             <div className="flex items-center space-x-2">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-green-400 text-sm font-medium">处理完成</span>
+              <span className="text-green-700 dark:text-green-400 text-sm font-medium">处理完成</span>
             </div>
           </div>
 
@@ -270,13 +270,13 @@ export function SuperSimpleUpload({ onUpload, photoUrl, avatarUrl }: SuperSimple
                   <ImageIcon className="w-4 h-4 text-white" />
                 </div>
                 <div>
-                  <Label className="text-white text-base font-medium">展示照片</Label>
-                  <p className="text-gray-400 text-sm">用于主页和详情页展示</p>
+                  <Label className="text-base font-medium">展示照片</Label>
+                  <p className="text-muted-foreground text-sm">用于主页和详情页展示</p>
                 </div>
               </div>
 
               <div className="relative group">
-                <div className="aspect-[4/5] border-2 border-[#3c4043] rounded-2xl overflow-hidden bg-gradient-to-br from-[#2a2a2a] to-[#1a1a1a] shadow-2xl">
+                <div className="aspect-[4/5] border-2 border-border rounded-2xl overflow-hidden bg-card shadow-2xl">
                   {photoUrl ? (
                     <img
                       src={photoUrl}
@@ -285,7 +285,7 @@ export function SuperSimpleUpload({ onUpload, photoUrl, avatarUrl }: SuperSimple
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <ImageIcon className="w-16 h-16 text-gray-500" />
+                      <ImageIcon className="w-16 h-16 text-muted-foreground" />
                     </div>
                   )}
                 </div>
@@ -293,8 +293,8 @@ export function SuperSimpleUpload({ onUpload, photoUrl, avatarUrl }: SuperSimple
               </div>
 
               <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-400">高分辨率 • 1200x1200</span>
-                <span className="text-green-400">✓ 已优化</span>
+                <span className="text-muted-foreground">高分辨率 • 1200x1200</span>
+                <span className="text-green-700 dark:text-green-400">✓ 已优化</span>
               </div>
             </div>
 
@@ -305,14 +305,14 @@ export function SuperSimpleUpload({ onUpload, photoUrl, avatarUrl }: SuperSimple
                   <User className="w-4 h-4 text-white" />
                 </div>
                 <div>
-                  <Label className="text-white text-base font-medium">聊天头像</Label>
-                  <p className="text-gray-400 text-sm">用于聊天界面显示</p>
+                  <Label className="text-base font-medium">聊天头像</Label>
+                  <p className="text-muted-foreground text-sm">用于聊天界面显示</p>
                 </div>
               </div>
 
               <div className="flex justify-center">
                 <div className="relative group">
-                  <div className="w-48 h-48 border-2 border-[#3c4043] rounded-full overflow-hidden bg-gradient-to-br from-[#2a2a2a] to-[#1a1a1a] shadow-2xl">
+                  <div className="w-48 h-48 border-2 border-border rounded-full overflow-hidden bg-card shadow-2xl">
                     {avatarUrl ? (
                       <img
                         src={avatarUrl}
@@ -321,7 +321,7 @@ export function SuperSimpleUpload({ onUpload, photoUrl, avatarUrl }: SuperSimple
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <User className="w-16 h-16 text-gray-500" />
+                        <User className="w-16 h-16 text-muted-foreground" />
                       </div>
                     )}
                   </div>
@@ -330,8 +330,8 @@ export function SuperSimpleUpload({ onUpload, photoUrl, avatarUrl }: SuperSimple
               </div>
 
               <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-400">智能裁剪 • 400x400</span>
-                <span className="text-green-400">✓ 已优化</span>
+                <span className="text-muted-foreground">智能裁剪 • 400x400</span>
+                <span className="text-green-700 dark:text-green-400">✓ 已优化</span>
               </div>
             </div>
           </div>
@@ -344,7 +344,7 @@ export function SuperSimpleUpload({ onUpload, photoUrl, avatarUrl }: SuperSimple
               </div>
               <div className="space-y-2">
                 <p className="text-blue-400 font-medium text-sm">图片处理完成</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-400">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-muted-foreground">
                   <div>• 展示照片：保持原始比例，高清优化</div>
                   <div>• 聊天头像：智能裁剪，突出主体</div>
                   <div>• 自动压缩：减少存储空间</div>

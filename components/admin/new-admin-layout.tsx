@@ -22,7 +22,8 @@ import {
   User,
   ChevronDown,
   Home,
-  Network
+  Network,
+  Palette
 } from "lucide-react"
 
 interface AdminLayoutProps {
@@ -79,6 +80,12 @@ export default function NewAdminLayout({ children }: AdminLayoutProps) {
       label: "用户管理",
       icon: User,
       description: "用户账号管理"
+    },
+    {
+      href: "/admin/theme",
+      label: "主题设置",
+      icon: Palette,
+      description: "界面主题配置"
     }
   ]
 
@@ -124,8 +131,8 @@ export default function NewAdminLayout({ children }: AdminLayoutProps) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <div className="text-white">加载中...</div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-foreground">加载中...</div>
       </div>
     )
   }
@@ -135,26 +142,26 @@ export default function NewAdminLayout({ children }: AdminLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white">
+    <div className="min-h-screen bg-background text-foreground">
       {/* 顶部导航栏 */}
-      <header className="bg-[#1f1f1f] border-b border-[#2d2d2d] px-6 py-4">
+      <header className="bg-card border-b border-border px-6 py-4">
         <div className="flex items-center justify-between">
           {/* 左侧：Logo和标题 */}
           <div className="flex items-center space-x-4">
             {user.company.logoUrl ? (
-              <img 
-                src={user.company.logoUrl} 
+              <img
+                src={user.company.logoUrl}
                 alt={user.company.name}
                 className="w-8 h-8 rounded"
               />
             ) : (
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded flex items-center justify-center">
-                <Building className="w-4 h-4 text-white" />
+              <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary/70 rounded flex items-center justify-center">
+                <Building className="w-4 h-4 text-primary-foreground" />
               </div>
             )}
             <div>
-              <h1 className="text-xl font-semibold">{user.company.name} 管理后台</h1>
-              <p className="text-sm text-gray-400">系统管理与配置</p>
+              <h1 className="text-xl font-semibold text-foreground">{user.company.name} 管理后台</h1>
+              <p className="text-sm text-muted-foreground">系统管理与配置</p>
             </div>
           </div>
 
@@ -165,7 +172,7 @@ export default function NewAdminLayout({ children }: AdminLayoutProps) {
               variant="outline"
               size="sm"
               onClick={() => router.push('/workspace')}
-              className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
+              className="border-border text-muted-foreground hover:bg-muted"
             >
               <Home className="w-4 h-4 mr-2" />
               返回主页
@@ -174,10 +181,10 @@ export default function NewAdminLayout({ children }: AdminLayoutProps) {
             {/* 用户菜单 */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center space-x-2 text-white hover:bg-[#2d2d2d]">
+                <Button variant="ghost" className="flex items-center space-x-2 text-foreground hover:bg-muted">
                   <Avatar className="w-8 h-8">
                     <AvatarImage src={user.avatarUrl} />
-                    <AvatarFallback className="bg-[#6a5acd] text-white">
+                    <AvatarFallback className="bg-primary text-primary-foreground">
                       {user.displayName?.[0] || user.userId[0]}
                     </AvatarFallback>
                   </Avatar>
@@ -185,18 +192,18 @@ export default function NewAdminLayout({ children }: AdminLayoutProps) {
                   <ChevronDown className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 bg-[#2a2a2a] border-[#444]">
-                <DropdownMenuItem className="text-white hover:bg-[#333]">
+              <DropdownMenuContent align="end" className="w-56 bg-popover border-border">
+                <DropdownMenuItem className="text-foreground hover:bg-muted">
                   <User className="w-4 h-4 mr-2" />
                   个人资料
                 </DropdownMenuItem>
-                <DropdownMenuItem className="text-white hover:bg-[#333]">
+                <DropdownMenuItem className="text-foreground hover:bg-muted">
                   <Settings className="w-4 h-4 mr-2" />
                   系统设置
                 </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-[#444]" />
-                <DropdownMenuItem 
-                  className="text-red-400 hover:bg-red-500/20"
+                <DropdownMenuSeparator className="bg-border" />
+                <DropdownMenuItem
+                  className="text-destructive hover:bg-destructive/10"
                   onClick={handleLogout}
                 >
                   <LogOut className="w-4 h-4 mr-2" />
@@ -210,27 +217,27 @@ export default function NewAdminLayout({ children }: AdminLayoutProps) {
 
       <div className="flex">
         {/* 左侧导航栏 */}
-        <nav className="w-64 bg-[#1f1f1f] border-r border-[#2d2d2d] min-h-[calc(100vh-73px)]">
+        <nav className="w-64 bg-card border-r border-border min-h-[calc(100vh-73px)]">
           <div className="p-4">
             <div className="space-y-2">
               {menuItems.map((item) => {
                 const Icon = item.icon
                 const isActive = pathname === item.href
-                
+
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     className={`flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${
                       isActive
-                        ? 'bg-[#6a5acd] text-white'
-                        : 'text-gray-300 hover:bg-[#2d2d2d] hover:text-white'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     }`}
                   >
                     <Icon className="w-5 h-5" />
                     <div className="flex-1">
                       <div className="font-medium">{item.label}</div>
-                      <div className="text-xs text-gray-400">{item.description}</div>
+                      <div className={`text-xs ${isActive ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{item.description}</div>
                     </div>
                   </Link>
                 )
@@ -240,7 +247,7 @@ export default function NewAdminLayout({ children }: AdminLayoutProps) {
         </nav>
 
         {/* 主内容区域 */}
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-6 bg-background">
           {children}
         </main>
       </div>

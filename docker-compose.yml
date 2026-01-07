@@ -36,7 +36,7 @@ services:
       - "host.docker.internal:host-gateway"  # 允许访问宿主机服务
     environment:
       # 应用配置
-      - NODE_ENV=development
+      - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
       - NEXT_PUBLIC_APP_URL=http://localhost:8100
       

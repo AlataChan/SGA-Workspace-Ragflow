@@ -172,7 +172,7 @@ export default function CompanySettingsPage() {
     return (
       <NewAdminLayout>
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-[#6a5acd]" />
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       </NewAdminLayout>
     )
@@ -182,8 +182,8 @@ export default function CompanySettingsPage() {
     <NewAdminLayout>
       <div className="max-w-2xl">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-white mb-2">公司设置</h1>
-          <p className="text-gray-400">管理公司基本信息和品牌设置</p>
+          <h1 className="text-2xl font-bold text-foreground mb-2">公司设置</h1>
+          <p className="text-muted-foreground">管理公司基本信息和品牌设置</p>
         </div>
 
         {/* 消息提示 */}
@@ -194,55 +194,54 @@ export default function CompanySettingsPage() {
               : 'border-red-500/20 bg-red-500/10'
           }`}>
             {message.type === 'success' ? (
-              <CheckCircle className="h-4 w-4 text-green-400" />
+              <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
             ) : (
-              <AlertCircle className="h-4 w-4 text-red-400" />
+              <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
             )}
-            <AlertDescription className={message.type === 'success' ? 'text-green-100' : 'text-red-100'}>
+            <AlertDescription className={message.type === 'success' ? 'text-green-700 dark:text-green-200' : 'text-red-700 dark:text-red-200'}>
               {message.text}
             </AlertDescription>
           </Alert>
         )}
 
-        <Card className="bg-[#1f1f1f] border-[#2d2d2d]">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-white flex items-center">
+            <CardTitle className="flex items-center">
               <Building className="w-5 h-5 mr-2" />
               公司信息
             </CardTitle>
-            <CardDescription className="text-gray-400">
+            <CardDescription>
               设置公司名称和Logo，这些信息将显示在登录页面和主页面
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* 公司名称 */}
             <div className="space-y-2">
-              <Label htmlFor="companyName" className="text-white">公司名称</Label>
+              <Label htmlFor="companyName">公司名称</Label>
               <Input
                 id="companyName"
                 type="text"
                 placeholder="请输入公司名称"
                 value={formData.name}
                 onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
               />
             </div>
 
             {/* Logo上传 */}
             <div className="space-y-4">
-              <Label className="text-white">公司Logo</Label>
+              <Label>公司Logo</Label>
               
               {/* Logo预览 */}
               {logoPreview && (
                 <div className="flex items-center space-x-4">
-                  <div className="w-16 h-16 bg-[#2a2a2a] border border-[#3c4043] rounded-lg flex items-center justify-center overflow-hidden">
+                  <div className="w-16 h-16 bg-muted border border-border rounded-lg flex items-center justify-center overflow-hidden">
                     <img 
                       src={logoPreview} 
                       alt="Logo预览" 
                       className="w-full h-full object-contain"
                     />
                   </div>
-                  <div className="text-sm text-gray-400">
+                  <div className="text-sm text-muted-foreground">
                     当前Logo预览
                   </div>
                 </div>
@@ -261,12 +260,11 @@ export default function CompanySettingsPage() {
                   type="button"
                   variant="outline"
                   onClick={() => document.getElementById('logoUpload')?.click()}
-                  className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
                 >
                   <Upload className="w-4 h-4 mr-2" />
                   选择Logo文件
                 </Button>
-                <span className="text-sm text-gray-400">
+                <span className="text-sm text-muted-foreground">
                   支持 JPG、PNG 格式，文件大小不超过 2MB
                 </span>
               </div>
@@ -277,7 +275,6 @@ export default function CompanySettingsPage() {
               <Button
                 onClick={handleSave}
                 disabled={isSaving || isUploading}
-                className="bg-[#6a5acd] hover:bg-[#5a4abd] text-white"
               >
                 {isSaving || isUploading ? (
                   <>

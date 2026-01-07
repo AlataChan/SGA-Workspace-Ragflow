@@ -47,28 +47,28 @@ export default function TestMessageFormatPage() {
 > **提示**: 如需详细技术面数据分析，可进一步指定板块/标的，我可帮助深度数据整理趋势研判。`
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
+    <div className="min-h-screen bg-background p-8">
       <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-6">消息格式测试页面</h1>
-          <p className="text-gray-600 mb-8">
+        <div className="bg-card rounded-xl border border-border shadow-lg p-8 mb-8">
+          <h1 className="text-3xl font-bold text-foreground mb-6">消息格式测试页面</h1>
+          <p className="text-muted-foreground mb-8">
             这个页面用于测试和展示我们优化后的聊天消息格式效果，对比Dify的显示样式。
           </p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-lg p-8">
-          <h2 className="text-2xl font-semibold text-gray-800 mb-6">优化后的消息显示效果</h2>
+        <div className="bg-card rounded-xl border border-border shadow-lg p-8">
+          <h2 className="text-2xl font-semibold text-foreground mb-6">优化后的消息显示效果</h2>
           
           {/* 模拟聊天消息容器 */}
-          <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+          <div className="bg-muted/30 rounded-lg p-6 border border-border">
             <div className="flex items-start space-x-4">
               {/* Agent头像 */}
-              <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-lg flex-shrink-0">
+              <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-semibold text-lg flex-shrink-0">
                 AI
               </div>
               
               {/* 消息气泡 */}
-              <div className="flex-1 bg-white rounded-xl px-4 py-3 shadow-sm border border-gray-200">
+              <div className="flex-1 bg-card rounded-xl px-4 py-3 shadow-sm border border-border">
                 <div
                   className="message-content"
                   style={{
@@ -89,9 +89,9 @@ export default function TestMessageFormatPage() {
           </div>
 
           {/* 样式说明 */}
-          <div className="mt-8 p-6 bg-blue-50 rounded-lg border border-blue-200">
-            <h3 className="text-lg font-semibold text-blue-800 mb-4">优化特点</h3>
-            <ul className="space-y-2 text-blue-700">
+          <div className="mt-8 p-6 bg-accent/40 rounded-lg border border-border">
+            <h3 className="text-lg font-semibold text-foreground mb-4">优化特点</h3>
+            <ul className="space-y-2 text-muted-foreground">
               <li>• <strong>清晰的列表格式</strong>：有序列表使用数字编号，无序列表使用项目符号</li>
               <li>• <strong>优化的链接样式</strong>：链接有编号和蓝色高亮，悬停效果</li>
               <li>• <strong>合适的段落间距</strong>：段落之间有足够的空白，提升可读性</li>
@@ -108,7 +108,7 @@ export default function TestMessageFormatPage() {
             font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
             font-size: 14px !important;
             line-height: 1.7 !important;
-            color: #1f2937 !important;
+            color: hsl(var(--foreground)) !important;
             letter-spacing: 0.25px !important;
           }
 
@@ -137,7 +137,7 @@ export default function TestMessageFormatPage() {
           .message-content h4,
           .message-content h5,
           .message-content h6 {
-            color: #111827 !important;
+            color: hsl(var(--foreground)) !important;
             font-weight: 600 !important;
             margin: 20px 0 12px 0 !important;
             line-height: 1.4 !important;
@@ -145,13 +145,13 @@ export default function TestMessageFormatPage() {
 
           .message-content h1 {
             font-size: 20px !important;
-            border-bottom: 2px solid #e5e7eb !important;
+            border-bottom: 2px solid hsl(var(--border)) !important;
             padding-bottom: 8px !important;
           }
 
           .message-content h2 {
             font-size: 18px !important;
-            border-bottom: 1px solid #f3f4f6 !important;
+            border-bottom: 1px solid hsl(var(--border)) !important;
             padding-bottom: 6px !important;
           }
 
@@ -160,7 +160,7 @@ export default function TestMessageFormatPage() {
           }
 
           .message-content strong {
-            color: #111827 !important;
+            color: hsl(var(--foreground)) !important;
             font-weight: 600 !important;
           }
 
@@ -189,11 +189,11 @@ export default function TestMessageFormatPage() {
           /* 列表标记样式 */
           .message-content ol li::marker {
             font-weight: 600 !important;
-            color: #1f2937 !important;
+            color: hsl(var(--foreground)) !important;
           }
 
           .message-content ul li::marker {
-            color: #1f2937 !important;
+            color: hsl(var(--foreground)) !important;
           }
 
           /* 嵌套列表 */
@@ -206,8 +206,8 @@ export default function TestMessageFormatPage() {
           }
 
           .message-content code {
-            background: #f3f4f6 !important;
-            color: #374151 !important;
+            background: hsl(var(--muted)) !important;
+            color: hsl(var(--foreground)) !important;
             padding: 3px 6px !important;
             border-radius: 4px !important;
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
@@ -215,33 +215,33 @@ export default function TestMessageFormatPage() {
           }
 
           .message-content pre {
-            background: #f8f9fa !important;
-            color: #374151 !important;
+            background: hsl(var(--muted)) !important;
+            color: hsl(var(--foreground)) !important;
             padding: 16px !important;
             border-radius: 8px !important;
             overflow-x: auto !important;
             margin: 12px 0 !important;
-            border: 1px solid #e5e7eb !important;
+            border: 1px solid hsl(var(--border)) !important;
           }
 
           .message-content pre code {
             background: transparent !important;
             padding: 0 !important;
-            color: #212529 !important;
+            color: hsl(var(--foreground)) !important;
             font-size: 13px !important;
           }
 
           .message-content blockquote {
-            border-left: 3px solid #4285f4 !important;
+            border-left: 3px solid hsl(var(--primary)) !important;
             margin: 12px 0 !important;
             padding: 8px 0 8px 16px !important;
-            background: rgba(66, 133, 244, 0.1) !important;
+            background: hsl(var(--primary) / 0.12) !important;
             border-radius: 0 4px 4px 0 !important;
           }
 
           /* 链接样式优化 - 仿Dify样式 */
           .message-content a {
-            color: #1a73e8 !important;
+            color: hsl(var(--primary)) !important;
             text-decoration: none !important;
             font-weight: 500 !important;
             transition: all 0.2s ease !important;
@@ -252,9 +252,9 @@ export default function TestMessageFormatPage() {
           }
 
           .message-content a:hover {
-            color: #1557b0 !important;
-            background-color: rgba(26, 115, 232, 0.08) !important;
-            border-bottom: 1px solid #1a73e8 !important;
+            color: hsl(var(--primary)) !important;
+            background-color: hsl(var(--primary) / 0.12) !important;
+            border-bottom: 1px solid hsl(var(--primary)) !important;
           }
 
           /* 移除链接的自动编号，因为列表已经有编号了 */
@@ -264,25 +264,25 @@ export default function TestMessageFormatPage() {
             width: 100% !important;
             border-collapse: collapse !important;
             margin: 16px 0 !important;
-            border: 1px solid #e5e7eb !important;
+            border: 1px solid hsl(var(--border)) !important;
             border-radius: 8px !important;
             overflow: hidden !important;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+            box-shadow: 0 1px 3px hsl(var(--foreground) / 0.12) !important;
           }
 
           .message-content th,
           .message-content td {
             padding: 12px 16px !important;
             text-align: left !important;
-            border-bottom: 1px solid #e5e7eb !important;
+            border-bottom: 1px solid hsl(var(--border)) !important;
             vertical-align: top !important;
           }
 
           .message-content th {
-            background-color: #f9fafb !important;
+            background-color: hsl(var(--muted)) !important;
             font-weight: 600 !important;
-            color: #374151 !important;
-            border-bottom: 2px solid #e5e7eb !important;
+            color: hsl(var(--foreground)) !important;
+            border-bottom: 2px solid hsl(var(--border)) !important;
           }
 
           .message-content tr:last-child td {
@@ -290,13 +290,13 @@ export default function TestMessageFormatPage() {
           }
 
           .message-content tr:hover {
-            background-color: #f9fafb !important;
+            background-color: hsl(var(--muted) / 0.6) !important;
           }
 
           /* 文字分类样式 - 仿Dify */
           .message-content strong {
             font-weight: 600 !important;
-            color: #1f2937 !important;
+            color: hsl(var(--foreground)) !important;
           }
 
           /* 分类标题样式 */
@@ -306,12 +306,12 @@ export default function TestMessageFormatPage() {
 
           /* 引用块样式 */
           .message-content blockquote {
-            border-left: 4px solid #3b82f6 !important;
+            border-left: 4px solid hsl(var(--primary)) !important;
             padding-left: 16px !important;
             margin: 16px 0 !important;
-            color: #6b7280 !important;
+            color: hsl(var(--muted-foreground)) !important;
             font-style: italic !important;
-            background-color: #f8fafc !important;
+            background-color: hsl(var(--muted)) !important;
             padding: 12px 16px !important;
             border-radius: 0 8px 8px 0 !important;
           }

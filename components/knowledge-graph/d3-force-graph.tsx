@@ -37,6 +37,54 @@ interface D3ForceGraphProps {
 
 const NODE_RADIUS = 28;
 
+const getCssVar = (name: string) => {
+  if (typeof window === "undefined") return "";
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+};
+
+const hslVar = (name: string, alpha?: number) => {
+  const value = getCssVar(name);
+  if (!value) return "";
+  if (typeof alpha === "number") return `hsl(${value} / ${alpha})`;
+  return `hsl(${value})`;
+};
+
+const parseHexColor = (color: string) => {
+  const hex = color.trim().replace("#", "");
+  if (!/^[0-9a-fA-F]{3}$|^[0-9a-fA-F]{6}$/.test(hex)) return null;
+  const normalized = hex.length === 3 ? hex.split("").map((c) => c + c).join("") : hex;
+  const num = parseInt(normalized, 16);
+  return {
+    r: (num >> 16) & 255,
+    g: (num >> 8) & 255,
+    b: num & 255,
+  };
+};
+
+const relativeLuminance = (r: number, g: number, b: number) => {
+  const toLinear = (v: number) => {
+    const c = v / 255;
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  const rr = toLinear(r);
+  const gg = toLinear(g);
+  const bb = toLinear(b);
+  return 0.2126 * rr + 0.7152 * gg + 0.0722 * bb;
+};
+
+const pickReadableTextColor = (backgroundColor: string) => {
+  const rgb = parseHexColor(backgroundColor);
+  if (!rgb) return "#ffffff";
+  return relativeLuminance(rgb.r, rgb.g, rgb.b) > 0.6 ? "#0b1220" : "#ffffff";
+};
+
+const pickTextShadow = (textColor: string) => {
+  const isLightText = textColor.toLowerCase() === "#ffffff";
+  return isLightText
+    ? "0 1px 3px rgba(0,0,0,0.75), 0 -1px 3px rgba(0,0,0,0.75), 1px 0 3px rgba(0,0,0,0.75), -1px 0 3px rgba(0,0,0,0.75)"
+    : "0 1px 3px rgba(255,255,255,0.65), 0 -1px 3px rgba(255,255,255,0.65), 1px 0 3px rgba(255,255,255,0.65), -1px 0 3px rgba(255,255,255,0.65)";
+};
+
 // 分析节点关联关系
 const analyzeNodeRelations = (selectedNodeId: string, links: Link[]) => {
   const directNodes = new Set<string>();
@@ -126,6 +174,12 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
     const svg = d3.select(svgRef.current);
     const g = svg.append("g");
 
+	    const nodeStrokeDefault = hslVar("--foreground", 0.6) || "#ffffff";
+	    const nodeStrokeStrong = hslVar("--foreground", 0.9) || "#ffffff";
+	    const linkStrokeDefault = hslVar("--muted-foreground", 0.55) || "#6b7280";
+	    const linkStrokeTemporary = hslVar("--chart-3", 0.85) || hslVar("--primary", 0.85) || linkStrokeDefault;
+	    const selectedStroke = hslVar("--primary") || nodeStrokeStrong;
+
     // 设置缩放
     const zoom = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.1, 4])
@@ -147,15 +201,15 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
       .force("collision", d3.forceCollide().radius(NODE_RADIUS + 10));
 
     // 创建连线
-    const link = g.append("g")
-      .attr("class", "links")
-      .selectAll("line")
-      .data(validLinks)
-      .join("line")
-      .attr("stroke", d => (d as any).isTemporary ? "#fbbf24" : "#6b7280")
-      .attr("stroke-opacity", 0.7)
-      .attr("stroke-width", 1.5)
-      .attr("stroke-dasharray", (d: any) => d.isTemporary ? "5,5" : "none");
+	    const link = g.append("g")
+	      .attr("class", "links")
+	      .selectAll("line")
+	      .data(validLinks)
+	      .join("line")
+	      .attr("stroke", d => (d as any).isTemporary ? linkStrokeTemporary : linkStrokeDefault)
+	      .attr("stroke-opacity", 0.7)
+	      .attr("stroke-width", 1.5)
+	      .attr("stroke-dasharray", (d: any) => d.isTemporary ? "5,5" : "none");
 
     // 创建节点
     const node = g.append("g")
@@ -165,7 +219,7 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
       .join("circle")
       .attr("r", NODE_RADIUS)
       .attr("fill", d => getEntityColor(d.type, d.isTemporary))
-      .attr("stroke", "#fff")
+      .attr("stroke", nodeStrokeDefault)
       .attr("stroke-width", 2)
       .style("cursor", "pointer")
       .call(d3.drag<any, Node>()
@@ -209,11 +263,11 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
             if (nodeData.id === newSelectedId) return 5;
             return 2;
           })
-          .attr("stroke", nodeData => {
-            if (!newSelectedId) return "#fff";
-            if (nodeData.id === newSelectedId) return "#ffd700";
-            return "#fff";
-          });
+	          .attr("stroke", nodeData => {
+	            if (!newSelectedId) return nodeStrokeDefault;
+	            if (nodeData.id === newSelectedId) return selectedStroke;
+	            return nodeStrokeStrong;
+	          });
 
         // 强化连线对比
         link.style("opacity", linkData => {
@@ -236,12 +290,12 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
       .text(d => d.name.length > 10 ? d.name.substring(0, 10) + '...' : d.name)
       .attr("font-size", "14px")
       .attr("font-family", "Microsoft YaHei, SimHei, Arial, sans-serif")
-      .attr("fill", "#ffffff")
+      .attr("fill", d => pickReadableTextColor(getEntityColor(d.type, d.isTemporary)))
       .attr("font-weight", "500")
       .attr("text-anchor", "middle")
       .attr("dy", "0.35em")
       .style("pointer-events", "none")
-      .style("text-shadow", "0 1px 3px rgba(0,0,0,0.8), 0 -1px 3px rgba(0,0,0,0.8), 1px 0 3px rgba(0,0,0,0.8), -1px 0 3px rgba(0,0,0,0.8)");
+      .style("text-shadow", d => pickTextShadow(pickReadableTextColor(getEntityColor(d.type, d.isTemporary))));
 
     // 添加动画完成标志
     let animationCompleted = false;
@@ -294,7 +348,7 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
       node
         .style("opacity", 1)
         .attr("stroke-width", 2)
-        .attr("stroke", "#fff");
+        .attr("stroke", nodeStrokeDefault);
       link.style("opacity", 0.6);
 
       // 只在必要时重启动画，并且使用较低的alpha值
@@ -315,7 +369,7 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
         width="100%"
         height="100%"
         viewBox={`0 0 ${width} ${height}`}
-        className="w-full h-full bg-[#0d1117]"
+        className="w-full h-full bg-background"
         style={{
           position: 'absolute',
           top: 0,

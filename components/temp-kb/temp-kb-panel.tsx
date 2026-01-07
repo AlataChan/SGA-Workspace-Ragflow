@@ -228,18 +228,18 @@ export default function TempKbPanel({
   }
 
   return (
-    <Card className={cn("bg-slate-900 border border-slate-600 text-white flex flex-col", className)}>
+    <Card className={cn("bg-card border border-border text-foreground flex flex-col", className)}>
       {/* 紧凑模式下隐藏标题栏 */}
       {!compact && (
         <CardHeader className="pb-2 flex-shrink-0">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg flex items-center gap-2 text-white">
-              <Database className="h-5 w-5 text-blue-400" />
+            <CardTitle className="text-lg flex items-center gap-2 text-foreground">
+              <Database className="h-5 w-5 text-primary" />
               我的知识库
             </CardTitle>
             <div className="flex items-center gap-2">
               {kbInfo && getStatusBadge(kbInfo.status)}
-              <Button variant="ghost" size="icon" onClick={fetchKbInfo} className="text-white hover:bg-slate-700">
+              <Button variant="ghost" size="icon" onClick={fetchKbInfo} className="text-muted-foreground hover:text-foreground hover:bg-muted">
                 <RefreshCw className="h-4 w-4" />
               </Button>
               {kbInfo && (
@@ -268,7 +268,7 @@ export default function TempKbPanel({
         {compact && (
           <div className="flex items-center justify-end gap-2 mb-2 flex-shrink-0">
             {kbInfo && getStatusBadge(kbInfo.status)}
-            <Button variant="ghost" size="sm" onClick={fetchKbInfo} className="text-white hover:bg-slate-700 h-7 px-2">
+            <Button variant="ghost" size="sm" onClick={fetchKbInfo} className="text-muted-foreground hover:text-foreground hover:bg-muted h-7 px-2">
               <RefreshCw className="h-3.5 w-3.5" />
             </Button>
             {kbInfo && (
@@ -298,20 +298,20 @@ export default function TempKbPanel({
 
         {/* 统计信息 - 紧凑布局 */}
         <div className={cn("grid grid-cols-3 gap-2 flex-shrink-0", compact ? "mb-2" : "mb-4")}>
-          <div className={cn("text-center bg-slate-800 border border-slate-600 rounded-lg", compact ? "p-2" : "p-3")}>
-            <FileText className={cn("mx-auto text-blue-400", compact ? "h-4 w-4" : "h-5 w-5 mb-1")} />
-            <div className={cn("font-bold text-white", compact ? "text-xl" : "text-2xl")}>{kbInfo?.chunkCount || 0}</div>
-            <div className="text-xs text-slate-400">知识片段</div>
+          <div className={cn("text-center bg-muted border border-border rounded-lg", compact ? "p-2" : "p-3")}>
+            <FileText className={cn("mx-auto text-primary", compact ? "h-4 w-4" : "h-5 w-5 mb-1")} />
+            <div className={cn("font-bold text-foreground", compact ? "text-xl" : "text-2xl")}>{kbInfo?.chunkCount || 0}</div>
+            <div className="text-xs text-muted-foreground">知识片段</div>
           </div>
-          <div className={cn("text-center bg-slate-800 border border-slate-600 rounded-lg", compact ? "p-2" : "p-3")}>
+          <div className={cn("text-center bg-muted border border-border rounded-lg", compact ? "p-2" : "p-3")}>
             <Network className={cn("mx-auto text-green-400", compact ? "h-4 w-4" : "h-5 w-5 mb-1")} />
-            <div className={cn("font-bold text-white", compact ? "text-xl" : "text-2xl")}>{kbInfo?.nodeCount || 0}</div>
-            <div className="text-xs text-slate-400">图谱节点</div>
+            <div className={cn("font-bold text-foreground", compact ? "text-xl" : "text-2xl")}>{kbInfo?.nodeCount || 0}</div>
+            <div className="text-xs text-muted-foreground">图谱节点</div>
           </div>
-          <div className={cn("text-center bg-slate-800 border border-slate-600 rounded-lg", compact ? "p-2" : "p-3")}>
+          <div className={cn("text-center bg-muted border border-border rounded-lg", compact ? "p-2" : "p-3")}>
             <Network className={cn("mx-auto text-purple-400", compact ? "h-4 w-4" : "h-5 w-5 mb-1")} />
-            <div className={cn("font-bold text-white", compact ? "text-xl" : "text-2xl")}>{kbInfo?.edgeCount || 0}</div>
-            <div className="text-xs text-slate-400">图谱关系</div>
+            <div className={cn("font-bold text-foreground", compact ? "text-xl" : "text-2xl")}>{kbInfo?.edgeCount || 0}</div>
+            <div className="text-xs text-muted-foreground">图谱关系</div>
           </div>
         </div>
 
@@ -334,17 +334,17 @@ export default function TempKbPanel({
 
         {/* 标签页 - 使用 flex 布局填充剩余空间 */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col">
-          <TabsList className="w-full grid grid-cols-2 bg-slate-800 border border-slate-600 flex-shrink-0">
+          <TabsList className="w-full grid grid-cols-2 bg-muted border border-border flex-shrink-0">
             <TabsTrigger
               value="chunks"
-              className="text-slate-300 data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+              className="text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
             >
               <FileText className="h-4 w-4 mr-2" />
               知识片段
             </TabsTrigger>
             <TabsTrigger
               value="graph"
-              className="text-slate-300 data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+              className="text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
             >
               <Network className="h-4 w-4 mr-2" />
               知识图谱
@@ -362,10 +362,10 @@ export default function TempKbPanel({
             {kbInfo && kbInfo.chunkCount > 0 ? (
               <KnowledgeGraphView />
             ) : (
-              <div className="text-center py-8 bg-slate-800 border border-slate-600 rounded-lg">
-                <Network className="h-12 w-12 mx-auto mb-3 text-slate-500" />
-                <p className="text-sm text-slate-300">暂无图谱数据</p>
-                <p className="text-xs mt-1 text-slate-500">
+              <div className="text-center py-8 bg-muted border border-border rounded-lg">
+                <Network className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">暂无图谱数据</p>
+                <p className="text-xs mt-1 text-muted-foreground">
                   保存知识片段后构建图谱
                 </p>
               </div>

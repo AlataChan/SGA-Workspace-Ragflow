@@ -17,7 +17,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
-      <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
+      <body
+        suppressHydrationWarning
+        className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}
+      >
         <ThemeProvider
           attribute="class"
           defaultTheme="light"
