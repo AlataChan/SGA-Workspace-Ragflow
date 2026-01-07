@@ -58,14 +58,17 @@ export class UserSyncService {
         const updatedUser = await prisma.user.update({
           where: { id: existingUser.id },
           data: {
+            userId: yunzhijiaUser.userid,
+            username: yunzhijiaUser.username || existingUser.username,
             yunzhijiaUserId: yunzhijiaUser.userid, // 关联i国贸用户ID
-            displayName: yunzhijiaUser.jobNo,
-            avatarUrl: yunzhijiaUser.avatarUrl || existingUser.avatarUrl,
+            displayName: yunzhijiaUser.username,
             // 生成唯一的 phone（company_id 和 phone 字段被设置了联合唯一索引）
-            phone:yunzhijiaUser.phone || existingUser.phone,
+            phone:yunzhijiaUser.mobile || existingUser.phone,
             email: yunzhijiaUser.email || existingUser.email,
             lastLoginAt: new Date(),
-            ssoProvider: 'yunzhijia',
+            ssoProvider: yunzhijiaUser.projectCode,
+            avatarUrl: yunzhijiaUser.photoUrl,
+            chineseName:yunzhijiaUser.username
           },
           include: {
             company: {
@@ -90,29 +93,28 @@ export class UserSyncService {
       logger.info('用户不存在，创建新用户', {
         yunzhijiaUserId: yunzhijiaUser.userid
       })
-
       // 获取或创建默认公司
       const companyId = await this.getOrCreateDefaultCompany(yunzhijiaUser.department)
-
-      // 生成用户ID
-      const userId = this.generateUserId(yunzhijiaUser)
-
-      // 生成唯一的 phone（如果i国贸没有返回）
-      const phone = yunzhijiaUser.phone || `sso_${yunzhijiaUser.userid}`
+      const departmentId = await this.getOrCreateDepartmentByIdName({
+        companyId,
+        externalId: yunzhijiaUser.orgId,
+        name: yunzhijiaUser.department,
+      })
 
       const newUser = await prisma.user.create({
         data: {
-          userId: userId,
+          userId: yunzhijiaUser.userid,
           yunzhijiaUserId: yunzhijiaUser.userid,
           username: yunzhijiaUser.username || yunzhijiaUser.userid,
-          displayName: yunzhijiaUser.jobNo,
-          phone: phone,
+          displayName: yunzhijiaUser.username,
+          phone: yunzhijiaUser.mobile||yunzhijiaUser.userid,
           email: yunzhijiaUser.email,
-          avatarUrl: yunzhijiaUser.avatarUrl,
+          avatarUrl: yunzhijiaUser.photoUrl,
           role: UserRole.USER, // 默认为普通用户
           passwordHash: '', // SSO 用户不需要密码
-          ssoProvider: 'yunzhijia',
+          ssoProvider: yunzhijiaUser.projectCode,
           companyId: companyId,
+          departmentId: departmentId ?? undefined,
           isActive: true,
           lastLoginAt: new Date(),
           chineseName:yunzhijiaUser.username
@@ -143,16 +145,6 @@ export class UserSyncService {
     }
   }
 
-  /**
-   * 生成用户ID
-   * @param yunzhijiaUser i国贸用户信息
-   * @returns 用户ID
-   */
-  private generateUserId(yunzhijiaUser: UserInfoResponse): string {
-    // 使用i国贸用户ID作为基础
-    // 格式：yzj_i国贸用户ID
-    return `yzj_${yunzhijiaUser.userid}`
-  }
 
   /**
    * 获取或创建默认公司
@@ -160,46 +152,102 @@ export class UserSyncService {
    * @returns 公司ID
    */
   private async getOrCreateDefaultCompany(department?: string): Promise<string> {
+
+
+    //尝试获取任意一个公司
+    const anyCompany = await prisma.company.findFirst()
+
+    if (anyCompany) {
+      logger.info('使用第一个找到的公司', { companyId: anyCompany.id })
+      return anyCompany.id
+    }
+
+    // 如果还是失败，抛出错误
+    throw new Error('无法获取公司')
+  }
+/**
+   * 获取或创建部门（优先按 externalId，其次按 name）
+   * - externalId 如果传入，会尝试作为 Department.id 使用
+   * - name 用于同公司下的唯一约束兜底匹配
+   */
+  private async getOrCreateDepartmentByIdName(params: {
+    companyId: string
+    externalId?: string
+    name?: string
+  }): Promise<string | null> {
+    const companyId = params.companyId
+    const externalId = params.externalId
+    const name = params.name
+
+    if (!name && !externalId) {
+      return null
+    }
+
+    // 1) 优先按 externalId 查找（如果传了）
+    if (externalId) {
+      const byId = await prisma.department.findUnique({ where: { id: externalId } })
+      if (byId) {
+        if (byId.companyId !== companyId) {
+          logger.warn('部门ID已存在但公司不匹配，忽略externalId并按name兜底', {
+            externalId,
+            existingCompanyId: byId.companyId,
+            companyId,
+          })
+        } else {
+          return byId.id
+        }
+      }
+    }
+
+    // 2) 按 name 兜底（同公司下唯一）
+    if (name) {
+      const byName = await prisma.department.findFirst({
+        where: { companyId, name },
+        select: { id: true },
+      })
+      if (byName) return byName.id
+    }
+
+    // 3) 创建部门
+    // 若 name 为空但 externalId 有值，用 externalId 作为显示名兜底
+    const finalName = name || externalId!
+
+    // 自动排序：最大 sortOrder + 1
+    const maxSortOrder = await prisma.department.findFirst({
+      where: { companyId },
+      orderBy: { sortOrder: 'desc' },
+      select: { sortOrder: true },
+    })
+    const sortOrder = (maxSortOrder?.sortOrder || 0) + 1
+
     try {
-      // 尝试查找默认公司
-      let company = await prisma.company.findFirst({
-        where: {
-          OR: [
-            { name: '默认公司' }
-          ],
+      const created = await prisma.department.create({
+        data: {
+          ...(externalId ? { id: externalId } : {}),
+          companyId,
+          name: finalName,
+          icon: 'Building',
+          sortOrder,
+          description: externalId ? `Synced from igm (deptId=${finalName})` : 'Synced from igm',
         },
+        select: { id: true },
+      })
+      return created.id
+    } catch (error) {
+      // 可能并发下已被创建：按 name 再取一次
+      logger.warn('创建部门失败，尝试按name重新获取（可能并发创建）', error as Error, {
+        companyId,
+        externalId,
+        name: finalName,
       })
 
-      // 如果不存在，创建默认公司
-      if (!company) {
-        logger.info('创建默认公司')
-
-        company = await prisma.company.create({
-          data: {
-            name: '默认公司'
-          },
-        })
-
-        logger.info('成功创建默认公司', { companyId: company.id })
-      }
-
-      return company.id
-    } catch (error) {
-      logger.error('获取或创建默认公司失败', error as Error)
-
-      // 如果失败，尝试获取任意一个公司
-      const anyCompany = await prisma.company.findFirst()
-
-      if (anyCompany) {
-        logger.warn('使用第一个找到的公司', { companyId: anyCompany.id })
-        return anyCompany.id
-      }
-
-      // 如果还是失败，抛出错误
-      throw new Error('无法获取或创建公司')
+      const byName = await prisma.department.findFirst({
+        where: { companyId, name: finalName },
+        select: { id: true },
+      })
+      return byName?.id ?? null
     }
   }
-
   /**
    * 通过i国贸用户ID查找本地用户
    * @param yunzhijiaUserId i国贸用户ID

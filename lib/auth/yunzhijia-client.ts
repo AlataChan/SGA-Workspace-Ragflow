@@ -30,6 +30,12 @@ interface UserInfoResponse {
   deviceId?: string //设备id
   openid?: string //团队用户id
   ticket?: string
+  photoUrl?:string //头像
+  orgId?:string //部门id
+  department?:string //部门name
+  projectCode?:string
+  mobile?:string
+  email?:string
   [key: string]: any // 其他可能的字段
 }
 
