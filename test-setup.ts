@@ -7,6 +7,14 @@ afterEach(() => {
   cleanup()
 })
 
+// JSDOM does not implement scrollIntoView; mock it for components that call it.
+if (!('scrollIntoView' in window.HTMLElement.prototype)) {
+  Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', {
+    value: () => {},
+    writable: true,
+  })
+}
+
 // Mock Next.js router
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -28,4 +36,3 @@ vi.mock('sonner', () => ({
     info: vi.fn(),
   },
 }))
-

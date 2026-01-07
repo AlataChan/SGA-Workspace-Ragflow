@@ -17,6 +17,41 @@
 
 ---
 
+## 🔎 方案审查：10-20 个文档批量上传到 Dify
+
+结论：**可以实现**。但需要补齐几个关键点，否则示例会“看起来能跑、实际上不可靠/不安全”。
+
+### 关键风险与遗漏
+
+1) **Dify API Key 暴露风险（必须避免）**
+- `docs/dify-batch-upload-example.tsx` 这种“前端直连 Dify + 明文 API Key”的写法不可用：Key 会被浏览器、日志、抓包、前端源码泄露。
+- 建议：前端只请求本域接口；由后端代理转发到 Dify，并在服务端读取 Key（环境变量或数据库）。
+
+2) **“上传成功”不等于“处理完成”（Dify 的索引是异步的）**
+- Dify 数据集上传接口返回 `document.id` 只能代表“创建成功”；真正完成要等 `indexing_status=completed`。
+- 批量场景需要一个“状态跟踪器”：对同一个 dataset（kb）统一轮询一次，更新多个文档状态，避免 20 个文档=20 个轮询器。
+
+3) **接口边界需要明确：Dify Chat vs Dataset 是两套接口/权限**
+- 本项目已有的 Dify Chat（`/v1/chat-messages`、`/v1/files/upload`）不等于 Dataset 文档上传。
+- Dataset 批量上传需要用 Dify Dataset API，例如：
+  - `POST /v1/datasets/{dataset_id}/document/create_by_file`
+  - `GET /v1/datasets/{dataset_id}/documents?page=1&limit=...`（读取 `indexing_status`）
+  - `DELETE /v1/datasets/{dataset_id}/documents/{document_id}`
+
+4) **进度与体验：Dify 通常没有“真实进度条”**
+- Dify 多数情况下只给状态（waiting/parsing/indexing/completed/error），无法提供精确百分比；可以用“状态→估算进度”的方式展示（例如 parsing=30%，indexing=70%）。
+- 如果你一定要“上传字节进度”，`fetch` 不好做，需要改用 `XMLHttpRequest` 的 `upload.onprogress`（MVP 可先不做）。
+
+5) **失败重试与限流**
+- 10-20 个文件并发直打 Dify 容易触发 429/超时；建议并发 `2~3`，并对 429/5xx 使用指数退避重试。
+- 401/403 这类权限问题应 fail-fast（直接提示并停止该组任务），避免无意义重试。
+
+### 实施建议（最小可落地）
+- 前端：使用一个并发受控的任务队列（或 promise pool）+ 一个 dataset 维度的轮询器；示例见 `docs/dify-batch-upload-example.tsx`。
+- 后端：新增 Dify Dataset API 的代理路由（建议路径形如 `/api/dify/v1/**`），由后端注入 `Authorization: Bearer ...`，并做基础超时/重试/错误透传。
+
+---
+
 ## 🧠 核心设计思路：三层渐进式（最小变动 → 可扩展）
 
 ### 第 1 层：前端任务队列管理器（最小变动核心）
@@ -2612,10 +2647,62 @@ Phase 4: 集成测试与优化 (4 天)
 
 ---
 
-## �📝 变更记录
+## 🔍 项目实际状态审查（2026-01-05）
+
+> **审查结论**: 文档设计完善，但需要修正实施状态标记，部分标记为"已完成"的内容实际未实现。
+
+### ✅ 已完成的内容
+| 组件 | 文件路径 | 状态 |
+|------|----------|------|
+| DocumentStatus 枚举 | `lib/types/document.ts` | ✅ 已实现，包含 PARSING/COMPLETED/FAILED 和辅助函数 |
+| Task 类型定义 | `lib/types/task.ts` | ✅ 已实现，包含 TaskStatus、TaskType（仅 kb.*）、RetryConfig、Task、GroupProgress 等 |
+| 文档上传组件 | `components/knowledge-base/document-upload.tsx` | ⚠️ 已存在但无并发控制 |
+| API 路由结构 | `app/api/knowledge-bases/[id]/documents/` | ✅ 已实现（上传、状态查询、解析触发） |
+
+### ❌ 未完成的内容（文档标记需修正）
+| 组件 | 预期路径 | 状态 | 备注 |
+|------|----------|------|------|
+| 适配器目录 | `lib/adapters/` | ❌ 不存在 | v1.1 设计中标记"0.2-0.7 已完成"实际未开始 |
+| TaskStore | `app/store/task.ts` | ❌ 不存在 | 核心状态管理未实现 |
+| TaskQueue | `lib/task-queue.ts` | ❌ 不存在 | 核心队列逻辑未实现 |
+| DocumentStatusPoller | `lib/document-status-poller.ts` | ❌ 不存在 | 状态轮询器未实现 |
+| Task Center UI | `components/task-center.tsx` | ❌ 不存在 | UI 组件未实现 |
+| chat/agent 任务类型 | `lib/types/task.ts` | ❌ 未扩展 | v1.2 设计中标记的 chat.* 和 agent.* 类型未添加 |
+| Dify 代理路由 | `app/api/dify/` | ❌ 不存在 | dify-batch-upload-example.tsx 依赖的后端代理 |
+
+### ⚠️ 环境变量遗漏
+当前 `.env.example` 缺少批量任务相关配置：
+```env
+# 需要补充的配置
+BATCH_TASK_CONCURRENCY=3           # 批量任务并发数
+BATCH_TASK_RETRY_MAX=3             # 最大重试次数
+BATCH_TASK_POLL_INTERVAL=3000      # 状态轮询间隔(ms)
+BATCH_TASK_CLEANUP_TTL=86400000    # 任务清理时间(ms) 24h
+```
+
+### 📝 改进建议
+
+1. **工期估算偏乐观**: 考虑到适配器层、TaskStore、TaskQueue 都未开始，建议将 Phase 0 的工期从 4 天调整为 5-6 天。
+
+2. **依赖关系应明确**: dify-batch-upload-example.tsx 依赖的 `/api/dify/v1/...` 代理路由不存在，应在实施路线图中明确标出。
+
+3. **RAGFlow 配置缺失**: DEPLOYMENT.md 缺少 RAGFlow 相关的部署配置说明，而这是项目的主要后端。
+
+4. **测试用例应先行**: 建议在实现 TaskQueue 之前先编写测试用例框架，确保 TDD 开发模式。
+
+---
+
+## 📝 变更记录
+
+### v1.3 (2026-01-05) - 项目实际状态审查
+- 🔍 审查项目代码，发现多处"已完成"标记与实际不符
+- ⚠️ 修正 Phase 0 实施状态：0.1 已完成，0.2-0.7 未开始
+- ⚠️ 修正 v1.2 状态：chat/agent 任务类型设计已完成，但代码未实现
+- 📝 新增环境变量配置建议
+- 📝 新增改进建议
 
 ### v1.2 (2025-12-25)
-- ✅ 扩展 TaskType 支持 chat.* 和 agent.* 任务
+- ✅ 扩展 TaskType 支持 chat.* 和 agent.* 任务（设计完成，代码待实现）
 - ✅ 定义 ChatAdapter 统一接口
 - ✅ 实现 RAGFlowChatAdapter 设计
 - ✅ 实现 DifyChatAdapter 设计
