@@ -162,7 +162,7 @@ export default function KnowledgeGraphViewer({ knowledgeGraphId, onBack }: Knowl
       .selectAll("line")
       .data(graphData.links)
       .enter().append("line")
-      .attr("stroke", "#999")
+      .attr("stroke", "hsl(var(--muted-foreground))")
       .attr("stroke-opacity", 0.6)
       .attr("stroke-width", 2)
 
@@ -194,7 +194,7 @@ export default function KnowledgeGraphViewer({ knowledgeGraphId, onBack }: Knowl
     node.append("circle")
       .attr("r", 20)
       .attr("fill", d => getEntityColor(d.type, false))
-      .attr("stroke", "#fff")
+      .attr("stroke", "hsl(var(--background))")
       .attr("stroke-width", 2)
 
     // 添加节点标签
@@ -202,7 +202,7 @@ export default function KnowledgeGraphViewer({ knowledgeGraphId, onBack }: Knowl
       .attr("dy", ".35em")
       .attr("text-anchor", "middle")
       .attr("font-size", "10px")
-      .attr("fill", "#333")
+      .attr("fill", "hsl(var(--foreground))")
       .text(d => d.name.length > 8 ? d.name.substring(0, 8) + "..." : d.name)
 
     // 节点点击事件
@@ -323,8 +323,8 @@ export default function KnowledgeGraphViewer({ knowledgeGraphId, onBack }: Knowl
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">加载知识图谱中...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">加载知识图谱中...</p>
         </div>
       </div>
     )
@@ -347,8 +347,8 @@ export default function KnowledgeGraphViewer({ knowledgeGraphId, onBack }: Knowl
   return (
     <div className="flex-1 flex">
       {/* 左侧搜索面板 */}
-      <div className="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+      <div className="w-80 bg-card border-r border-border flex flex-col">
+        <div className="p-4 border-b border-border">
           <div className="flex items-center space-x-2 mb-4">
             <Button variant="ghost" onClick={onBack} size="sm">
               ← 返回
@@ -377,13 +377,13 @@ export default function KnowledgeGraphViewer({ knowledgeGraphId, onBack }: Knowl
           <div className="p-4">
             {searchResults.length > 0 && (
               <div className="space-y-2">
-                <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                <h4 className="font-medium text-sm text-foreground">
                   搜索结果 ({searchResults.length})
                 </h4>
                 {searchResults.map((node) => (
                   <Card
                     key={node.id}
-                    className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+                    className="cursor-pointer hover:bg-muted"
                     onClick={() => handleNodeClick(node)}
                   >
                     <CardContent className="p-3">
@@ -394,7 +394,7 @@ export default function KnowledgeGraphViewer({ knowledgeGraphId, onBack }: Knowl
                         />
                         <span className="text-sm font-medium">{node.name}</span>
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">{node.type}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{node.type}</p>
                     </CardContent>
                   </Card>
                 ))}
@@ -423,11 +423,11 @@ export default function KnowledgeGraphViewer({ knowledgeGraphId, onBack }: Knowl
         <svg
           ref={svgRef}
           className="w-full h-full"
-          style={{ background: '#f8fafc' }}
+          style={{ background: 'hsl(var(--background))' }}
         />
 
         {/* 图例 */}
-        <div className="absolute bottom-4 left-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 border border-gray-200 dark:border-gray-700">
+        <div className="absolute bottom-4 left-4 bg-card rounded-lg shadow-lg p-3 border border-border">
           <h4 className="font-medium text-sm mb-2">节点类型</h4>
           <div className="space-y-1">
             {['entity', 'concept', 'relation', 'document'].map((type) => (
@@ -463,7 +463,7 @@ export default function KnowledgeGraphViewer({ knowledgeGraphId, onBack }: Knowl
             {selectedNode?.description && (
               <div>
                 <h4 className="font-medium mb-2">描述</h4>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-muted-foreground">
                   {selectedNode.description}
                 </p>
               </div>
@@ -477,19 +477,19 @@ export default function KnowledgeGraphViewer({ knowledgeGraphId, onBack }: Knowl
                   <span className="text-sm">加载中...</span>
                 </div>
               ) : nodeFiles.length === 0 ? (
-                <p className="text-sm text-gray-500">暂无关联文件</p>
+                <p className="text-sm text-muted-foreground">暂无关联文件</p>
               ) : (
                 <div className="space-y-2">
                   {nodeFiles.map((file) => (
                     <div
                       key={file.id}
-                      className="flex items-center justify-between p-2 border border-gray-200 dark:border-gray-700 rounded"
+                      className="flex items-center justify-between p-2 border border-border rounded"
                     >
                       <div className="flex items-center space-x-2">
-                        <FileText className="w-4 h-4 text-gray-500" />
+                        <FileText className="w-4 h-4 text-muted-foreground" />
                         <div>
                           <p className="text-sm font-medium">{file.name}</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-muted-foreground">
                             {file.type} • {(file.size / 1024).toFixed(1)} KB
                           </p>
                         </div>

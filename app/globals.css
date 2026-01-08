@@ -3,76 +3,82 @@
 @tailwind utilities;
 
 :root {
-  /* Updated to high-end minimalist design tokens */
-  --background: #ffffff;
-  --foreground: #475569;
-  --card: #ecfeff;
-  --card-foreground: #164e63;
-  --popover: #ffffff;
-  --popover-foreground: #475569;
-  --primary: #164e63;
-  --primary-foreground: #ffffff;
-  --secondary: #ec4899;
-  --secondary-foreground: #ffffff;
-  --muted: #f0f0f0;
-  --muted-foreground: #475569;
-  --accent: #ec4899;
-  --accent-foreground: #ffffff;
-  --destructive: #be123c;
-  --destructive-foreground: #ffffff;
-  --border: #e0e0e0;
-  --input: #f9f9f9;
-  --ring: rgba(22, 78, 99, 0.5);
-  --chart-1: #164e63;
-  --chart-2: #ec4899;
-  --chart-3: #a16207;
-  --chart-4: #475569;
-  --chart-5: #ffffff;
+  /* 浅色主题 - 基于 frontend-light.html 紫色配色方案 */
+  /* 主色：#6c5ce7 (紫色) */
+  /* NOTE: 这些变量以 HSL 三元组形式存储（例如：246.9 74.3% 63.3%），用于 Tailwind 的 hsl(var(--...)) 语法 */
+  --background: 210 20% 98%;           /* gray-50 页面背景 (#f9fafb) */
+  --foreground: 216.9 19.1% 26.7%;     /* gray-700 主要文字 (#374151) */
+  --card: 0 0% 100%;                   /* 卡片背景 (#ffffff) */
+  --card-foreground: 215 27.9% 16.9%;  /* gray-800 卡片文字 (#1f2937) */
+  --popover: 0 0% 100%;
+  --popover-foreground: 216.9 19.1% 26.7%;
+  --primary: 246.9 74.3% 63.3%;        /* 紫色主色 (#6c5ce7) */
+  --primary-foreground: 0 0% 100%;
+  --primary-light: 247.5 84.2% 92.5%;  /* 主色浅色版 (#e0dcfc) */
+  --primary-hover: 247.9 50.6% 53.1%;  /* 主色 hover 状态 (#5b4bc4) */
+  --secondary: 220 14.3% 95.9%;        /* gray-100 次要背景 (#f3f4f6) */
+  --secondary-foreground: 216.9 19.1% 26.7%;
+  --muted: 220 14.3% 95.9%;            /* gray-100 */
+  --muted-foreground: 220 8.9% 46.1%;  /* gray-500 (#6b7280) */
+  --accent: 251.4 91.3% 95.5%;         /* 紫色浅色背景 (#ede9fe) */
+  --accent-foreground: 246.9 74.3% 63.3%;
+  --destructive: 0 84.2% 60.2%;        /* red-500 (#ef4444) */
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 13% 91%;               /* gray-200 (#e5e7eb) */
+  --input: 210 20% 98%;                /* gray-50 (#f9fafb) */
+  --ring: 246.9 74.3% 63.3%;           /* 与主色保持一致 */
+  --chart-1: 246.9 74.3% 63.3%;        /* 紫色 */
+  --chart-2: 160.1 84.1% 39.4%;        /* 绿色 (#10b981) */
+  --chart-3: 37.7 92.1% 50.2%;         /* 橙色 (#f59e0b) */
+  --chart-4: 220 8.9% 46.1%;           /* 灰色 (#6b7280) */
+  --chart-5: 330.4 81.2% 60.4%;        /* 粉色 (#ec4899) */
   --radius: 0.5rem;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #475569;
-  --sidebar-primary: #164e63;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #ec4899;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #e0e0e0;
-  --sidebar-ring: rgba(22, 78, 99, 0.5);
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 216.9 19.1% 26.7%;
+  --sidebar-primary: 246.9 74.3% 63.3%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 251.4 91.3% 95.5%;
+  --sidebar-accent-foreground: 246.9 74.3% 63.3%;
+  --sidebar-border: 220 14.3% 95.9%;   /* gray-100 */
+  --sidebar-ring: 246.9 74.3% 63.3%;
 }
 
 .dark {
-  /* Updated dark mode for premium feel */
-  --background: #0f172a;
-  --foreground: #e2e8f0;
-  --card: #1e293b;
-  --card-foreground: #e2e8f0;
-  --popover: #0f172a;
-  --popover-foreground: #e2e8f0;
-  --primary: #0ea5e9;
-  --primary-foreground: #0f172a;
-  --secondary: #ec4899;
-  --secondary-foreground: #ffffff;
-  --muted: #334155;
-  --muted-foreground: #94a3b8;
-  --accent: #ec4899;
-  --accent-foreground: #ffffff;
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
-  --border: #334155;
-  --input: #1e293b;
-  --ring: rgba(14, 165, 233, 0.5);
-  --chart-1: #0ea5e9;
-  --chart-2: #ec4899;
-  --chart-3: #f59e0b;
-  --chart-4: #94a3b8;
-  --chart-5: #1e293b;
-  --sidebar: #0f172a;
-  --sidebar-foreground: #e2e8f0;
-  --sidebar-primary: #0ea5e9;
-  --sidebar-primary-foreground: #0f172a;
-  --sidebar-accent: #ec4899;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #334155;
-  --sidebar-ring: rgba(14, 165, 233, 0.5);
+  /* 深色主题 - 紫色主色调保持一致 */
+  --background: 222.2 47.4% 11.2%;      /* slate-900 (#0f172a) */
+  --foreground: 214.3 31.8% 91.4%;      /* slate-200 (#e2e8f0) */
+  --card: 217.2 32.6% 17.5%;            /* slate-800 (#1e293b) */
+  --card-foreground: 214.3 31.8% 91.4%;
+  --popover: 217.2 32.6% 17.5%;
+  --popover-foreground: 214.3 31.8% 91.4%;
+  --primary: 255.1 91.7% 76.3%;         /* violet-400 (#a78bfa) */
+  --primary-foreground: 222.2 47.4% 11.2%;
+  --primary-light: 263.5 67.4% 34.9%;   /* violet-900 (#4c1d95) */
+  --primary-hover: 252.5 94.7% 85.1%;   /* violet-300 (#c4b5fd) */
+  --secondary: 215.3 25% 26.7%;         /* slate-700 (#334155) */
+  --secondary-foreground: 214.3 31.8% 91.4%;
+  --muted: 215.3 25% 26.7%;
+  --muted-foreground: 215 20.2% 65.1%;  /* slate-400 (#94a3b8) */
+  --accent: 261.2 72.6% 22.9%;          /* violet-950 (#2e1065) */
+  --accent-foreground: 255.1 91.7% 76.3%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 215.3 25% 26.7%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: 255.1 91.7% 76.3%;
+  --chart-1: 255.1 91.7% 76.3%;
+  --chart-2: 158.1 64.4% 51.6%;
+  --chart-3: 43.3 96.4% 56.3%;
+  --chart-4: 215 20.2% 65.1%;
+  --chart-5: 328.6 85.5% 70.2%;
+  --sidebar: 222.2 47.4% 11.2%;
+  --sidebar-foreground: 214.3 31.8% 91.4%;
+  --sidebar-primary: 255.1 91.7% 76.3%;
+  --sidebar-primary-foreground: 222.2 47.4% 11.2%;
+  --sidebar-accent: 261.2 72.6% 22.9%;
+  --sidebar-accent-foreground: 255.1 91.7% 76.3%;
+  --sidebar-border: 215.3 25% 26.7%;
+  --sidebar-ring: 255.1 91.7% 76.3%;
 }
 
 /* Added subtle premium animations */
@@ -89,10 +95,10 @@
 @keyframes subtle-glow {
   0%,
   100% {
-    box-shadow: 0 0 20px rgba(22, 78, 99, 0.1);
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.12);
   }
   50% {
-    box-shadow: 0 0 30px rgba(22, 78, 99, 0.2);
+    box-shadow: 0 0 30px hsl(var(--primary) / 0.22);
   }
 }
 

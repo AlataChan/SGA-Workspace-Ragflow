@@ -47,6 +47,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import KnowledgeGraphVisualization from "@/components/knowledge-graph/knowledge-graph-visualization"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 interface Agent {
   id: string
@@ -565,31 +566,31 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
   // 如果没有Agent数据，显示空状态
   if (realAgents.length === 0) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] text-[#e0e0e0] flex items-center justify-center">
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
         <div className="text-center">
-          <Bot className="w-16 h-16 mx-auto mb-4 text-[#6a5acd]" />
-          <h2 className="text-xl font-semibold text-white mb-2">暂无可用的AI助手</h2>
-          <p className="text-[#9aa0a6]">请联系管理员为您分配Agent权限</p>
+          <Bot className="w-16 h-16 mx-auto mb-4 text-primary" />
+          <h2 className="text-xl font-semibold text-foreground mb-2">暂无可用的AI助手</h2>
+          <p className="text-muted-foreground">请联系管理员为您分配Agent权限</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-[#e0e0e0] overflow-hidden relative">
+    <div className="min-h-screen bg-background text-foreground overflow-hidden relative">
       {/* 增强动画背景效果 */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {/* 主要光晕 */}
-        <div className="absolute w-[350px] h-[350px] bg-[#00e0ff] rounded-full blur-[100px] top-[8%] left-[12%] opacity-30"
+        <div className="absolute w-[350px] h-[350px] bg-accent rounded-full blur-[100px] top-[8%] left-[12%] opacity-30"
              style={{ animation: 'pulseGlow 18s infinite alternate ease-in-out' }} />
-        <div className="absolute w-[450px] h-[450px] bg-[#6a5acd] rounded-full blur-[120px] bottom-[3%] right-[8%] opacity-25"
+        <div className="absolute w-[450px] h-[450px] bg-primary rounded-full blur-[120px] bottom-[3%] right-[8%] opacity-25"
              style={{ animation: 'pulseGlow 20s infinite alternate ease-in-out', animationDelay: '-10s' }} />
-        <div className="absolute w-[200px] h-[200px] bg-[#ff6b9d] rounded-full blur-[60px] top-[50%] left-[80%] opacity-20"
+        <div className="absolute w-[200px] h-[200px] bg-secondary rounded-full blur-[60px] top-[50%] left-[80%] opacity-20"
              style={{ animation: 'pulseGlow 15s infinite alternate ease-in-out', animationDelay: '-5s' }} />
       </div>
 
       {/* 移动端顶部导航栏 */}
-      <div className="md:hidden bg-[#1f1f1f] border-b border-[#2d2d2d] p-4 relative z-20">
+      <div className="md:hidden bg-card border-b border-border p-4 relative z-20">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             {company?.logoUrl && (
@@ -599,13 +600,13 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                 className="w-8 h-8 rounded-lg object-cover"
               />
             )}
-            <h1 className="text-lg font-semibold text-white">{company?.name || 'SGA Team'}</h1>
+            <h1 className="text-lg font-semibold text-foreground">{company?.name || 'SGA Team'}</h1>
           </div>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="text-[#e0e0e0]"
+            className="text-foreground"
           >
             <Settings className="w-5 h-5" />
           </Button>
@@ -615,9 +616,9 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
       {/* 主布局容器 - 响应式设计 */}
       <div className="relative z-10 flex h-screen md:h-screen">
         {/* 左侧导航栏 - 响应式宽度 */}
-        <nav className="w-[280px] lg:w-[320px] xl:w-[360px] bg-[#1f1f1f] border-r border-[#2d2d2d] flex-shrink-0 flex flex-col hidden md:flex">
+        <nav className="w-[280px] lg:w-[320px] xl:w-[360px] bg-card border-r border-border flex-shrink-0 flex flex-col hidden md:flex">
           {/* 公司信息区域 */}
-          <div className="p-6 border-b border-[#2d2d2d]">
+          <div className="p-6 border-b border-border">
             <div className="flex items-center space-x-3">
               {company?.logoUrl && (
                 <img
@@ -627,10 +628,10 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                 />
               )}
               <div>
-                <h2 className="text-xl font-semibold text-white mb-1">
+                <h2 className="text-xl font-semibold text-foreground mb-1">
                   {company?.name || 'SGA Team'}
                 </h2>
-                <p className="text-sm text-[#9aa0a6]">智能体组织架构</p>
+                <p className="text-sm text-muted-foreground">智能体组织架构</p>
               </div>
             </div>
           </div>
@@ -643,10 +644,10 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                 <div key={index} className="space-y-1">
                   <button
                     onClick={() => toggleDepartment(index)}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[#2d2d2d] transition-colors text-[#8ab4f8] text-sm font-medium"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted transition-colors text-primary text-sm font-medium"
                   >
                     <div className="flex items-center space-x-2">
-                      <span className="text-[#8ab4f8]">{dept.icon}</span>
+                      <span className="text-primary">{dept.icon}</span>
                       <span>{dept.title}</span>
                     </div>
                     <ChevronDown
@@ -661,14 +662,14 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                         <button
                           key={memberIndex}
                           onClick={() => jumpToAgent(member.name)}
-                          className="w-full flex items-center px-3 py-2 rounded-lg hover:bg-[#2d2d2d] transition-all duration-200 group text-left"
+                          className="w-full flex items-center px-3 py-2 rounded-lg hover:bg-muted transition-all duration-200 group text-left"
                         >
-                          <span className="text-[#8ab4f8] mr-3 w-4 h-4 flex items-center justify-center opacity-70 group-hover:opacity-100 transition-opacity">
+                          <span className="text-primary mr-3 w-4 h-4 flex items-center justify-center opacity-70 group-hover:opacity-100 transition-opacity">
                             {member.icon}
                           </span>
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-[#e0e0e0] truncate">{member.name}</div>
-                            <div className="text-xs text-[#9aa0a6] truncate">{member.role}</div>
+                            <div className="text-sm font-medium text-foreground truncate">{member.name}</div>
+                            <div className="text-xs text-muted-foreground truncate">{member.role}</div>
                           </div>
                         </button>
                       ))}
@@ -688,7 +689,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
               <CollapsibleTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="w-full justify-between p-2 h-auto text-left hover:bg-[#2d2d2d] text-[#e0e0e0]"
+                  className="w-full justify-between p-2 h-auto text-left hover:bg-muted text-foreground"
                 >
                   <div className="flex items-center space-x-2">
                     <Network className="w-4 h-4" />
@@ -707,8 +708,8 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
               <CollapsibleContent className="mt-2">
                 {knowledgeGraphs.length === 0 ? (
                   <div className="text-center py-6">
-                    <Network className="w-10 h-10 mx-auto text-gray-500 mb-2" />
-                    <p className="text-sm text-gray-500 mb-2">暂无知识图谱</p>
+                    <Network className="w-10 h-10 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground mb-2">暂无知识图谱</p>
                     {user.role === "ADMIN" && (
                       <Button variant="outline" size="sm" onClick={goToAdmin}>
                         前往管理后台配置
@@ -720,24 +721,24 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                     {/* 搜索框 - 仅当数量超过5个时显示 */}
                     {knowledgeGraphs.length > 5 && (
                       <div className="relative mb-2">
-                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                         <Input
                           type="text"
                           placeholder="搜索图谱..."
                           value={kgSearchQuery}
                           onChange={(e) => setKgSearchQuery(e.target.value)}
-                          className="pl-7 h-7 text-xs bg-[#1f1f1f] border-[#3d3d3d] text-gray-200 placeholder-gray-500"
+                          className="pl-7 h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground"
                         />
                       </div>
                     )}
                     {/* 紧凑列表 - 带内部滚动 */}
-                    <div className="max-h-[240px] overflow-y-auto space-y-0.5 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
+                    <div className="max-h-[240px] overflow-y-auto space-y-0.5 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
                       {knowledgeGraphs
                         .filter(kg => !kgSearchQuery || kg.name.toLowerCase().includes(kgSearchQuery.toLowerCase()))
                         .map((kg) => (
                           <div
                             key={kg.id}
-                            className="group flex items-center px-2 py-1.5 rounded-md cursor-pointer hover:bg-[#3d3d3d] transition-colors"
+                            className="group flex items-center px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted transition-colors"
                             onClick={() => handleSelectKnowledgeGraph(kg)}
                           >
                             {/* 左侧小图标 */}
@@ -745,12 +746,12 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                               <Network className="w-3 h-3 text-white" />
                             </div>
                             {/* 中间名称 */}
-                            <span className="flex-1 ml-2 text-sm text-gray-200 truncate" title={kg.name}>
+                            <span className="flex-1 ml-2 text-sm text-foreground truncate" title={kg.name}>
                               {kg.name}
                             </span>
                             {/* 右侧节点数和活跃状态 */}
                             <div className="flex items-center space-x-1 flex-shrink-0">
-                              <span className="text-xs text-gray-500">{kg.nodeCount}</span>
+                              <span className="text-xs text-muted-foreground">{kg.nodeCount}</span>
                               {kg.isActive && (
                                 <div className="w-1.5 h-1.5 rounded-full bg-green-500" title="活跃" />
                               )}
@@ -759,7 +760,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                         ))}
                       {/* 搜索无结果提示 */}
                       {kgSearchQuery && knowledgeGraphs.filter(kg => kg.name.toLowerCase().includes(kgSearchQuery.toLowerCase())).length === 0 && (
-                        <div className="text-center py-3 text-xs text-gray-500">
+                        <div className="text-center py-3 text-xs text-muted-foreground">
                           未找到匹配的图谱
                         </div>
                       )}
@@ -770,12 +771,16 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
             </Collapsible>
           </div>
 
-          {/* 底部操作区域 - 管理员权限控制 */}
-          <div className="p-4 border-t border-[#2d2d2d]">
+          {/* 底部操作区域 - 主题切换和管理员权限控制 */}
+          <div className="p-4 border-t border-border space-y-2">
+            {/* 主题切换开关 */}
+            <ThemeToggle className="hover:bg-muted/50" />
+
+            {/* 管理员设置 */}
             {isAdmin ? (
               <button
                 onClick={() => router.push('/admin')}
-                className="w-full flex items-center px-3 py-2 rounded-lg hover:bg-[#2d2d2d] transition-colors text-[#8ab4f8] text-sm"
+                className="w-full flex items-center px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-primary text-sm"
               >
                 <Settings className="w-4 h-4 mr-2" />
                 管理员设置
@@ -783,7 +788,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
             ) : (
               <button
                 disabled
-                className="w-full flex items-center px-3 py-2 rounded-lg text-[#5a5a5a] text-sm cursor-not-allowed opacity-50"
+                className="w-full flex items-center px-3 py-2 rounded-lg text-muted-foreground text-sm cursor-not-allowed opacity-50"
               >
                 <Settings className="w-4 h-4 mr-2" />
                 管理员设置
@@ -800,8 +805,8 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
             {/* Agent展示区域 - 响应式精致布局 */}
             <div className="flex-1 flex justify-center items-center relative overflow-hidden py-8 md:py-16" style={{ perspective: '1000px' }}>
               {/* 背景效果 */}
-              <div className="absolute bottom-20 w-[450px] h-[110px] bg-gradient-to-r from-transparent via-[#6a5acd]/15 to-transparent rounded-full blur-2xl animate-pulse" />
-              <div className="absolute bottom-16 w-[320px] h-[80px] bg-gradient-to-r from-[#00e0ff]/8 via-[#6a5acd]/25 to-[#ff6b9d]/8 rounded-full blur-xl animate-pulse" style={{ animationDelay: '1s' }} />
+              <div className="absolute bottom-20 w-[450px] h-[110px] bg-gradient-to-r from-transparent via-primary/15 to-transparent rounded-full blur-2xl animate-pulse" />
+              <div className="absolute bottom-16 w-[320px] h-[80px] bg-gradient-to-r from-secondary/10 via-primary/25 to-accent/10 rounded-full blur-xl animate-pulse" style={{ animationDelay: '1s' }} />
 
               {/* 3D旋转容器 - 响应式尺寸 */}
               <div
@@ -818,11 +823,11 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                   return (
                     <div
                       key={agent.id}
-                      className={`absolute w-full h-full rounded-[15px] overflow-hidden bg-[#1e1e1e] border-2 transition-all duration-500 flex flex-col ${
-                        isActive
-                          ? 'border-[#6a5acd] shadow-[0_0_25px_rgba(106,90,205,0.6)] scale-105'
-                          : 'border-[#333] shadow-[0_0_10px_rgba(0,0,0,0.5)]'
-                      }`}
+	                      className={`absolute w-full h-full rounded-[15px] overflow-hidden bg-card border-2 transition-all duration-500 flex flex-col ${
+	                        isActive
+	                          ? 'border-primary shadow-[0_0_25px_hsl(var(--primary)/0.35)] scale-105'
+	                          : 'border-border shadow-[0_0_10px_hsl(var(--foreground)/0.12)]'
+	                      }`}
                       style={{
                         transform: `rotateY(${cardRotation}deg) translateZ(${radius}px)`,
                       }}
@@ -853,13 +858,13 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
               <div className="absolute top-1/2 left-2 right-2 sm:left-5 sm:right-5 flex justify-between transform -translate-y-1/2 pointer-events-none">
                 <Button
                   onClick={prevAgent}
-                  className="pointer-events-auto w-[50px] h-[50px] sm:w-[60px] sm:h-[60px] rounded-full border-2 border-[#6a5acd] bg-[#1e1e1e] text-[#6a5acd] hover:bg-[#6a5acd] hover:text-white transition-all duration-300"
+                  className="pointer-events-auto w-[50px] h-[50px] sm:w-[60px] sm:h-[60px] rounded-full border-2 border-primary bg-card text-primary hover:bg-primary hover:text-primary-foreground transition-all duration-300"
                 >
                   <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
                 </Button>
                 <Button
                   onClick={nextAgent}
-                  className="pointer-events-auto w-[50px] h-[50px] sm:w-[60px] sm:h-[60px] rounded-full border-2 border-[#6a5acd] bg-[#1e1e1e] text-[#6a5acd] hover:bg-[#6a5acd] hover:text-white transition-all duration-300"
+                  className="pointer-events-auto w-[50px] h-[50px] sm:w-[60px] sm:h-[60px] rounded-full border-2 border-primary bg-card text-primary hover:bg-primary hover:text-primary-foreground transition-all duration-300"
                 >
                   <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
                 </Button>
@@ -867,10 +872,10 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
 
               {/* 空白处的简化介绍 - 响应式 */}
               {realAgents[selectedIndex] && (
-                <div className="absolute bottom-4 left-4 right-4 sm:bottom-8 sm:left-8 sm:right-auto sm:max-w-[320px] p-3 sm:p-4 bg-[rgba(30,30,30,0.95)] backdrop-blur-sm rounded-lg border border-[#3c4043] shadow-lg">
-                  <h3 className="text-base sm:text-lg font-semibold text-white mb-2">{realAgents[selectedIndex].chineseName}</h3>
-                  <p className="text-sm text-[#9aa0a6] mb-3">{realAgents[selectedIndex].position}</p>
-                  <p className="text-xs text-[#b0b0b0] leading-relaxed line-clamp-3">
+                <div className="absolute bottom-4 left-4 right-4 sm:bottom-8 sm:left-8 sm:right-auto sm:max-w-[320px] p-3 sm:p-4 bg-card/90 backdrop-blur-sm rounded-lg border border-border shadow-lg">
+                  <h3 className="text-base sm:text-lg font-semibold text-foreground mb-2">{realAgents[selectedIndex].chineseName}</h3>
+                  <p className="text-sm text-muted-foreground mb-3">{realAgents[selectedIndex].position}</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
                     {realAgents[selectedIndex].description}
                   </p>
                 </div>
@@ -879,28 +884,28 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
           </div>
 
           {/* 右侧详细信息面板 - 响应式 */}
-          <div className="w-full md:w-[320px] lg:w-[360px] xl:w-[400px] bg-[#1f1f1f] border-l border-[#2d2d2d] flex flex-col">
+          <div className="w-full md:w-[320px] lg:w-[360px] xl:w-[400px] bg-card border-l border-border flex flex-col">
             {/* 用户设置区域 - 移到顶部，确保始终显示 */}
             {user && (
-              <div className="p-4 border-b border-[#2d2d2d]">
+              <div className="p-4 border-b border-border">
                 <DropdownMenu open={isUserDropdownOpen} onOpenChange={setIsUserDropdownOpen}>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="w-full flex items-center justify-between text-[#e0e0e0] hover:text-white hover:bg-[#2d2d2d] p-3 rounded-lg">
+                    <Button variant="ghost" className="w-full flex items-center justify-between text-foreground hover:text-foreground hover:bg-muted p-3 rounded-lg">
                       <div className="flex items-center space-x-4">
-                        <Avatar className="w-12 h-12 border-2 border-[#6a5acd] ring-2 ring-[#6a5acd]/20">
-                          <AvatarImage src={user.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"} />
-                          <AvatarFallback className="bg-[#6a5acd] text-white text-base font-semibold">
-                            {user.display_name?.[0] || user.username?.[0] || 'U'}
-                          </AvatarFallback>
-                        </Avatar>
+                          <Avatar className="w-12 h-12 border-2 border-primary ring-2 ring-primary/20">
+                            <AvatarImage src={user.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"} />
+                            <AvatarFallback className="bg-primary text-primary-foreground text-base font-semibold">
+                              {user.display_name?.[0] || user.username?.[0] || 'U'}
+                            </AvatarFallback>
+                          </Avatar>
                         <span className="text-base font-medium">{user.display_name || user.username || '用户'}</span>
                       </div>
                       <ChevronDown className="w-4 h-4" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56 bg-[#1e1e1e] border-[#333]">
+                  <DropdownMenuContent align="end" className="w-56 bg-card border-border">
                     <DropdownMenuItem
-                      className="text-[#e0e0e0] hover:bg-[#6a5acd]/20 hover:text-white focus:bg-[#6a5acd]/20 focus:text-white"
+                      className="text-foreground hover:bg-primary/20 hover:text-foreground focus:bg-primary/20 focus:text-foreground"
                       onClick={() => {
                         setIsPasswordDialogOpen(true)
                         setIsUserDropdownOpen(false)
@@ -911,9 +916,9 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                     </DropdownMenuItem>
                     {user.role === 'ADMIN' && (
                       <>
-                        <DropdownMenuSeparator className="bg-[#333]" />
+                        <DropdownMenuSeparator className="bg-border" />
                         <DropdownMenuItem
-                          className="text-[#e0e0e0] hover:bg-[#6a5acd]/20 hover:text-white focus:bg-[#6a5acd]/20 focus:text-white"
+                          className="text-foreground hover:bg-primary/20 hover:text-foreground focus:bg-primary/20 focus:text-foreground"
                           onClick={() => router.push('/admin')}
                         >
                           <Settings className="w-4 h-4 mr-2" />
@@ -921,7 +926,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                         </DropdownMenuItem>
                       </>
                     )}
-                    <DropdownMenuSeparator className="bg-[#333]" />
+                    <DropdownMenuSeparator className="bg-border" />
                     <DropdownMenuItem
                       className="text-red-400 hover:bg-red-500/20 hover:text-red-300 focus:bg-red-500/20 focus:text-red-300"
                       onClick={handleLogout}
@@ -935,26 +940,26 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
             )}
 
             {realAgents[selectedIndex] && (
-              <div className="flex flex-col flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-thumb-[#3c4043] scrollbar-track-transparent">
+              <div className="flex flex-col flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
                 {/* 上方留空区域 - 减少留空 */}
                 <div className="min-h-[40px]" />
 
                 {/* Agent基本信息 - 稍微往下 */}
-                <div className="p-6 text-center border-b border-[#2d2d2d] mb-6">
+                <div className="p-6 text-center border-b border-border mb-6">
                   <img
                     src={realAgents[selectedIndex].avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop'}
                     alt={realAgents[selectedIndex].chineseName}
-                    className="w-28 h-28 rounded-full object-cover border-4 border-[#6a5acd] ring-4 ring-[#6a5acd]/20 mx-auto mb-6 shadow-lg shadow-[#6a5acd]/30"
+                    className="w-28 h-28 rounded-full object-cover border-4 border-primary ring-4 ring-primary/20 mx-auto mb-6 shadow-lg shadow-primary/30"
                   />
-                  <h3 className="text-2xl font-semibold text-white mb-3">
+                  <h3 className="text-2xl font-semibold text-foreground mb-3">
                     {realAgents[selectedIndex].chineseName}
                   </h3>
-                  <p className="text-base text-[#9aa0a6] mb-6">
+                  <p className="text-base text-muted-foreground mb-6">
                     {realAgents[selectedIndex].position}
                   </p>
                   <div className="flex items-center justify-center">
-                    <div className={`w-2 h-2 rounded-full mr-2 ${realAgents[selectedIndex].isOnline ? 'bg-green-400' : 'bg-gray-400'}`} />
-                    <span className="text-xs text-[#9aa0a6]">
+                    <div className={`w-2 h-2 rounded-full mr-2 ${realAgents[selectedIndex].isOnline ? 'bg-green-400' : 'bg-muted-foreground'}`} />
+                    <span className="text-xs text-muted-foreground">
                       {realAgents[selectedIndex].isOnline ? '在线' : '离线'}
                     </span>
                   </div>
@@ -964,23 +969,23 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                 <div className="px-6 space-y-6">
                   {/* 部门信息 */}
                   <div>
-                    <h4 className="text-sm font-medium text-[#e8eaed] mb-2 flex items-center">
-                      <Building className="w-4 h-4 mr-2 text-[#8ab4f8]" />
+                    <h4 className="text-sm font-medium text-foreground mb-2 flex items-center">
+                      <Building className="w-4 h-4 mr-2 text-primary" />
                       所属部门
                     </h4>
-                    <p className="text-sm text-[#9aa0a6] bg-[#2d2d2d] p-3 rounded-lg">
+                    <p className="text-sm text-muted-foreground bg-muted p-3 rounded-lg">
                       {realAgents[selectedIndex].department.name}
                     </p>
                   </div>
 
                   {/* 平台信息 */}
                   <div>
-                    <h4 className="text-sm font-medium text-[#e8eaed] mb-2 flex items-center">
-                      <Bot className="w-4 h-4 mr-2 text-[#8ab4f8]" />
+                    <h4 className="text-sm font-medium text-foreground mb-2 flex items-center">
+                      <Bot className="w-4 h-4 mr-2 text-primary" />
                       AI平台
                     </h4>
-                    <div className="bg-[#2d2d2d] p-3 rounded-lg">
-                      <span className="inline-block px-2 py-1 bg-[#6a5acd] text-white text-xs rounded-full">
+                    <div className="bg-muted p-3 rounded-lg">
+                      <span className="inline-block px-2 py-1 bg-primary text-primary-foreground text-xs rounded-full">
                         {realAgents[selectedIndex].platform}
                       </span>
                     </div>
@@ -988,15 +993,15 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                 </div>
 
                 {/* 操作按钮区域 - 固定在底部 */}
-                <div className="p-6 border-t border-[#2d2d2d] space-y-4">
+                <div className="p-6 border-t border-border space-y-4">
                   {/* 进入聊天按钮 */}
                   <Button
                     onClick={() => handleStartChat(realAgents[selectedIndex])}
                     disabled={!realAgents[selectedIndex].isOnline}
                     className={`w-full py-3 rounded-lg font-medium transition-all duration-300 ${
                       realAgents[selectedIndex].isOnline
-                        ? 'bg-gradient-to-r from-[#6a5acd] to-[#8a2be2] hover:from-[#7b68ee] hover:to-[#9370db] text-white shadow-lg shadow-[#6a5acd]/30 hover:shadow-[#6a5acd]/50 transform hover:scale-[1.02]'
-                        : 'bg-[#3c4043] text-[#9aa0a6] cursor-not-allowed'
+                        ? 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/30 hover:shadow-primary/40 transform hover:scale-[1.02]'
+                        : 'bg-muted text-muted-foreground cursor-not-allowed'
                     }`}
                   >
                     <div className="flex items-center justify-center">
@@ -1009,14 +1014,14 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                   <div className="grid grid-cols-2 gap-3">
                     <Button
                       disabled={!realAgents[selectedIndex].isOnline}
-                      className="py-2 bg-[#3c4043] hover:bg-[#4a4a4a] text-[#9aa0a6] hover:text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="py-2 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Mic className="w-4 h-4 mr-1" />
                       语音通话
                     </Button>
                     <Button
                       disabled={!realAgents[selectedIndex].isOnline}
-                      className="py-2 bg-[#3c4043] hover:bg-[#4a4a4a] text-[#9aa0a6] hover:text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="py-2 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Video className="w-4 h-4 mr-1" />
                       视频会议
@@ -1026,7 +1031,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                   {/* 主要操作按钮 */}
                   <Button
                     disabled={!realAgents[selectedIndex].isOnline}
-                    className="w-full py-3 bg-[#3c4043] hover:bg-[#4a4a4a] text-[#9aa0a6] hover:text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full py-3 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <History className="w-4 h-4 mr-2" />
                     交互历史
@@ -1063,8 +1068,8 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
           scrollbar-width: thin;
         }
 
-        .scrollbar-thumb-\\[\\#3c4043\\] {
-          scrollbar-color: #3c4043 transparent;
+        .scrollbar-thumb-muted {
+          scrollbar-color: hsl(var(--muted-foreground) / 0.4) transparent;
         }
 
         .scrollbar-track-transparent {
@@ -1081,12 +1086,12 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
         }
 
         .scrollbar-thin::-webkit-scrollbar-thumb {
-          background-color: #3c4043;
+          background-color: hsl(var(--muted-foreground) / 0.4);
           border-radius: 3px;
         }
 
         .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-          background-color: #4a4a4a;
+          background-color: hsl(var(--muted-foreground) / 0.55);
         }
       `}</style>
 
@@ -1098,21 +1103,21 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
 
       {/* 知识图谱查看器 */}
       {selectedKnowledgeGraph && graphData && (
-        <div className="fixed inset-0 z-50 bg-[#0d1117]">
+        <div className="fixed inset-0 z-50 bg-background">
           <div className="h-full flex flex-col">
             {/* 顶部导航栏 */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-700/50 bg-[#161b22]">
+            <div className="flex items-center justify-between p-4 border-b border-border/50 bg-card">
               <div className="flex items-center space-x-4">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={handleBackToMain}
-                  className="flex items-center space-x-2 text-gray-300 hover:text-white hover:bg-gray-700/50"
+                  className="flex items-center space-x-2 text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 >
                   <ChevronLeft className="w-4 h-4" />
                   <span>返回</span>
                 </Button>
-                <h1 className="text-lg font-semibold text-white">
+                <h1 className="text-lg font-semibold text-foreground">
                   {selectedKnowledgeGraph.name}
                 </h1>
               </div>
@@ -1131,7 +1136,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
 
       {/* 聊天界面 */}
       {showChat && selectedAgent && (
-        <div className="fixed inset-0 z-50 bg-black">
+        <div className="fixed inset-0 z-50 bg-background">
           <EnhancedChatWithSidebar
             agentConfig={selectedAgent.agentConfig}
             agentName={selectedAgent.chineseName || selectedAgent.englishName}

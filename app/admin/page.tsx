@@ -13,8 +13,8 @@ export default function AdminPage() {
   }, [router])
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-      <div className="text-white">正在跳转到管理后台...</div>
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="text-foreground">正在跳转到管理后台...</div>
     </div>
   )
 }

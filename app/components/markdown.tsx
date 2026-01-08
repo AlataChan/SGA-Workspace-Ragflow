@@ -350,44 +350,24 @@ function _MarkDownContent(props: { content: string }) {
             };
 
             return (
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                padding: '8px 12px',
-                margin: '4px 0',
-                backgroundColor: '#f0f8ff',
-                border: '1px solid #4a90e2',
-                borderRadius: '6px',
-                textDecoration: 'none',
-                color: '#4a90e2',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#e6f3ff';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#f0f8ff';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-              onClick={() => {
-                const link = document.createElement('a');
-                link.href = href;
-                link.download = fileName;
-                link.target = '_blank';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-              }}
-            >
-              <span style={{ marginRight: '8px', fontSize: '16px' }}>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 px-3 py-2 my-1 rounded-md border border-primary/40 bg-accent text-primary text-sm font-medium transition hover:bg-accent/70 hover:-translate-y-[1px]"
+                onClick={() => {
+                  const link = document.createElement('a');
+                  link.href = href;
+                  link.download = fileName;
+                  link.target = '_blank';
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                }}
+              >
+              <span className="text-base leading-none">
                 {getFileIcon(fileExt)}
               </span>
               <span>下载 {fileName}</span>
-            </div>
+            </button>
             );
           }
 

@@ -503,7 +503,7 @@ export default function KnowledgeGraphsPage() {
     return (
       <NewAdminLayout>
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-[#6a5acd]" />
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       </NewAdminLayout>
     )
@@ -514,13 +514,10 @@ export default function KnowledgeGraphsPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white mb-2">知识图谱管理</h1>
-            <p className="text-gray-400">管理RAGFlow知识图谱，支持图谱可视化和搜索</p>
+            <h1 className="text-2xl font-bold text-foreground mb-2">知识图谱管理</h1>
+            <p className="text-muted-foreground">管理RAGFlow知识图谱，支持图谱可视化和搜索</p>
           </div>
-          <Button
-            onClick={openCreateDialog}
-            className="bg-[#6a5acd] hover:bg-[#5a4abd] text-white"
-          >
+          <Button onClick={openCreateDialog}>
             <Plus className="w-4 h-4 mr-2" />
             添加知识图谱
           </Button>
@@ -535,50 +532,50 @@ export default function KnowledgeGraphsPage() {
         )}
 
         {/* 知识图谱列表 */}
-        <Card className="bg-[#1f1f1f] border-[#2d2d2d]">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-white">知识图谱列表</CardTitle>
-            <CardDescription className="text-gray-400">
+            <CardTitle>知识图谱列表</CardTitle>
+            <CardDescription>
               共 {knowledgeGraphs.length} 个知识图谱
             </CardDescription>
           </CardHeader>
           <CardContent>
             {knowledgeGraphs.length === 0 ? (
               <div className="text-center py-8">
-                <Network className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-                <p className="text-gray-400">暂无知识图谱</p>
-                <p className="text-gray-500 text-sm">点击上方按钮添加第一个知识图谱</p>
+                <Network className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">暂无知识图谱</p>
+                <p className="text-muted-foreground text-sm">点击上方按钮添加第一个知识图谱</p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
-                  <TableRow className="border-[#2d2d2d]">
-                    <TableHead className="text-gray-300">名称</TableHead>
-                    <TableHead className="text-gray-300">描述</TableHead>
-                    <TableHead className="text-gray-300">RAGFlow URL</TableHead>
-                    <TableHead className="text-gray-300">知识库ID</TableHead>
-                    <TableHead className="text-gray-300">状态</TableHead>
-                    <TableHead className="text-gray-300">统计</TableHead>
-                    <TableHead className="text-gray-300">操作</TableHead>
+                  <TableRow>
+                    <TableHead>名称</TableHead>
+                    <TableHead>描述</TableHead>
+                    <TableHead>RAGFlow URL</TableHead>
+                    <TableHead>知识库ID</TableHead>
+                    <TableHead>状态</TableHead>
+                    <TableHead>统计</TableHead>
+                    <TableHead>操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {knowledgeGraphs.map((kg) => (
-                    <TableRow key={kg.id} className="border-[#2d2d2d]">
-                      <TableCell className="text-white font-medium">
+                    <TableRow key={kg.id}>
+                      <TableCell className="font-medium">
                         {kg.name}
                       </TableCell>
-                      <TableCell className="text-gray-300">
+                      <TableCell>
                         {kg.description || '-'}
                       </TableCell>
-                      <TableCell className="text-gray-300">
+                      <TableCell>
                         <div className="flex items-center space-x-2">
                           <span className="truncate max-w-[200px]">{kg.ragflowUrl}</span>
                           <ExternalLink className="w-3 h-3" />
                         </div>
                       </TableCell>
-                      <TableCell className="text-gray-300">
-                        <code className="bg-[#2d2d2d] px-2 py-1 rounded text-xs">
+                      <TableCell>
+                        <code className="bg-muted px-2 py-1 rounded text-xs">
                           {kg.kbId}
                         </code>
                       </TableCell>
@@ -603,7 +600,7 @@ export default function KnowledgeGraphsPage() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-gray-300">
+                      <TableCell>
                         <div className="text-xs">
                           <div>节点: {kg.nodeCount}</div>
                           <div>边: {kg.edgeCount}</div>
@@ -616,7 +613,6 @@ export default function KnowledgeGraphsPage() {
                             size="sm"
                             onClick={() => handleTestConnection(kg)}
                             disabled={isTesting === kg.id}
-                            className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
                           >
                             {isTesting === kg.id ? (
                               <Loader2 className="w-3 h-3 animate-spin" />
@@ -628,7 +624,6 @@ export default function KnowledgeGraphsPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => openEditDialog(kg)}
-                            className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
                           >
                             <Edit className="w-3 h-3" />
                           </Button>
@@ -636,7 +631,7 @@ export default function KnowledgeGraphsPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => openDeleteDialog(kg)}
-                            className="border-red-600 text-red-400 hover:bg-red-600/10"
+                            className="border-red-600 text-red-600 hover:bg-red-600/10 dark:text-red-400"
                           >
                             <Trash2 className="w-3 h-3" />
                           </Button>
@@ -653,16 +648,16 @@ export default function KnowledgeGraphsPage() {
 
       {/* 创建对话框 */}
       <Dialog open={isCreateDialogOpen} onOpenChange={(open) => { setIsCreateDialogOpen(open); if (!open) setFormTestResult(null); }}>
-        <DialogContent className="bg-[#1f1f1f] border-[#2d2d2d] text-white">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>添加知识图谱</DialogTitle>
-            <DialogDescription className="text-gray-400">
+            <DialogDescription>
               配置RAGFlow知识图谱连接信息
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="create-name" className="text-gray-300">名称 *</Label>
+              <Label htmlFor="create-name">名称 *</Label>
               <Input
                 id="create-name"
                 name="kg-name"
@@ -670,11 +665,10 @@ export default function KnowledgeGraphsPage() {
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="输入知识图谱名称"
-                className="bg-[#2d2d2d] border-[#3c4043] text-white"
               />
             </div>
             <div>
-              <Label htmlFor="create-description" className="text-gray-300">描述</Label>
+              <Label htmlFor="create-description">描述</Label>
               <Textarea
                 id="create-description"
                 name="kg-description"
@@ -682,11 +676,10 @@ export default function KnowledgeGraphsPage() {
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="输入知识图谱描述"
-                className="bg-[#2d2d2d] border-[#3c4043] text-white"
               />
             </div>
             <div>
-              <Label htmlFor="create-ragflowUrl" className="text-gray-300">RAGFlow URL *</Label>
+              <Label htmlFor="create-ragflowUrl">RAGFlow URL *</Label>
               <Input
                 id="create-ragflowUrl"
                 name="kg-ragflow-url"
@@ -694,11 +687,10 @@ export default function KnowledgeGraphsPage() {
                 value={formData.ragflowUrl}
                 onChange={(e) => setFormData({ ...formData, ragflowUrl: e.target.value })}
                 placeholder="例如: http://192.168.1.100:9380"
-                className="bg-[#2d2d2d] border-[#3c4043] text-white"
               />
             </div>
             <div>
-              <Label htmlFor="create-apiKey" className="text-gray-300">API Key *</Label>
+              <Label htmlFor="create-apiKey">API Key *</Label>
               <Input
                 id="create-apiKey"
                 name="kg-api-key"
@@ -707,11 +699,10 @@ export default function KnowledgeGraphsPage() {
                 value={formData.apiKey}
                 onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
                 placeholder="输入RAGFlow API Key"
-                className="bg-[#2d2d2d] border-[#3c4043] text-white"
               />
             </div>
             <div>
-              <Label htmlFor="create-kbId" className="text-gray-300">知识库ID *</Label>
+              <Label htmlFor="create-kbId">知识库ID *</Label>
               <Input
                 id="create-kbId"
                 name="kg-kb-id"
@@ -719,7 +710,6 @@ export default function KnowledgeGraphsPage() {
                 value={formData.kbId}
                 onChange={(e) => setFormData({ ...formData, kbId: e.target.value })}
                 placeholder="输入RAGFlow中的知识库ID"
-                className="bg-[#2d2d2d] border-[#3c4043] text-white"
               />
             </div>
 
@@ -731,7 +721,7 @@ export default function KnowledgeGraphsPage() {
                   variant="outline"
                   onClick={handleTestFormConnection}
                   disabled={isTesting === 'form' || !formData.ragflowUrl.trim() || !formData.apiKey.trim() || !formData.kbId.trim()}
-                  className="border-[#6a5acd] text-[#6a5acd] hover:bg-[#6a5acd] hover:text-white"
+                  className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
                 >
                   {isTesting === 'form' ? (
                     <>
@@ -766,15 +756,10 @@ export default function KnowledgeGraphsPage() {
             <Button
               variant="outline"
               onClick={() => setIsCreateDialogOpen(false)}
-              className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
             >
               取消
             </Button>
-            <Button
-              onClick={handleCreate}
-              disabled={isSaving}
-              className="bg-[#6a5acd] hover:bg-[#5a4abd] text-white"
-            >
+            <Button onClick={handleCreate} disabled={isSaving}>
               {isSaving ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -790,16 +775,16 @@ export default function KnowledgeGraphsPage() {
 
       {/* 编辑对话框 */}
       <Dialog open={isEditDialogOpen} onOpenChange={(open) => { setIsEditDialogOpen(open); if (!open) setFormTestResult(null); }}>
-        <DialogContent className="bg-[#1f1f1f] border-[#2d2d2d] text-white">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>编辑知识图谱</DialogTitle>
-            <DialogDescription className="text-gray-400">
+            <DialogDescription>
               修改知识图谱配置信息
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="edit-name" className="text-gray-300">名称 *</Label>
+              <Label htmlFor="edit-name">名称 *</Label>
               <Input
                 id="edit-name"
                 name="kg-edit-name"
@@ -807,11 +792,10 @@ export default function KnowledgeGraphsPage() {
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="输入知识图谱名称"
-                className="bg-[#2d2d2d] border-[#3c4043] text-white"
               />
             </div>
             <div>
-              <Label htmlFor="edit-description" className="text-gray-300">描述</Label>
+              <Label htmlFor="edit-description">描述</Label>
               <Textarea
                 id="edit-description"
                 name="kg-edit-description"
@@ -819,11 +803,10 @@ export default function KnowledgeGraphsPage() {
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="输入知识图谱描述"
-                className="bg-[#2d2d2d] border-[#3c4043] text-white"
               />
             </div>
             <div>
-              <Label htmlFor="edit-ragflowUrl" className="text-gray-300">RAGFlow URL *</Label>
+              <Label htmlFor="edit-ragflowUrl">RAGFlow URL *</Label>
               <Input
                 id="edit-ragflowUrl"
                 name="kg-edit-ragflow-url"
@@ -831,11 +814,10 @@ export default function KnowledgeGraphsPage() {
                 value={formData.ragflowUrl}
                 onChange={(e) => setFormData({ ...formData, ragflowUrl: e.target.value })}
                 placeholder="例如: http://192.168.1.100:9380"
-                className="bg-[#2d2d2d] border-[#3c4043] text-white"
               />
             </div>
             <div>
-              <Label htmlFor="edit-apiKey" className="text-gray-300">API Key *</Label>
+              <Label htmlFor="edit-apiKey">API Key *</Label>
               <Input
                 id="edit-apiKey"
                 name="kg-edit-api-key"
@@ -844,11 +826,10 @@ export default function KnowledgeGraphsPage() {
                 value={formData.apiKey}
                 onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
                 placeholder="输入RAGFlow API Key"
-                className="bg-[#2d2d2d] border-[#3c4043] text-white"
               />
             </div>
             <div>
-              <Label htmlFor="edit-kbId" className="text-gray-300">知识库ID *</Label>
+              <Label htmlFor="edit-kbId">知识库ID *</Label>
               <Input
                 id="edit-kbId"
                 name="kg-edit-kb-id"
@@ -856,7 +837,6 @@ export default function KnowledgeGraphsPage() {
                 value={formData.kbId}
                 onChange={(e) => setFormData({ ...formData, kbId: e.target.value })}
                 placeholder="输入RAGFlow中的知识库ID"
-                className="bg-[#2d2d2d] border-[#3c4043] text-white"
               />
             </div>
 
@@ -868,7 +848,7 @@ export default function KnowledgeGraphsPage() {
                   variant="outline"
                   onClick={handleTestFormConnection}
                   disabled={isTesting === 'form' || !formData.ragflowUrl.trim() || !formData.apiKey.trim() || !formData.kbId.trim()}
-                  className="border-[#6a5acd] text-[#6a5acd] hover:bg-[#6a5acd] hover:text-white"
+                  className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
                 >
                   {isTesting === 'form' ? (
                     <>
@@ -903,15 +883,10 @@ export default function KnowledgeGraphsPage() {
             <Button
               variant="outline"
               onClick={() => setIsEditDialogOpen(false)}
-              className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
             >
               取消
             </Button>
-            <Button
-              onClick={handleUpdate}
-              disabled={isSaving}
-              className="bg-[#6a5acd] hover:bg-[#5a4abd] text-white"
-            >
+            <Button onClick={handleUpdate} disabled={isSaving}>
               {isSaving ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -927,21 +902,21 @@ export default function KnowledgeGraphsPage() {
 
       {/* 删除确认对话框 */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent className="bg-[#1f1f1f] border-[#2d2d2d] text-white">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>确认删除</AlertDialogTitle>
-            <AlertDialogDescription className="text-gray-400">
+            <AlertDialogDescription>
               确定要删除知识图谱 "{selectedKG?.name}" 吗？此操作不可撤销。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]">
+            <AlertDialogCancel>
               取消
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               disabled={isSaving}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isSaving ? (
                 <>

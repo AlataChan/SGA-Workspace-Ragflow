@@ -1,0 +1,373 @@
+<!-- BEGIN: HTML Document --><!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ITG Smart Dashboard Replicate</title>
+<!-- Tailwind CSS v3 with Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration for Custom Colors -->
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#6c5ce7',
+            'primary-light': '#e0dcfc',
+            'primary-hover': '#5b4bc4',
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+<!-- BEGIN: Custom CSS -->
+<style data-purpose="layout-3d">
+    /* 3D Carousel Styles */
+    .carousel-perspective {
+      perspective: 1000px;
+    }
+    
+    .card-container {
+      transition: all 0.5s ease;
+      transform-style: preserve-3d;
+    }
+
+    /* Left Card Position */
+    .card-left {
+      transform: translateX(-340px) scale(0.85) rotateY(25deg);
+      opacity: 0.9;
+      filter: brightness(0.9);
+      z-index: 10;
+    }
+
+    /* Right Card Position */
+    .card-right {
+      transform: translateX(340px) scale(0.85) rotateY(-25deg);
+      opacity: 0.9;
+      filter: brightness(0.9);
+      z-index: 10;
+    }
+
+    /* Center Card Position */
+    .card-center {
+      transform: translateZ(0) rotateY(0deg);
+      z-index: 20;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+
+    /* Metallic/Gradient Card Border Effect */
+    .id-card-frame {
+      background: linear-gradient(135deg, #e2e2e2 0%, #ffffff 50%, #d1d1d1 100%);
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.1), 0 10px 30px rgba(0,0,0,0.15);
+    }
+  </style>
+<style data-purpose="custom-scrollbar">
+    /* Subtle scrollbar for lists */
+    .custom-scroll::-webkit-scrollbar {
+      width: 4px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background-color: #e5e7eb;
+      border-radius: 20px;
+    }
+  </style>
+<!-- END: Custom CSS -->
+</head>
+<body class="bg-gray-50 h-screen w-screen overflow-hidden flex text-gray-800 font-sans">
+<!-- BEGIN: Left Sidebar -->
+<aside class="w-72 bg-white flex flex-col border-r border-gray-100 flex-shrink-0 z-30 shadow-sm">
+<!-- Sidebar Header -->
+<header class="p-6 border-b border-gray-50 flex items-center space-x-3">
+<!-- Logo Placeholder -->
+<img alt="ITG Logo" class="h-10 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJsE07hgDuUx7-FKHLNOB3CbeR3nDLyFwK9bk8hYAgJlFtiThQ_L0lNJMrKknGkHuRq0gq5CmKf1u7H0vIydgKRJnQZA1a7zJnH7N9lGabmw3BAdqZQjqLC6R3pUhyzLiIqTt0YRZIss8RD3TfmNQpJWhRH46Aztp-qDxk9e1-_iQIvCTYxXYHqqXDMp1RLwqISoDqkffLnkH1iG_n7OTbW_d4b9k4Umyxx1uKQKiD2oatTq7ynLt03F1ShpHMeoPBs0_jVPD3ag"/>
+<div class="flex flex-col">
+<span class="font-bold text-gray-900 leading-tight">厦门国贸股份有限公司</span>
+<span class="text-xs text-gray-500">智能协同架构</span>
+</div>
+</header>
+<!-- Sidebar Content Area -->
+<div class="flex-1 overflow-y-auto custom-scroll py-4 px-3 space-y-6">
+<!-- User List Section -->
+<nav aria-label="User List">
+<ul class="space-y-1">
+<!-- Item 1: Active -->
+<li>
+<a class="flex items-start p-3 rounded-lg border-l-4 border-primary transition-colors bg-purple-50" href="#">
+<div class="mt-1 text-primary">
+<svg class="h-5 w-5" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div class="ml-3">
+<p class="text-sm font-bold text-gray-900">林翰</p>
+<p class="text-xs text-gray-500 leading-snug mt-0.5">信息技术管理制度知识库管理员</p>
+</div>
+</a>
+</li>
+<!-- Item 2 -->
+<li>
+<a class="flex items-start p-3 rounded-lg hover:bg-gray-50 transition-colors group" href="#">
+<div class="mt-1 text-gray-400 group-hover:text-gray-600">
+<svg class="h-5 w-5" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div class="ml-3">
+<p class="text-sm font-medium text-gray-700">李珊</p>
+<p class="text-xs text-gray-400 leading-snug mt-0.5">安全管理制度知识库管理员</p>
+</div>
+</a>
+</li>
+<!-- Item 3 -->
+<li>
+<a class="flex items-start p-3 rounded-lg hover:bg-gray-50 transition-colors group" href="#">
+<div class="mt-1 text-gray-400 group-hover:text-gray-600">
+<svg class="h-5 w-5" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div class="ml-3">
+<p class="text-sm font-medium text-gray-700">陈诚</p>
+<p class="text-xs text-gray-400 leading-snug mt-0.5">证券事务合规知识库管理员</p>
+</div>
+</a>
+</li>
+<!-- Item 4 -->
+<li>
+<a class="flex items-start p-3 rounded-lg hover:bg-gray-50 transition-colors group" href="#">
+<div class="mt-1 text-gray-400 group-hover:text-gray-600">
+<svg class="h-5 w-5" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div class="ml-3">
+<p class="text-sm font-medium text-gray-700">凌云</p>
+<p class="text-xs text-gray-400 leading-snug mt-0.5">集团IT运维管理 &amp; 懂得司</p>
+</div>
+</a>
+</li>
+</ul>
+</nav>
+<!-- Knowledge Graph Section -->
+<div class="pt-4 border-t border-gray-100">
+<div class="flex items-center justify-between mb-3 px-2">
+<div class="flex items-center space-x-2 text-gray-700 font-medium">
+<svg class="h-5 w-5" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>知识图谱</span>
+</div>
+<span class="text-sm font-bold text-gray-800">2</span>
+<svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M5 15l7-7 7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<ul class="space-y-1 pl-2">
+<!-- KG Item 1 -->
+<li class="flex items-center justify-between p-2 rounded hover:bg-gray-50 text-sm group cursor-pointer">
+<div class="flex items-center space-x-2">
+<span class="w-6 h-6 rounded bg-purple-100 text-primary flex items-center justify-center text-xs font-bold">
+<svg class="h-3.5 w-3.5" fill="currentColor" viewbox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+<path clip-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" fill-rule="evenodd"></path>
+</svg>
+</span>
+<span class="text-gray-600">证券管理制度</span>
+</div>
+<div class="flex items-center space-x-1">
+<span class="text-xs text-gray-400">256</span>
+<span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>
+</div>
+</li>
+<!-- KG Item 2 -->
+<li class="flex items-center justify-between p-2 rounded hover:bg-gray-50 text-sm group cursor-pointer">
+<div class="flex items-center space-x-2">
+<span class="w-6 h-6 rounded bg-purple-100 text-primary flex items-center justify-center text-xs font-bold">
+<svg class="h-3.5 w-3.5" fill="currentColor" viewbox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+<path clip-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" fill-rule="evenodd"></path>
+</svg>
+</span>
+<span class="text-gray-600">安全管理制度</span>
+</div>
+<div class="flex items-center space-x-1">
+<span class="text-xs text-gray-400">256</span>
+<span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>
+</div>
+</li>
+</ul>
+</div>
+</div>
+<!-- Sidebar Footer -->
+<div class="p-4 border-t border-gray-100 mt-auto">
+<a class="flex items-center space-x-3 text-gray-600 hover:text-gray-900 transition-colors" href="#">
+<svg class="h-5 w-5" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="text-sm font-medium">管理员设置</span>
+</a>
+</div>
+</aside>
+<!-- END: Left Sidebar -->
+<!-- BEGIN: Main Content (Carousel) -->
+<main class="flex-1 relative bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
+<div class="carousel-perspective w-full h-full flex items-center justify-center relative">
+<!-- LEFT Card (Angled) -->
+<div class="card-container card-left absolute w-[300px] h-[550px] bg-white rounded-xl id-card-frame border-2 border-gray-300">
+<div class="h-full w-full bg-white/90 rounded-xl flex flex-col items-center p-6 relative overflow-hidden">
+<div class="text-center mb-6 opacity-70">
+<span class="text-red-600 font-bold text-2xl block">ITG</span>
+<span class="text-xs font-bold text-gray-800 tracking-widest">国贸股份</span>
+</div>
+<div class="w-32 h-40 bg-gray-200 mb-6 overflow-hidden shadow-inner">
+<img alt="Yun Wei" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDhpeIXNfnz1fYaNWcb6_bUZkNmkWKItT9N8uDGVqSXgoMw6fp6cbyMSYcIZbl3WsQVlKjkXRNCHF_BlmaTHR6pKd0OXb2M5CmDAACsHaAtEnY6eOY0IJa3ryI-qz_r8Emqw4sllMwvjW0jUH78Y-N-xxZ-NzkPzVrTUZ95JNSau3S9IbFBwUK0Uyga60i0LduHC3hGtlE40wDizUDTX5PMgy1QrvoFmFUGFHqgjnbneRvgZ_73LpVeJ-wPJEg73s_q6WBIz7R0Lw"/>
+</div>
+<h2 class="text-3xl font-bold text-gray-900 mb-2">云蔚</h2>
+<p class="text-xs text-center text-gray-500 line-clamp-4 px-4">
+             信息技术管理制度知识库管理员<br/>
+             安全管理制度<br/>
+             ...
+           </p>
+</div>
+</div>
+<!-- RIGHT Card (Angled) -->
+<div class="card-container card-right absolute w-[300px] h-[550px] bg-white rounded-xl id-card-frame border-2 border-gray-300">
+<div class="h-full w-full bg-white/90 rounded-xl flex flex-col items-center p-6 relative overflow-hidden">
+<div class="text-center mb-6 opacity-70">
+<span class="text-red-600 font-bold text-2xl block">ITG</span>
+<span class="text-xs font-bold text-gray-800 tracking-widest">国贸股份</span>
+</div>
+<div class="w-32 h-40 bg-gray-200 mb-6 overflow-hidden shadow-inner">
+<img alt="Peng Wen" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB7dcVGYU1_yzyp7n9QQw9gwTYfCaURx7wgfsBPA9zd8oAr4PdwnOe8PXx1KkJwgBuay5x78Wz0fechVNJT_U_bc1CbaVkeGIe7DPz9Qq-s8uBI7QcV5ZBGqNi-gwRcJOYvD40YziUbyZSbVI5o9l0k22g_u7ii4GsJiMjk16_gZWDI5jvwYWCocNH05JRM8uQvxGjh8TqY8gJVO3mocBAQBAY0UjGstpRDJowSCHHW3JayzFj0TndcEMj9haAq2eYmaKXEYSJGDA"/>
+</div>
+<h2 class="text-3xl font-bold text-gray-900 mb-2">彭雯</h2>
+<p class="text-xs text-center text-gray-500 line-clamp-4 px-4">
+             财务合规部<br/>
+             ...
+           </p>
+</div>
+</div>
+<!-- CENTER Card (Main Focus) -->
+<div class="card-container card-center relative w-[380px] h-[640px] bg-white rounded-2xl id-card-frame border-[6px] border-gray-200 flex flex-col">
+<!-- Inner Paper Area -->
+<div class="flex-1 m-2 bg-white rounded-lg shadow-sm flex flex-col items-center pt-10 pb-6 px-8 relative overflow-hidden border border-gray-100">
+<!-- Badge Hole (Visual detail) -->
+<div class="absolute top-3 left-1/2 -translate-x-1/2 w-10 h-1.5 bg-gray-200 rounded-full"></div>
+<!-- Card Logo -->
+<div class="flex justify-center mb-6 mt-4"><img alt="ITG Logo" class="h-10 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJsE07hgDuUx7-FKHLNOB3CbeR3nDLyFwK9bk8hYAgJlFtiThQ_L0lNJMrKknGkHuRq0gq5CmKf1u7H0vIydgKRJnQZA1a7zJnH7N9lGabmw3BAdqZQjqLC6R3pUhyzLiIqTt0YRZIss8RD3TfmNQpJWhRH46Aztp-qDxk9e1-_iQIvCTYxXYHqqXDMp1RLwqISoDqkffLnkH1iG_n7OTbW_d4b9k4Umyxx1uKQKiD2oatTq7ynLt03F1ShpHMeoPBs0_jVPD3ag"/></div>
+<!-- Card Photo -->
+<div class="w-40 h-52 bg-gray-100 mb-6 shadow-md overflow-hidden relative rounded-md">
+<img alt="Lin Han" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAHurC_il7cCr282_uFrOJx55QzEnKfoApTwfnHJq-QBpL3GFm_d42jUXhoawTxgORgBmiqkO0uWdyRt7KCEbwv6gdiknf0kOxkKQVCZu7fu6QaaSNnC4ffqVBizsfYx0tjlS10UV_i_T-IqPL59GCLm1Fsf3h7OAFRJTZiEzLqKYtzdN2CGk6XAp9L4_H4Z_Mg52NfCuHmKJB70P5uan3rszicFLbIL5EjdTUuDoDawfnCyaJNcI4N5R9C8y2sF6ofiM7dwORoFA"/>
+</div>
+<!-- Card Name -->
+<h1 class="text-4xl font-extrabold text-gray-900 mb-1 tracking-wide">林翰</h1>
+<!-- Card Title -->
+<h3 class="text-sm font-bold text-gray-800 mb-0.5 text-center leading-tight mt-3">国贸集团数字化部门资深技术顾问</h3>
+<p class="text-xs font-semibold text-gray-500 mb-6">数字化部门</p>
+<!-- Card Footer Text -->
+<div class="mt-auto text-[10px] text-gray-400 text-center space-y-0.5 leading-tight">
+<p>信息大学计算机科学硕士</p>
+<p>国贸集团数字化专业人员</p>
+<p>全年应用安全等级保护高级评测员</p>
+<p>数据MTE深度测试专家</p>
+<p>数据数字化转型首席顾问</p>
+</div>
+</div>
+<!-- Left Control Button (Floating) -->
+<button class="absolute top-1/2 -left-20 -translate-y-1/2 w-12 h-12 rounded-full bg-white shadow-lg flex items-center justify-center text-gray-400 hover:text-primary hover:scale-110 transition-all z-30 border border-gray-100">
+<svg class="h-6 w-6" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+<!-- Right Control Button (Floating) -->
+<button class="absolute top-1/2 -right-20 -translate-y-1/2 w-12 h-12 rounded-full bg-white shadow-lg flex items-center justify-center text-gray-400 hover:text-primary hover:scale-110 transition-all z-30 border border-gray-100">
+<svg class="h-6 w-6" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+</div>
+</div>
+</main>
+<!-- END: Main Content -->
+<!-- BEGIN: Right Sidebar -->
+<aside class="w-80 bg-white flex flex-col border-l border-gray-100 flex-shrink-0 z-30 shadow-sm">
+<!-- Top Bar: System Admin -->
+<div class="h-16 flex items-center justify-end px-6 border-b border-gray-50">
+<div class="flex items-center cursor-pointer hover:bg-gray-50 px-2 py-1 rounded transition-colors">
+<img alt="Admin" class="w-8 h-8 rounded-full object-cover mr-3 border border-gray-200" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAHurC_il7cCr282_uFrOJx55QzEnKfoApTwfnHJq-QBpL3GFm_d42jUXhoawTxgORgBmiqkO0uWdyRt7KCEbwv6gdiknf0kOxkKQVCZu7fu6QaaSNnC4ffqVBizsfYx0tjlS10UV_i_T-IqPL59GCLm1Fsf3h7OAFRJTZiEzLqKYtzdN2CGk6XAp9L4_H4Z_Mg52NfCuHmKJB70P5uan3rszicFLbIL5EjdTUuDoDawfnCyaJNcI4N5R9C8y2sF6ofiM7dwORoFA"/>
+<span class="text-sm font-medium text-gray-700 mr-2">系统管理员</span>
+<svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+<!-- Main Detail Content -->
+<div class="flex-1 p-8 flex flex-col items-center">
+<!-- Large Avatar Profile -->
+<div class="relative mb-6">
+<div class="w-32 h-32 rounded-full p-1 border-4 border-primary">
+<img alt="Lin Han Large" class="w-full h-full rounded-full object-cover border-4 border-white shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAHurC_il7cCr282_uFrOJx55QzEnKfoApTwfnHJq-QBpL3GFm_d42jUXhoawTxgORgBmiqkO0uWdyRt7KCEbwv6gdiknf0kOxkKQVCZu7fu6QaaSNnC4ffqVBizsfYx0tjlS10UV_i_T-IqPL59GCLm1Fsf3h7OAFRJTZiEzLqKYtzdN2CGk6XAp9L4_H4Z_Mg52NfCuHmKJB70P5uan3rszicFLbIL5EjdTUuDoDawfnCyaJNcI4N5R9C8y2sF6ofiM7dwORoFA"/>
+</div>
+<!-- ID Card mini preview inside avatar circle (visual flair from mockup) -->
+<div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0">
+<!-- Hidden/Overlay effect if needed, kept simple as standard avatar per instructions -->
+</div>
+</div>
+<!-- Name & Title -->
+<h2 class="text-2xl font-bold text-gray-900 mb-2">林翰</h2>
+<p class="text-sm text-center text-gray-500 mb-6 leading-relaxed px-4">
+         信息技术管理制度知识库管理员
+       </p>
+<!-- Status Indicator -->
+<div class="flex items-center space-x-2 mb-10">
+<span class="relative flex h-3 w-3">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+</span>
+<span class="text-sm font-medium text-gray-600">在线</span>
+</div>
+<!-- Info Form Fields -->
+<div class="w-full space-y-6">
+<!-- Field 1: Department -->
+<div class="flex flex-col space-y-2">
+<label class="flex items-center text-sm font-medium text-gray-600">
+<svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+                所属部门
+             </label>
+<div class="bg-gray-100 rounded-lg px-4 py-3 text-gray-700 text-sm font-medium">
+                数科
+             </div>
+</div>
+<!-- Field 2: AI Platform -->
+<div class="flex flex-col space-y-2">
+<label class="flex items-center text-sm font-medium text-gray-600">
+<svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+                AI 平台
+             </label>
+<div class="bg-gray-100 rounded-lg px-4 py-3">
+<span class="inline-block bg-primary text-white text-sm font-medium px-3 py-1 rounded-full shadow-sm">RAGFLOW</span>
+</div>
+</div>
+</div>
+<!-- Action Button -->
+<div class="mt-auto w-full pt-8 pb-4">
+<button class="w-full bg-primary hover:bg-primary-hover text-white font-medium py-3 rounded-xl shadow-lg shadow-primary/30 transition-all flex items-center justify-center space-x-2 group">
+<svg class="h-5 w-5 group-hover:animate-pulse" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>进入聊天</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- END: Right Sidebar -->
+</body></html><!-- END: HTML Document -->

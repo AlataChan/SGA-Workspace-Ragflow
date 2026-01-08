@@ -124,13 +124,13 @@ export default function ChangePasswordDialog({ open, onOpenChange }: ChangePassw
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#1f1f1f] border-[#2d2d2d] text-white max-w-md">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold flex items-center">
             <Lock className="w-5 h-5 mr-2" />
             修改密码
           </DialogTitle>
-          <DialogDescription className="text-gray-400">
+          <DialogDescription>
             请输入当前密码和新密码
           </DialogDescription>
         </DialogHeader>
@@ -138,7 +138,7 @@ export default function ChangePasswordDialog({ open, onOpenChange }: ChangePassw
         <div className="space-y-4 mt-6">
           {/* 当前密码 */}
           <div className="space-y-2">
-            <Label htmlFor="currentPassword" className="text-white">当前密码</Label>
+            <Label htmlFor="currentPassword">当前密码</Label>
             <div className="relative">
               <Input
                 id="currentPassword"
@@ -146,7 +146,7 @@ export default function ChangePasswordDialog({ open, onOpenChange }: ChangePassw
                 placeholder="请输入当前密码"
                 value={formData.currentPassword}
                 onChange={(e) => setFormData(prev => ({ ...prev, currentPassword: e.target.value }))}
-                className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500 pr-10"
+                className="pr-10"
               />
               <Button
                 type="button"
@@ -156,9 +156,9 @@ export default function ChangePasswordDialog({ open, onOpenChange }: ChangePassw
                 onClick={() => setShowCurrentPassword(!showCurrentPassword)}
               >
                 {showCurrentPassword ? (
-                  <EyeOff className="h-4 w-4 text-gray-400" />
+                  <EyeOff className="h-4 w-4 text-muted-foreground" />
                 ) : (
-                  <Eye className="h-4 w-4 text-gray-400" />
+                  <Eye className="h-4 w-4 text-muted-foreground" />
                 )}
               </Button>
             </div>
@@ -166,7 +166,7 @@ export default function ChangePasswordDialog({ open, onOpenChange }: ChangePassw
 
           {/* 新密码 */}
           <div className="space-y-2">
-            <Label htmlFor="newPassword" className="text-white">新密码</Label>
+            <Label htmlFor="newPassword">新密码</Label>
             <div className="relative">
               <Input
                 id="newPassword"
@@ -174,7 +174,7 @@ export default function ChangePasswordDialog({ open, onOpenChange }: ChangePassw
                 placeholder="请输入新密码（至少6位）"
                 value={formData.newPassword}
                 onChange={(e) => setFormData(prev => ({ ...prev, newPassword: e.target.value }))}
-                className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500 pr-10"
+                className="pr-10"
               />
               <Button
                 type="button"
@@ -184,9 +184,9 @@ export default function ChangePasswordDialog({ open, onOpenChange }: ChangePassw
                 onClick={() => setShowNewPassword(!showNewPassword)}
               >
                 {showNewPassword ? (
-                  <EyeOff className="h-4 w-4 text-gray-400" />
+                  <EyeOff className="h-4 w-4 text-muted-foreground" />
                 ) : (
-                  <Eye className="h-4 w-4 text-gray-400" />
+                  <Eye className="h-4 w-4 text-muted-foreground" />
                 )}
               </Button>
             </div>
@@ -194,7 +194,7 @@ export default function ChangePasswordDialog({ open, onOpenChange }: ChangePassw
 
           {/* 确认新密码 */}
           <div className="space-y-2">
-            <Label htmlFor="confirmPassword" className="text-white">确认新密码</Label>
+            <Label htmlFor="confirmPassword">确认新密码</Label>
             <div className="relative">
               <Input
                 id="confirmPassword"
@@ -202,7 +202,7 @@ export default function ChangePasswordDialog({ open, onOpenChange }: ChangePassw
                 placeholder="请再次输入新密码"
                 value={formData.confirmPassword}
                 onChange={(e) => setFormData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500 pr-10"
+                className="pr-10"
               />
               <Button
                 type="button"
@@ -212,16 +212,16 @@ export default function ChangePasswordDialog({ open, onOpenChange }: ChangePassw
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
               >
                 {showConfirmPassword ? (
-                  <EyeOff className="h-4 w-4 text-gray-400" />
+                  <EyeOff className="h-4 w-4 text-muted-foreground" />
                 ) : (
-                  <Eye className="h-4 w-4 text-gray-400" />
+                  <Eye className="h-4 w-4 text-muted-foreground" />
                 )}
               </Button>
             </div>
           </div>
 
           {/* 密码要求提示 */}
-          <div className="text-sm text-gray-400 bg-[#2d2d2d] p-3 rounded-lg">
+          <div className="text-sm text-muted-foreground bg-muted p-3 rounded-lg">
             <p className="font-medium mb-1">密码要求：</p>
             <ul className="list-disc list-inside space-y-1">
               <li>至少6个字符</li>
@@ -235,8 +235,8 @@ export default function ChangePasswordDialog({ open, onOpenChange }: ChangePassw
         {message && (
           <div className={`flex items-center p-3 rounded-lg ${
             message.type === 'success' 
-              ? 'bg-green-500/20 border border-green-500/30 text-green-400' 
-              : 'bg-red-500/20 border border-red-500/30 text-red-400'
+              ? 'bg-green-500/10 border border-green-500/30 text-green-700 dark:text-green-200'
+              : 'bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-200'
           }`}>
             {message.type === 'success' ? (
               <CheckCircle className="w-4 h-4 mr-2" />
@@ -248,11 +248,10 @@ export default function ChangePasswordDialog({ open, onOpenChange }: ChangePassw
         )}
 
         {/* 操作按钮 */}
-        <div className="flex justify-end space-x-2 pt-4 border-t border-[#2d2d2d]">
+        <div className="flex justify-end space-x-2 pt-4 border-t border-border">
           <Button
             variant="outline"
             onClick={handleCancel}
-            className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
             disabled={isSaving}
           >
             取消
@@ -260,7 +259,6 @@ export default function ChangePasswordDialog({ open, onOpenChange }: ChangePassw
           <Button
             onClick={handleChangePassword}
             disabled={isSaving}
-            className="bg-[#6a5acd] hover:bg-[#5a4abd] text-white"
           >
             {isSaving ? (
               <>

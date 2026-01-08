@@ -162,12 +162,12 @@ const CustomNode = ({ data, selected }: any) => {
         {label}
       </div>
       {type && (
-        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+        <div className="text-xs text-muted-foreground mt-1">
           {type}
         </div>
       )}
       {count && (
-        <div className="text-xs bg-gray-200 dark:bg-gray-700 rounded-full px-2 py-0.5 mt-1 inline-block">
+        <div className="text-xs bg-muted rounded-full px-2 py-0.5 mt-1 inline-block">
           {count}
         </div>
       )}
@@ -228,7 +228,7 @@ const ReactFlowGraphViewer: React.FC<ReactFlowGraphViewerProps> = ({
       target: link.target,
       type: 'smoothstep',
       animated: false,
-      style: { stroke: '#3b82f6' }
+      style: { stroke: 'hsl(var(--primary))' }
     }))
 
     setNodes(reactFlowNodes)
@@ -362,26 +362,26 @@ const ReactFlowGraphViewer: React.FC<ReactFlowGraphViewerProps> = ({
           onNodeClick={onNodeClick}
           nodeTypes={nodeTypes}
           fitView
-          className="bg-gray-50 dark:bg-gray-900"
+          className="bg-background"
         >
-          <Background color="#aaa" gap={16} />
-          <Controls className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700" />
+          <Background color="hsl(var(--border))" gap={16} />
+          <Controls className="bg-card border border-border" />
           <MiniMap
-            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
-            nodeColor={(node) => '#3b82f6'}
+            className="bg-card border border-border"
+            nodeColor={(node) => 'hsl(var(--primary))'}
           />
 
           {/* Stats Panel */}
           <Panel position="top-left">
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 shadow-lg">
+            <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
               <div className="flex items-center space-x-4 text-sm">
                 <div className="flex items-center space-x-1">
-                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                  <span className="text-gray-600 dark:text-gray-300">节点: {nodes.length}</span>
+                  <div className="w-3 h-3 bg-primary rounded-full"></div>
+                  <span className="text-muted-foreground">节点: {nodes.length}</span>
                 </div>
                 <div className="flex items-center space-x-1">
                   <Zap className="w-3 h-3 text-yellow-500" />
-                  <span className="text-gray-600 dark:text-gray-300">关系: {edges.length}</span>
+                  <span className="text-muted-foreground">关系: {edges.length}</span>
                 </div>
               </div>
             </div>

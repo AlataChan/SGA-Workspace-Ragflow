@@ -666,7 +666,7 @@ export default function AgentsPage() {
     return (
       <NewAdminLayout>
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-[#6a5acd]" />
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       </NewAdminLayout>
     )
@@ -677,13 +677,10 @@ export default function AgentsPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white mb-2">Agent管理</h1>
-            <p className="text-gray-400">管理AI智能体，支持多平台接入</p>
+            <h1 className="text-2xl font-bold text-foreground mb-2">Agent管理</h1>
+            <p className="text-muted-foreground">管理AI智能体，支持多平台接入</p>
           </div>
-          <Button
-            onClick={openCreateDialog}
-            className="bg-[#6a5acd] hover:bg-[#5a4abd] text-white"
-          >
+          <Button onClick={openCreateDialog}>
             <Plus className="w-4 h-4 mr-2" />
             添加Agent
           </Button>
@@ -692,46 +689,46 @@ export default function AgentsPage() {
         {/* 统计信息 */}
         {stats && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="bg-[#1f1f1f] border-[#2d2d2d]">
+            <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <Bot className="w-5 h-5 text-[#8ab4f8]" />
+                  <Bot className="w-5 h-5 text-primary" />
                   <div>
-                    <p className="text-sm text-gray-400">总Agent数</p>
-                    <p className="text-2xl font-bold text-white">{stats.total}</p>
+                    <p className="text-sm text-muted-foreground">总Agent数</p>
+                    <p className="text-2xl font-bold text-foreground">{stats.total}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-[#1f1f1f] border-[#2d2d2d]">
+            <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <Wifi className="w-5 h-5 text-green-400" />
+                  <Wifi className="w-5 h-5 text-green-600 dark:text-green-400" />
                   <div>
-                    <p className="text-sm text-gray-400">在线Agent</p>
-                    <p className="text-2xl font-bold text-white">{stats.online}</p>
+                    <p className="text-sm text-muted-foreground">在线Agent</p>
+                    <p className="text-2xl font-bold text-foreground">{stats.online}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-[#1f1f1f] border-[#2d2d2d]">
+            <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <WifiOff className="w-5 h-5 text-red-400" />
+                  <WifiOff className="w-5 h-5 text-red-600 dark:text-red-400" />
                   <div>
-                    <p className="text-sm text-gray-400">离线Agent</p>
-                    <p className="text-2xl font-bold text-white">{stats.total - stats.online}</p>
+                    <p className="text-sm text-muted-foreground">离线Agent</p>
+                    <p className="text-2xl font-bold text-foreground">{stats.total - stats.online}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-[#1f1f1f] border-[#2d2d2d]">
+            <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <Filter className="w-5 h-5 text-[#8ab4f8]" />
+                  <Filter className="w-5 h-5 text-primary" />
                   <div>
-                    <p className="text-sm text-gray-400">平台数量</p>
-                    <p className="text-2xl font-bold text-white">{Object.keys(stats.byPlatform).length}</p>
+                    <p className="text-sm text-muted-foreground">平台数量</p>
+                    <p className="text-2xl font-bold text-foreground">{Object.keys(stats.byPlatform).length}</p>
                   </div>
                 </div>
               </CardContent>
@@ -740,30 +737,30 @@ export default function AgentsPage() {
         )}
 
         {/* 筛选和搜索 */}
-        <Card className="bg-[#1f1f1f] border-[#2d2d2d]">
+        <Card>
           <CardContent className="p-4">
             <div className="flex flex-col md:flex-row gap-4">
               <Select value={filterDepartment} onValueChange={setFilterDepartment}>
-                <SelectTrigger className="w-48 bg-[#2a2a2a] border-[#3c4043] text-white">
+                <SelectTrigger className="w-48">
                   <SelectValue placeholder="筛选部门" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#2a2a2a] border-[#3c4043]">
-                  <SelectItem value="all" className="text-white hover:bg-[#3c4043]">全部部门</SelectItem>
+                <SelectContent>
+                  <SelectItem value="all">全部部门</SelectItem>
                   {departments.map((dept) => (
-                    <SelectItem key={dept.id} value={dept.id} className="text-white hover:bg-[#3c4043] focus:bg-[#3c4043] focus:text-white data-[highlighted]:bg-[#3c4043] data-[highlighted]:text-white">
+                    <SelectItem key={dept.id} value={dept.id}>
                       {dept.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <Select value={filterPlatform} onValueChange={setFilterPlatform}>
-                <SelectTrigger className="w-48 bg-[#2a2a2a] border-[#3c4043] text-white">
+                <SelectTrigger className="w-48">
                   <SelectValue placeholder="筛选平台" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#2a2a2a] border-[#3c4043]">
-                  <SelectItem value="all" className="text-white hover:bg-[#3c4043]">全部平台</SelectItem>
+                <SelectContent>
+                  <SelectItem value="all">全部平台</SelectItem>
                   {platformOptions.map((platform) => (
-                    <SelectItem key={platform.value} value={platform.value} className="text-white hover:bg-[#3c4043]">
+                    <SelectItem key={platform.value} value={platform.value}>
                       {platform.label}
                     </SelectItem>
                   ))}
@@ -781,52 +778,52 @@ export default function AgentsPage() {
               : 'border-red-500/20 bg-red-500/10'
           }`}>
             {message.type === 'success' ? (
-              <CheckCircle className="h-4 w-4 text-green-400" />
+              <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
             ) : (
-              <AlertCircle className="h-4 w-4 text-red-400" />
+              <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
             )}
-            <AlertDescription className={message.type === 'success' ? 'text-green-100' : 'text-red-100'}>
+            <AlertDescription className={message.type === 'success' ? 'text-green-700 dark:text-green-200' : 'text-red-700 dark:text-red-200'}>
               {message.text}
             </AlertDescription>
           </Alert>
         )}
 
         {/* Agent列表 */}
-        <Card className="bg-[#1f1f1f] border-[#2d2d2d]">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-white flex items-center">
+            <CardTitle className="flex items-center">
               <Bot className="w-5 h-5 mr-2" />
               Agent列表
             </CardTitle>
-            <CardDescription className="text-gray-400">
+            <CardDescription>
               当前共有 {filteredAgents.length} 个Agent
             </CardDescription>
           </CardHeader>
           <CardContent>
             {filteredAgents.length === 0 ? (
               <div className="text-center py-8">
-                <Bot className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-                <p className="text-gray-400">
+                <Bot className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">
                   {filterDepartment !== 'all' || filterPlatform !== 'all' ? '没有找到匹配的Agent' : '暂无Agent，点击上方按钮添加第一个Agent'}
                 </p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
-                  <TableRow className="border-[#2d2d2d] hover:bg-[#2a2a2a]/50">
-                    <TableHead className="text-gray-200 font-bold text-base py-4">Agent信息</TableHead>
-                    <TableHead className="text-gray-200 font-bold text-base text-center py-4">部门</TableHead>
-                    <TableHead className="text-gray-200 font-bold text-base text-center py-4">平台</TableHead>
-                    <TableHead className="text-gray-200 font-bold text-base text-center py-4">状态</TableHead>
-                    <TableHead className="text-gray-200 font-bold text-base text-center py-4">权限用户</TableHead>
-                    <TableHead className="text-gray-200 font-bold text-base text-center py-4">操作</TableHead>
+                  <TableRow>
+                    <TableHead className="font-bold text-base py-4">Agent信息</TableHead>
+                    <TableHead className="font-bold text-base text-center py-4">部门</TableHead>
+                    <TableHead className="font-bold text-base text-center py-4">平台</TableHead>
+                    <TableHead className="font-bold text-base text-center py-4">状态</TableHead>
+                    <TableHead className="font-bold text-base text-center py-4">权限用户</TableHead>
+                    <TableHead className="font-bold text-base text-center py-4">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredAgents.map((agent) => {
                     const platformInfo = getPlatformInfo(agent.platform)
                     return (
-                      <TableRow key={agent.id} className="border-[#2d2d2d] hover:bg-[#2a2a2a]/40 transition-all duration-200 group">
+                      <TableRow key={agent.id} className="hover:bg-muted/40 transition-all duration-200 group">
                         <TableCell className="py-6">
                           <div className="flex items-center space-x-5">
                             <div className="relative">
@@ -838,19 +835,19 @@ export default function AgentsPage() {
                                 )}
                               </div>
                               {agent.isOnline && (
-                                <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-[#1a1a1a] animate-pulse"></div>
+                                <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-background animate-pulse"></div>
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="font-bold text-white text-lg leading-tight">{agent.chineseName}</div>
+                              <div className="font-bold text-foreground text-lg leading-tight">{agent.chineseName}</div>
                               {agent.englishName && (
-                                <div className="text-base text-gray-300 mt-1 font-medium">{agent.englishName}</div>
+                                <div className="text-base text-muted-foreground mt-1 font-medium">{agent.englishName}</div>
                               )}
                               <div className="flex items-center mt-2 space-x-2">
-                                <div className="text-sm text-gray-400 bg-gray-800/60 px-3 py-1.5 rounded-lg border border-gray-700/50 font-medium">
+                                <div className="text-sm text-muted-foreground bg-muted/60 px-3 py-1.5 rounded-lg border border-border/50 font-medium">
                                   {agent.position}
                                 </div>
-                                <div className="text-xs text-gray-500 bg-gray-900/50 px-2 py-1 rounded-md">
+                                <div className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
                                   ID: {agent.id.slice(-8)}
                                 </div>
                               </div>
@@ -859,10 +856,10 @@ export default function AgentsPage() {
                         </TableCell>
                         <TableCell className="text-center py-6">
                           <div className="flex flex-col items-center space-y-1">
-                            <Badge variant="outline" className="border-[#3c4043] text-gray-200 bg-gray-800/40 text-sm font-semibold px-3 py-1.5">
+                            <Badge variant="outline" className="bg-muted/50 text-sm font-semibold px-3 py-1.5">
                               {agent.department.name}
                             </Badge>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-muted-foreground">
                               {agent.department.icon && (
                                 <span className="inline-block w-3 h-3 mr-1">📁</span>
                               )}
@@ -875,7 +872,7 @@ export default function AgentsPage() {
                             <Badge className={`${platformInfo.color} text-white shadow-lg text-sm font-semibold px-3 py-1.5`}>
                               {platformInfo.label}
                             </Badge>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-muted-foreground">
                               <span className="inline-block w-3 h-3 mr-1">🔗</span>
                               平台
                             </div>
@@ -884,17 +881,17 @@ export default function AgentsPage() {
                         <TableCell className="text-center py-6">
                           <div className="flex flex-col items-center space-y-1">
                             {agent.isOnline ? (
-                              <Badge className="bg-green-500/20 text-green-400 border-green-500/30 shadow-lg text-sm font-semibold px-3 py-1.5">
+                              <Badge className="bg-green-500/20 text-green-700 border-green-500/30 shadow-lg text-sm font-semibold px-3 py-1.5 dark:text-green-400">
                                 <Wifi className="w-4 h-4 mr-1.5" />
                                 在线
                               </Badge>
                             ) : (
-                              <Badge className="bg-red-500/20 text-red-400 border-red-500/30 shadow-lg text-sm font-semibold px-3 py-1.5">
+                              <Badge className="bg-red-500/20 text-red-700 border-red-500/30 shadow-lg text-sm font-semibold px-3 py-1.5 dark:text-red-400">
                                 <WifiOff className="w-4 h-4 mr-1.5" />
                                 离线
                               </Badge>
                             )}
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-muted-foreground">
                               <span className="inline-block w-3 h-3 mr-1">📡</span>
                               连接状态
                             </div>
@@ -902,10 +899,10 @@ export default function AgentsPage() {
                         </TableCell>
                         <TableCell className="text-center py-6">
                           <div className="flex flex-col items-center space-y-1">
-                            <div className="text-base text-gray-200 font-bold bg-gray-800/40 px-3 py-1.5 rounded-lg border border-gray-700/50">
+                            <div className="text-base text-foreground font-bold bg-muted/50 px-3 py-1.5 rounded-lg border border-border/50">
                               {agent.userPermissions.length}
                             </div>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-muted-foreground">
                               <span className="inline-block w-3 h-3 mr-1">👥</span>
                               个用户
                             </div>
@@ -959,7 +956,7 @@ export default function AgentsPage() {
                                 </Tooltip>
                               </TooltipProvider>
                             </div>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-muted-foreground">
                               <span className="inline-block w-3 h-3 mr-1">⚙️</span>
                               操作
                             </div>
@@ -976,10 +973,10 @@ export default function AgentsPage() {
 
         {/* 创建Agent弹窗 */}
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogContent className="bg-[#1f1f1f] border-[#2d2d2d] text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>添加Agent</DialogTitle>
-              <DialogDescription className="text-gray-400">
+              <DialogDescription>
                 创建新的AI智能体，支持多平台接入
               </DialogDescription>
             </DialogHeader>
@@ -987,32 +984,30 @@ export default function AgentsPage() {
               {/* 基本信息 */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="create-chinese-name" className="text-white">中文名称</Label>
+                  <Label htmlFor="create-chinese-name">中文名称</Label>
                   <Input
                     id="create-chinese-name"
                     placeholder="请输入Agent中文名称"
                     value={formData.chineseName}
                     onChange={(e) => setFormData(prev => ({ ...prev, chineseName: e.target.value }))}
-                    className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="create-english-name" className="text-white">英文名称（可选）</Label>
+                  <Label htmlFor="create-english-name">英文名称（可选）</Label>
                   <Input
                     id="create-english-name"
                     placeholder="请输入Agent英文名称"
                     value={formData.englishName}
                     onChange={(e) => setFormData(prev => ({ ...prev, englishName: e.target.value }))}
-                    className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="create-department" className="text-white">所属部门 *</Label>
+                  <Label htmlFor="create-department">所属部门 *</Label>
                   {departments.length === 0 ? (
-                    <div className="bg-[#2a2a2a] border border-[#3c4043] rounded-md p-3 text-gray-400">
+                    <div className="bg-muted border border-border rounded-md p-3 text-muted-foreground">
                       暂无部门，请先创建部门
                     </div>
                   ) : (
@@ -1034,8 +1029,8 @@ export default function AgentsPage() {
                               return null
                             })()
                           ) : (
-                            <div className="w-8 h-8 bg-gray-600 rounded-lg flex items-center justify-center">
-                              <Building className="w-4 h-4 text-gray-400" />
+                            <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center">
+                              <Building className="w-4 h-4 text-muted-foreground" />
                             </div>
                           )}
                         </div>
@@ -1048,56 +1043,49 @@ export default function AgentsPage() {
                               console.log('选择部门:', e.target.value)
                               setFormData(prev => ({ ...prev, departmentId: e.target.value }))
                             }}
-                            className="w-full bg-[#2a2a2a] border border-[#3c4043] text-white rounded-md px-3 py-2
-                                       hover:bg-[#3c4043] focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                                       appearance-none cursor-pointer"
+                            className="w-full bg-background border border-input text-foreground rounded-md px-3 py-2 hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 appearance-none cursor-pointer"
                           >
-                            <option value="" className="bg-[#2a2a2a] text-gray-400">
-                              请选择部门
-                            </option>
+                            <option value="">请选择部门</option>
                             {departments.map((dept) => (
                               <option
                                 key={dept.id}
                                 value={dept.id}
-                                className="bg-[#2a2a2a] text-white"
                               >
                                 {dept.name}
                               </option>
                             ))}
                           </select>
                           <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                            <ChevronDown className="h-4 w-4 text-gray-400" />
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
                           </div>
                         </div>
                       </div>
                     </div>
                   )}
                   {departments.length > 0 && (
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       当前有 {departments.length} 个部门可选
                     </p>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="create-position" className="text-white">职位</Label>
+                  <Label htmlFor="create-position">职位</Label>
                   <Input
                     id="create-position"
                     placeholder="请输入Agent职位"
                     value={formData.position}
                     onChange={(e) => setFormData(prev => ({ ...prev, position: e.target.value }))}
-                    className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="create-description" className="text-white">描述</Label>
+                <Label htmlFor="create-description">描述</Label>
                 <Textarea
                   id="create-description"
                   placeholder="请输入Agent描述（可选）"
                   value={formData.description}
                   onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                   rows={3}
                 />
               </div>
@@ -1116,9 +1104,9 @@ export default function AgentsPage() {
               />
 
               {/* 平台配置 */}
-              <div className="space-y-4 border-t border-[#2d2d2d] pt-4">
+              <div className="space-y-4 border-t border-border pt-4">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-lg font-medium text-white">平台配置</h4>
+                  <h4 className="text-lg font-medium text-foreground">平台配置</h4>
                   {connectionTestResult.tested && (
                     <div className={`text-sm px-2 py-1 rounded ${
                       connectionTestResult.success
@@ -1131,17 +1119,17 @@ export default function AgentsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="create-platform" className="text-white">平台类型</Label>
+                  <Label htmlFor="create-platform">平台类型</Label>
                   <Select
                     value={formData.platform}
                     onValueChange={handlePlatformChange}
                   >
-                    <SelectTrigger className="bg-[#2a2a2a] border-[#3c4043] text-white">
+                    <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#2a2a2a] border-[#3c4043]">
+                    <SelectContent>
                       {platformOptions.map((platform) => (
-                        <SelectItem key={platform.value} value={platform.value} className="text-white hover:bg-[#3c4043]">
+                        <SelectItem key={platform.value} value={platform.value}>
                           <div className="flex items-center space-x-2">
                             <div className={`w-3 h-3 rounded-full ${platform.color}`}></div>
                             <span>{platform.label}</span>
@@ -1156,7 +1144,7 @@ export default function AgentsPage() {
                 {formData.platform === 'DIFY' && (
                   <div className="space-y-3">
                     <div className="space-y-2">
-                      <Label className="text-white">Dify Base URL</Label>
+                      <Label>Dify Base URL</Label>
                       <Input
                         placeholder="https://api.dify.ai/v1"
                         value={formData.platformConfig.baseUrl || ''}
@@ -1164,11 +1152,10 @@ export default function AgentsPage() {
                           ...prev,
                           platformConfig: { ...prev.platformConfig, baseUrl: e.target.value }
                         }))}
-                        className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-white">API Key</Label>
+                      <Label>API Key</Label>
                       <Input
                         type="password"
                         placeholder="app-xxxxxxxxxxxxxxxx"
@@ -1177,7 +1164,6 @@ export default function AgentsPage() {
                           ...prev,
                           platformConfig: { ...prev.platformConfig, apiKey: e.target.value }
                         }))}
-                        className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                       />
                     </div>
                     <ConnectionTest
@@ -1191,7 +1177,7 @@ export default function AgentsPage() {
                 {formData.platform === 'RAGFLOW' && (
                   <div className="space-y-3">
                     <div className="space-y-2">
-                      <Label className="text-white">RAGFlow 服务地址</Label>
+                      <Label>RAGFlow 服务地址</Label>
                       <Input
                         placeholder="http://your-ragflow-server:port"
                         value={formData.platformConfig.baseUrl || ''}
@@ -1199,11 +1185,10 @@ export default function AgentsPage() {
                           ...prev,
                           platformConfig: { ...prev.platformConfig, baseUrl: e.target.value }
                         }))}
-                        className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-white">API Key</Label>
+                      <Label>API Key</Label>
                       <Input
                         type="password"
                         placeholder="ragflow-xxxxxxxxxxxxxxxx"
@@ -1212,11 +1197,10 @@ export default function AgentsPage() {
                           ...prev,
                           platformConfig: { ...prev.platformConfig, apiKey: e.target.value }
                         }))}
-                        className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-white">RAGFlow ID 类型</Label>
+                      <Label>RAGFlow ID 类型</Label>
                       <Select
                         value={formData.platformConfig.idType || 'CHAT'}
                         onValueChange={(value) => setFormData(prev => ({
@@ -1224,21 +1208,21 @@ export default function AgentsPage() {
                           platformConfig: { ...prev.platformConfig, idType: value }
                         }))}
                       >
-                        <SelectTrigger className="bg-[#2a2a2a] border-[#3c4043] text-white">
+                        <SelectTrigger>
                           <SelectValue placeholder="请选择 ID 类型" />
                         </SelectTrigger>
-                        <SelectContent className="bg-[#2a2a2a] border-[#3c4043]">
-                          <SelectItem value="CHAT" className="text-white hover:bg-[#3c4043]">
+                        <SelectContent>
+                          <SelectItem value="CHAT">
                             Chat Assistant ID（/api/v1/chats）
                           </SelectItem>
-                          <SelectItem value="AGENT" className="text-white hover:bg-[#3c4043]">
+                          <SelectItem value="AGENT">
                             Agent ID（/api/v1/agents）
                           </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-white">
+                      <Label>
                         {formData.platformConfig.idType === 'AGENT' ? 'Agent ID' : 'Chat Assistant ID'}
                       </Label>
                       <Input
@@ -1252,11 +1236,10 @@ export default function AgentsPage() {
                           ...prev,
                           platformConfig: { ...prev.platformConfig, agentId: e.target.value }
                         }))}
-                        className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-white">知识库 ID (可选)</Label>
+                      <Label>知识库 ID (可选)</Label>
                       <Input
                         placeholder="用于 PDF 预览功能，可从知识库管理页面获取"
                         value={formData.platformConfig.datasetId || ''}
@@ -1264,9 +1247,8 @@ export default function AgentsPage() {
                           ...prev,
                           platformConfig: { ...prev.platformConfig, datasetId: e.target.value }
                         }))}
-                        className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                       />
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-muted-foreground">
                         配置后可在聊天时直接预览引用的 PDF 原文
                       </p>
                     </div>
@@ -1281,7 +1263,7 @@ export default function AgentsPage() {
                 {formData.platform === 'OPENAI' && (
                   <div className="space-y-3">
                     <div className="space-y-2">
-                      <Label className="text-white">API Key</Label>
+                      <Label>API Key</Label>
                       <Input
                         type="password"
                         placeholder="sk-xxxxxxxxxxxxxxxx"
@@ -1290,11 +1272,10 @@ export default function AgentsPage() {
                           ...prev,
                           platformConfig: { ...prev.platformConfig, apiKey: e.target.value }
                         }))}
-                        className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-white">模型</Label>
+                      <Label>模型</Label>
                       <Select
                         value={formData.platformConfig.model || 'gpt-3.5-turbo'}
                         onValueChange={(value) => setFormData(prev => ({
@@ -1302,13 +1283,13 @@ export default function AgentsPage() {
                           platformConfig: { ...prev.platformConfig, model: value }
                         }))}
                       >
-                        <SelectTrigger className="bg-[#2a2a2a] border-[#3c4043] text-white">
+                        <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent className="bg-[#2a2a2a] border-[#3c4043]">
-                          <SelectItem value="gpt-3.5-turbo" className="text-white hover:bg-[#3c4043]">GPT-3.5 Turbo</SelectItem>
-                          <SelectItem value="gpt-4" className="text-white hover:bg-[#3c4043]">GPT-4</SelectItem>
-                          <SelectItem value="gpt-4-turbo" className="text-white hover:bg-[#3c4043]">GPT-4 Turbo</SelectItem>
+                        <SelectContent>
+                          <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+                          <SelectItem value="gpt-4">GPT-4</SelectItem>
+                          <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1327,7 +1308,6 @@ export default function AgentsPage() {
               <Button
                 variant="outline"
                 onClick={() => setIsCreateDialogOpen(false)}
-                className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
               >
                 取消
               </Button>
@@ -1348,7 +1328,6 @@ export default function AgentsPage() {
                   }
                 }}
                 disabled={isSaving}
-                className="bg-[#6a5acd] hover:bg-[#5a4abd] text-white"
               >
                 {isSaving ? (
                   <>
@@ -1365,10 +1344,10 @@ export default function AgentsPage() {
 
         {/* 编辑Agent弹窗 */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="bg-[#1a1a1a] border-[#3c4043] text-white max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-xl font-semibold">编辑Agent</DialogTitle>
-              <DialogDescription className="text-gray-400">
+              <DialogDescription>
                 修改AI智能体信息和配置
               </DialogDescription>
             </DialogHeader>
@@ -1376,30 +1355,28 @@ export default function AgentsPage() {
               {/* 基本信息 */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-white">中文名称 *</Label>
+                  <Label>中文名称 *</Label>
                   <Input
                     placeholder="请输入Agent中文名称"
                     value={formData.chineseName}
                     onChange={(e) => setFormData(prev => ({ ...prev, chineseName: e.target.value }))}
-                    className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-white">英文名称（可选）</Label>
+                  <Label>英文名称（可选）</Label>
                   <Input
                     placeholder="请输入Agent英文名称"
                     value={formData.englishName}
                     onChange={(e) => setFormData(prev => ({ ...prev, englishName: e.target.value }))}
-                    className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-white">所属部门 *</Label>
+                  <Label>所属部门 *</Label>
                   {departments.length === 0 ? (
-                    <div className="bg-[#2a2a2a] border border-[#3c4043] rounded-md p-3 text-gray-400">
+                    <div className="bg-muted border border-border rounded-md p-3 text-muted-foreground">
                       暂无部门，请先创建部门
                     </div>
                   ) : (
@@ -1421,8 +1398,8 @@ export default function AgentsPage() {
                               return null
                             })()
                           ) : (
-                            <div className="w-8 h-8 bg-gray-600 rounded-lg flex items-center justify-center">
-                              <Building className="w-4 h-4 text-gray-400" />
+                            <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center">
+                              <Building className="w-4 h-4 text-muted-foreground" />
                             </div>
                           )}
                         </div>
@@ -1435,54 +1412,47 @@ export default function AgentsPage() {
                               console.log('选择部门:', e.target.value)
                               setFormData(prev => ({ ...prev, departmentId: e.target.value }))
                             }}
-                            className="w-full bg-[#2a2a2a] border border-[#3c4043] text-white rounded-md px-3 py-2
-                                       hover:bg-[#3c4043] focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                                       appearance-none cursor-pointer"
+                            className="w-full bg-background border border-input text-foreground rounded-md px-3 py-2 hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 appearance-none cursor-pointer"
                           >
-                            <option value="" className="bg-[#2a2a2a] text-gray-400">
-                              请选择部门
-                            </option>
+                            <option value="">请选择部门</option>
                             {departments.map((dept) => (
                               <option
                                 key={dept.id}
                                 value={dept.id}
-                                className="bg-[#2a2a2a] text-white"
                               >
                                 {dept.name}
                               </option>
                             ))}
                           </select>
                           <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                            <ChevronDown className="h-4 w-4 text-gray-400" />
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
                           </div>
                         </div>
                       </div>
                     </div>
                   )}
                   {departments.length > 0 && (
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       当前有 {departments.length} 个部门可选
                     </p>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-white">职位 *</Label>
+                  <Label>职位 *</Label>
                   <Input
                     placeholder="请输入Agent职位"
                     value={formData.position}
                     onChange={(e) => setFormData(prev => ({ ...prev, position: e.target.value }))}
-                    className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label className="text-white">描述</Label>
+                <Label>描述</Label>
                 <Input
                   placeholder="请输入Agent描述（可选）"
                   value={formData.description}
                   onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                 />
               </div>
 
@@ -1502,7 +1472,7 @@ export default function AgentsPage() {
               {/* 平台配置 */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-lg font-semibold text-white">平台配置</h4>
+                  <h4 className="text-lg font-semibold text-foreground">平台配置</h4>
                   {connectionTestResult.tested && (
                     <div className={`text-sm px-2 py-1 rounded ${
                       connectionTestResult.success
@@ -1515,12 +1485,12 @@ export default function AgentsPage() {
                 </div>
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label className="text-white">平台类型</Label>
+                    <Label>平台类型</Label>
                     <Select
                       value={formData.platform}
                       onValueChange={(value: AgentPlatform) => handlePlatformChange(value)}
                     >
-                      <SelectTrigger className="bg-[#2a2a2a] border-[#3c4043] text-white">
+                      <SelectTrigger>
                         <SelectValue>
                           <div className="flex items-center space-x-2">
                             <div className={`w-2 h-2 rounded-full ${getPlatformInfo(formData.platform).color}`}></div>
@@ -1528,14 +1498,14 @@ export default function AgentsPage() {
                           </div>
                         </SelectValue>
                       </SelectTrigger>
-                      <SelectContent className="bg-[#2a2a2a] border-[#3c4043]">
-                        <SelectItem value="DIFY" className="text-white hover:bg-[#3c4043]">
+                      <SelectContent>
+                        <SelectItem value="DIFY">
                           <div className="flex items-center space-x-2">
                             <div className="w-2 h-2 rounded-full bg-blue-500"></div>
                             <span>Dify</span>
                           </div>
                         </SelectItem>
-                        <SelectItem value="OPENAI" className="text-white hover:bg-[#3c4043]">
+                        <SelectItem value="OPENAI">
                           <div className="flex items-center space-x-2">
                             <div className="w-2 h-2 rounded-full bg-green-500"></div>
                             <span>OpenAI</span>
@@ -1548,7 +1518,7 @@ export default function AgentsPage() {
                   {formData.platform === 'DIFY' && (
                     <div className="space-y-3">
                       <div className="space-y-2">
-                        <Label className="text-white">Dify Base URL</Label>
+                        <Label>Dify Base URL</Label>
                         <Input
                           placeholder="https://api.dify.ai/v1"
                           value={formData.platformConfig.baseUrl || ''}
@@ -1556,11 +1526,10 @@ export default function AgentsPage() {
                             ...prev,
                             platformConfig: { ...prev.platformConfig, baseUrl: e.target.value }
                           }))}
-                          className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-white">API Key</Label>
+                        <Label>API Key</Label>
                         <Input
                           type="password"
                           placeholder="app-xxxxxxxxxxxxxxxx"
@@ -1569,7 +1538,6 @@ export default function AgentsPage() {
                             ...prev,
                             platformConfig: { ...prev.platformConfig, apiKey: e.target.value }
                           }))}
-                          className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                         />
                       </div>
                       <ConnectionTest
@@ -1583,7 +1551,7 @@ export default function AgentsPage() {
                   {formData.platform === 'RAGFLOW' && (
                     <div className="space-y-3">
                       <div className="space-y-2">
-                        <Label className="text-white">RAGFlow 服务地址</Label>
+                        <Label>RAGFlow 服务地址</Label>
                         <Input
                           placeholder="http://your-ragflow-server:port"
                           value={formData.platformConfig.baseUrl || ''}
@@ -1591,11 +1559,10 @@ export default function AgentsPage() {
                             ...prev,
                             platformConfig: { ...prev.platformConfig, baseUrl: e.target.value }
                           }))}
-                          className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-white">API Key</Label>
+                        <Label>API Key</Label>
                         <Input
                           type="password"
                           placeholder="ragflow-xxxxxxxxxxxxxxxx"
@@ -1604,11 +1571,10 @@ export default function AgentsPage() {
                             ...prev,
                             platformConfig: { ...prev.platformConfig, apiKey: e.target.value }
                           }))}
-                          className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-white">RAGFlow ID 类型</Label>
+                        <Label>RAGFlow ID 类型</Label>
                         <Select
                           value={formData.platformConfig.idType || 'CHAT'}
                           onValueChange={(value) => setFormData(prev => ({
@@ -1616,21 +1582,21 @@ export default function AgentsPage() {
                             platformConfig: { ...prev.platformConfig, idType: value }
                           }))}
                         >
-                          <SelectTrigger className="bg-[#2a2a2a] border-[#3c4043] text-white">
+                          <SelectTrigger>
                             <SelectValue placeholder="请选择 ID 类型" />
                           </SelectTrigger>
-                          <SelectContent className="bg-[#2a2a2a] border-[#3c4043]">
-                            <SelectItem value="CHAT" className="text-white hover:bg-[#3c4043]">
+                          <SelectContent>
+                            <SelectItem value="CHAT">
                               Chat Assistant ID（/api/v1/chats）
                             </SelectItem>
-                            <SelectItem value="AGENT" className="text-white hover:bg-[#3c4043]">
+                            <SelectItem value="AGENT">
                               Agent ID（/api/v1/agents）
                             </SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-white">
+                        <Label>
                           {formData.platformConfig.idType === 'AGENT' ? 'Agent ID' : 'Chat Assistant ID'}
                         </Label>
                         <Input
@@ -1644,11 +1610,10 @@ export default function AgentsPage() {
                             ...prev,
                             platformConfig: { ...prev.platformConfig, agentId: e.target.value }
                           }))}
-                          className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-white">知识库 ID (可选)</Label>
+                        <Label>知识库 ID (可选)</Label>
                         <Input
                           placeholder="用于 PDF 预览功能，可从知识库管理页面获取"
                           value={formData.platformConfig.datasetId || ''}
@@ -1656,9 +1621,8 @@ export default function AgentsPage() {
                             ...prev,
                             platformConfig: { ...prev.platformConfig, datasetId: e.target.value }
                           }))}
-                          className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                         />
-                        <p className="text-xs text-gray-400">
+                        <p className="text-xs text-muted-foreground">
                           配置后可在聊天时直接预览引用的 PDF 原文
                         </p>
                       </div>
@@ -1673,7 +1637,7 @@ export default function AgentsPage() {
                   {formData.platform === 'OPENAI' && (
                     <div className="space-y-3">
                       <div className="space-y-2">
-                        <Label className="text-white">API Key</Label>
+                        <Label>API Key</Label>
                         <Input
                           type="password"
                           placeholder="sk-xxxxxxxxxxxxxxxx"
@@ -1682,11 +1646,10 @@ export default function AgentsPage() {
                             ...prev,
                             platformConfig: { ...prev.platformConfig, apiKey: e.target.value }
                           }))}
-                          className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-white">模型</Label>
+                        <Label>模型</Label>
                         <Select
                           value={formData.platformConfig.model || 'gpt-3.5-turbo'}
                           onValueChange={(value) => setFormData(prev => ({
@@ -1694,13 +1657,13 @@ export default function AgentsPage() {
                             platformConfig: { ...prev.platformConfig, model: value }
                           }))}
                         >
-                          <SelectTrigger className="bg-[#2a2a2a] border-[#3c4043] text-white">
+                          <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent className="bg-[#2a2a2a] border-[#3c4043]">
-                            <SelectItem value="gpt-3.5-turbo" className="text-white hover:bg-[#3c4043]">GPT-3.5 Turbo</SelectItem>
-                            <SelectItem value="gpt-4" className="text-white hover:bg-[#3c4043]">GPT-4</SelectItem>
-                            <SelectItem value="gpt-4-turbo" className="text-white hover:bg-[#3c4043]">GPT-4 Turbo</SelectItem>
+                          <SelectContent>
+                            <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+                            <SelectItem value="gpt-4">GPT-4</SelectItem>
+                            <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -1722,7 +1685,6 @@ export default function AgentsPage() {
                   setEditingAgent(null)
                   resetForm()
                 }}
-                className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
               >
                 取消
               </Button>
@@ -1743,7 +1705,6 @@ export default function AgentsPage() {
                   }
                 }}
                 disabled={isSaving}
-                className="bg-[#6a5acd] hover:bg-[#5a4abd] text-white"
               >
                 {isSaving ? (
                   <>
