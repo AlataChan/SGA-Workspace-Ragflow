@@ -1,0 +1,43 @@
+# 开发环境 Dockerfile - 支持热重载
+FROM node:20-alpine
+
+WORKDIR /app
+
+# 安装系统依赖
+RUN apk add --no-cache \
+    dos2unix \
+    curl
+
+# 复制 package 文件
+COPY package.json package-lock.json* .npmrc* ./
+
+# 安装依赖（包含开发依赖）
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    npm ci
+
+# 复制 Prisma schema
+COPY prisma ./prisma
+
+# 生成 Prisma 客户端
+RUN npx prisma generate
+
+# 创建非root用户
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# 创建必要目录并设置权限
+RUN mkdir -p /app/logs /app/uploads /app/public/uploads && \
+    chown -R nextjs:nodejs /app
+
+# 切换到非root用户
+USER nextjs
+
+# 暴露端口
+EXPOSE 3000
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
+
+# 开发模式启动
+CMD ["npm", "run", "dev"]

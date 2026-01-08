@@ -108,6 +108,11 @@ interface MainWorkspaceLayoutProps {
 }
 
 export default function MainWorkspaceLayout({ user, agents, sessions, company }: MainWorkspaceLayoutProps) {
+  // 用户反馈不喜欢左下角 Agent 简介卡片：默认隐藏，后续可随时改回 true
+  const SHOW_AGENT_INTRO_CARD = false
+  // 用户反馈暂不需要右侧底部的「语音通话 / 视频会议 / 交互历史」按钮：默认隐藏，后续可随时改回 true
+  const SHOW_AGENT_ACTION_BUTTONS = false
+
   const [searchQuery, setSearchQuery] = useState("")
   const [currentRotation, setCurrentRotation] = useState(0)
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -871,7 +876,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
               </div>
 
               {/* 空白处的简化介绍 - 响应式 */}
-              {realAgents[selectedIndex] && (
+              {SHOW_AGENT_INTRO_CARD && realAgents[selectedIndex] && (
                 <div className="absolute bottom-4 left-4 right-4 sm:bottom-8 sm:left-8 sm:right-auto sm:max-w-[320px] p-3 sm:p-4 bg-card/90 backdrop-blur-sm rounded-lg border border-border shadow-lg">
                   <h3 className="text-base sm:text-lg font-semibold text-foreground mb-2">{realAgents[selectedIndex].chineseName}</h3>
                   <p className="text-sm text-muted-foreground mb-3">{realAgents[selectedIndex].position}</p>
@@ -1010,32 +1015,36 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                     </div>
                   </Button>
 
-                  {/* 功能按钮组 */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <Button
-                      disabled={!realAgents[selectedIndex].isOnline}
-                      className="py-2 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Mic className="w-4 h-4 mr-1" />
-                      语音通话
-                    </Button>
-                    <Button
-                      disabled={!realAgents[selectedIndex].isOnline}
-                      className="py-2 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Video className="w-4 h-4 mr-1" />
-                      视频会议
-                    </Button>
-                  </div>
+                  {SHOW_AGENT_ACTION_BUTTONS && (
+                    <>
+                      {/* 功能按钮组 */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <Button
+                          disabled={!realAgents[selectedIndex].isOnline}
+                          className="py-2 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Mic className="w-4 h-4 mr-1" />
+                          语音通话
+                        </Button>
+                        <Button
+                          disabled={!realAgents[selectedIndex].isOnline}
+                          className="py-2 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Video className="w-4 h-4 mr-1" />
+                          视频会议
+                        </Button>
+                      </div>
 
-                  {/* 主要操作按钮 */}
-                  <Button
-                    disabled={!realAgents[selectedIndex].isOnline}
-                    className="w-full py-3 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <History className="w-4 h-4 mr-2" />
-                    交互历史
-                  </Button>
+                      {/* 主要操作按钮 */}
+                      <Button
+                        disabled={!realAgents[selectedIndex].isOnline}
+                        className="w-full py-3 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <History className="w-4 h-4 mr-2" />
+                        交互历史
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             )}
