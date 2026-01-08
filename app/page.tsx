@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Database, AlertCircle, CheckCircle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 export default function HomePage() {
   const router = useRouter()
@@ -57,13 +58,13 @@ export default function HomePage() {
 
   if (isChecking || dbStatus === 'checking') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
-          <p className="text-gray-600">正在检查系统状态...</p>
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
+          <p className="text-muted-foreground">正在检查系统状态...</p>
           <div className="mt-4 flex items-center justify-center space-x-2">
-            <Database className="w-4 h-4 text-gray-400" />
-            <span className="text-sm text-gray-500">检查数据库连接</span>
+            <Database className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">检查数据库连接</span>
           </div>
         </div>
       </div>
@@ -72,20 +73,20 @@ export default function HomePage() {
 
   if (dbStatus === 'error') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center max-w-md mx-auto p-6">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">系统启动失败</h1>
-          <p className="text-gray-600 mb-4">数据库连接失败，请检查以下配置：</p>
+          <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-foreground mb-2">系统启动失败</h1>
+          <p className="text-muted-foreground mb-4">数据库连接失败，请检查以下配置：</p>
 
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 text-left">
-            <p className="text-sm text-red-700 font-medium mb-2">错误信息：</p>
-            <p className="text-sm text-red-600 font-mono">{error}</p>
+          <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 mb-4 text-left">
+            <p className="text-sm text-destructive font-medium mb-2">错误信息：</p>
+            <p className="text-sm text-destructive font-mono">{error}</p>
           </div>
 
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-left">
-            <p className="text-sm font-medium text-gray-700 mb-2">请检查：</p>
-            <ul className="text-sm text-gray-600 space-y-1">
+          <div className="bg-card border border-border rounded-lg p-4 text-left">
+            <p className="text-sm font-medium text-foreground mb-2">请检查：</p>
+            <ul className="text-sm text-muted-foreground space-y-1">
               <li>• PostgreSQL 数据库是否运行在 localhost:5433</li>
               <li>• 数据库用户名/密码是否正确</li>
               <li>• 数据库 ai_workspace 是否存在</li>
@@ -93,12 +94,12 @@ export default function HomePage() {
             </ul>
           </div>
 
-          <button
+          <Button
             onClick={() => window.location.reload()}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="mt-4"
           >
             重新检查
-          </button>
+          </Button>
         </div>
       </div>
     )
@@ -106,10 +107,10 @@ export default function HomePage() {
 
   if (dbStatus === 'success') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <CheckCircle className="w-8 h-8 text-green-600 mx-auto mb-4" />
-          <p className="text-gray-600">系统检查完成，正在跳转...</p>
+          <p className="text-muted-foreground">系统检查完成，正在跳转...</p>
         </div>
       </div>
     )

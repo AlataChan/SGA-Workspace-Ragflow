@@ -34,7 +34,7 @@ services:
     # ports: 不暴露到主机，只在内部网络访问
     environment:
       # 应用配置
-      - NODE_ENV=development
+      - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
       - NEXT_PUBLIC_APP_URL=http://localhost:8100
       

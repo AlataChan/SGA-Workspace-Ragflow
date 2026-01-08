@@ -42,6 +42,8 @@ interface GraphData {
 
 interface KnowledgeGraphViewProps {
   className?: string
+  /** 容器高度（px），默认 300 */
+  height?: number
 }
 
 /**
@@ -53,7 +55,7 @@ function getNodeRadius(pagerank?: number): number {
   return Math.max(20, Math.min(50, 20 + pagerank * 30))
 }
 
-export default function KnowledgeGraphView({ className }: KnowledgeGraphViewProps) {
+export default function KnowledgeGraphView({ className, height = 300 }: KnowledgeGraphViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -147,7 +149,7 @@ export default function KnowledgeGraphView({ className }: KnowledgeGraphViewProp
       .data(graphData.edges)
       .enter()
       .append('line')
-      .attr('stroke', '#4B5563')
+      .attr('stroke', 'hsl(var(--muted-foreground))')
       .attr('stroke-opacity', 0.6)
       .attr('stroke-width', d => Math.max(1, (d.weight || 1) * 2))
       .on('mouseenter', function(event, d) {
@@ -158,11 +160,11 @@ export default function KnowledgeGraphView({ className }: KnowledgeGraphViewProp
           y: event.pageY,
           content: desc
         })
-        d3.select(this).attr('stroke', '#60A5FA').attr('stroke-opacity', 1)
+        d3.select(this).attr('stroke', 'hsl(var(--primary))').attr('stroke-opacity', 1)
       })
       .on('mouseleave', function() {
         setTooltip(prev => ({ ...prev, visible: false }))
-        d3.select(this).attr('stroke', '#4B5563').attr('stroke-opacity', 0.6)
+        d3.select(this).attr('stroke', 'hsl(var(--muted-foreground))').attr('stroke-opacity', 0.6)
       })
 
     // 绘制节点
@@ -193,7 +195,7 @@ export default function KnowledgeGraphView({ className }: KnowledgeGraphViewProp
     nodes.append('circle')
       .attr('r', d => getNodeRadius(d.pagerank))
       .attr('fill', d => getEntityColor(d.entity_type, false))
-      .attr('stroke', '#1F2937')
+      .attr('stroke', 'hsl(var(--border))')
       .attr('stroke-width', 2)
       .style('cursor', 'pointer')
       .on('mouseenter', function(event, d) {
@@ -204,11 +206,11 @@ export default function KnowledgeGraphView({ className }: KnowledgeGraphViewProp
           y: event.pageY,
           content
         })
-        d3.select(this).attr('stroke', '#60A5FA').attr('stroke-width', 3)
+        d3.select(this).attr('stroke', 'hsl(var(--primary))').attr('stroke-width', 3)
       })
       .on('mouseleave', function() {
         setTooltip(prev => ({ ...prev, visible: false }))
-        d3.select(this).attr('stroke', '#1F2937').attr('stroke-width', 2)
+        d3.select(this).attr('stroke', 'hsl(var(--border))').attr('stroke-width', 2)
       })
 
     // 节点标签
@@ -216,7 +218,10 @@ export default function KnowledgeGraphView({ className }: KnowledgeGraphViewProp
       .text(d => d.entity_name.length > 8 ? d.entity_name.slice(0, 8) + '...' : d.entity_name)
       .attr('text-anchor', 'middle')
       .attr('dy', 4)
-      .attr('fill', '#fff')
+      .attr('fill', 'hsl(var(--foreground))')
+      .style('paint-order', 'stroke')
+      .style('stroke', 'hsl(var(--background))')
+      .style('stroke-width', 3)
       .attr('font-size', 12)
       .attr('pointer-events', 'none')
 
@@ -266,26 +271,26 @@ export default function KnowledgeGraphView({ className }: KnowledgeGraphViewProp
 
   if (isLoading) {
     return (
-      <div className={`flex items-center justify-center h-[300px] bg-slate-800 rounded-lg ${className}`}>
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-        <span className="ml-2 text-slate-300">加载图谱数据...</span>
+      <div className={`flex items-center justify-center h-[300px] bg-muted rounded-lg ${className}`}>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-2 text-muted-foreground">加载图谱数据...</span>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className={`flex items-center justify-center h-[300px] bg-slate-800 rounded-lg ${className}`}>
-        <p className="text-red-400">{error}</p>
+      <div className={`flex items-center justify-center h-[300px] bg-muted rounded-lg ${className}`}>
+        <p className="text-destructive">{error}</p>
       </div>
     )
   }
 
   if (!graphData || graphData.nodes.length === 0) {
     return (
-      <div className={`flex flex-col items-center justify-center h-[300px] bg-slate-800 rounded-lg ${className}`}>
-        <p className="text-slate-400 mb-2">暂无图谱数据</p>
-        <p className="text-slate-500 text-sm">请先构建知识图谱</p>
+      <div className={`flex flex-col items-center justify-center h-[300px] bg-muted rounded-lg ${className}`}>
+        <p className="text-muted-foreground mb-2">暂无图谱数据</p>
+        <p className="text-muted-foreground text-sm">请先构建知识图谱</p>
       </div>
     )
   }
@@ -308,7 +313,8 @@ export default function KnowledgeGraphView({ className }: KnowledgeGraphViewProp
       {/* 图谱容器 */}
       <div 
         ref={containerRef} 
-        className="w-full h-[300px] bg-slate-900 rounded-lg overflow-hidden border border-slate-700"
+        className="w-full bg-card rounded-lg overflow-hidden border border-border"
+        style={{ height }}
       >
         <svg ref={svgRef} className="w-full h-full" />
       </div>
@@ -316,7 +322,7 @@ export default function KnowledgeGraphView({ className }: KnowledgeGraphViewProp
       {/* 图例 - 动态生成，基于实际存在的实体类型 */}
       <div className="flex flex-wrap gap-3 mt-2 justify-center">
         {graphData && [...new Set(graphData.nodes.map(n => n.entity_type))].map(type => (
-          <div key={type} className="flex items-center gap-1 text-xs text-slate-400">
+          <div key={type} className="flex items-center gap-1 text-xs text-muted-foreground">
             <span className="w-3 h-3 rounded-full" style={{ backgroundColor: getEntityColor(type, false) }} />
             <span>{type}</span>
           </div>
@@ -326,7 +332,7 @@ export default function KnowledgeGraphView({ className }: KnowledgeGraphViewProp
       {/* Tooltip */}
       {tooltip.visible && (
         <div
-          className="fixed z-50 px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg shadow-lg text-sm text-white whitespace-pre-line max-w-xs"
+          className="fixed z-50 px-3 py-2 bg-card border border-border rounded-lg shadow-lg text-sm text-foreground whitespace-pre-line max-w-xs"
           style={{ left: tooltip.x + 10, top: tooltip.y + 10 }}
         >
           {tooltip.content}
@@ -335,4 +341,3 @@ export default function KnowledgeGraphView({ className }: KnowledgeGraphViewProp
     </div>
   )
 }
-

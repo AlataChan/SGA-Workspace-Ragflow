@@ -102,10 +102,10 @@ export default function SimpleGraphViewer({ knowledgeGraphId, onBack }: SimpleGr
 
     const svg = container.appendChild(document.createElement('div'))
     svg.innerHTML = `
-      <svg width="100%" height="100%" style="border: 1px solid #e0e0e0; background-color: #fff;">
+      <svg width="100%" height="100%" style="border: 1px solid hsl(var(--border)); background-color: hsl(var(--background));">
         <defs>
           <marker id="arrow" viewBox="0 -5 10 10" refX="25" refY="0" markerWidth="6" markerHeight="6" orient="auto">
-            <path fill="#999" d="M0,-5L10,0L0,5"></path>
+            <path fill="hsl(var(--muted-foreground))" d="M0,-5L10,0L0,5"></path>
           </marker>
         </defs>
       </svg>
@@ -197,7 +197,7 @@ function renderGraph(container: HTMLElement, graphData: GraphData, width: number
 
   // 创建连线
   const link = g.append('g')
-    .attr('stroke', '#999')
+    .attr('stroke', 'hsl(var(--muted-foreground))')
     .attr('stroke-opacity', 0.6)
     .selectAll('line')
     .data(graphData.links)
@@ -207,13 +207,13 @@ function renderGraph(container: HTMLElement, graphData: GraphData, width: number
 
   // 创建节点
   const node = g.append('g')
-    .attr('stroke', '#fff')
+    .attr('stroke', 'hsl(var(--background))')
     .attr('stroke-width', 1.5)
     .selectAll('circle')
     .data(graphData.nodes)
     .join('circle')
     .attr('r', (d: any) => d.value || 10)
-    .attr('fill', (d: any) => d.color || '#999')
+    .attr('fill', (d: any) => d.color || 'hsl(var(--muted-foreground))')
     .call(d3.drag()
       .on('start', dragstarted)
       .on('drag', dragged)
@@ -227,7 +227,7 @@ function renderGraph(container: HTMLElement, graphData: GraphData, width: number
     .join('text')
     .text((d: any) => d.name)
     .attr('font-size', '12px')
-    .attr('fill', '#333')
+    .attr('fill', 'hsl(var(--foreground))')
 
   // 更新位置
   simulation.on('tick', () => {

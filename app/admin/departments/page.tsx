@@ -310,7 +310,7 @@ export default function DepartmentsPage() {
     return (
       <NewAdminLayout>
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-[#6a5acd]" />
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       </NewAdminLayout>
     )
@@ -321,13 +321,10 @@ export default function DepartmentsPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white mb-2">部门管理</h1>
-            <p className="text-gray-400">管理公司部门结构和组织架构</p>
+            <h1 className="text-2xl font-bold text-foreground mb-2">部门管理</h1>
+            <p className="text-muted-foreground">管理公司部门结构和组织架构</p>
           </div>
-          <Button
-            onClick={openCreateDialog}
-            className="bg-[#6a5acd] hover:bg-[#5a4abd] text-white"
-          >
+          <Button onClick={openCreateDialog}>
             <Plus className="w-4 h-4 mr-2" />
             添加部门
           </Button>
@@ -341,68 +338,68 @@ export default function DepartmentsPage() {
               : 'border-red-500/20 bg-red-500/10'
           }`}>
             {message.type === 'success' ? (
-              <CheckCircle className="h-4 w-4 text-green-400" />
+              <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
             ) : (
-              <AlertCircle className="h-4 w-4 text-red-400" />
+              <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
             )}
-            <AlertDescription className={message.type === 'success' ? 'text-green-100' : 'text-red-100'}>
+            <AlertDescription className={message.type === 'success' ? 'text-green-700 dark:text-green-200' : 'text-red-700 dark:text-red-200'}>
               {message.text}
             </AlertDescription>
           </Alert>
         )}
 
         {/* 部门列表 */}
-        <Card className="bg-[#1f1f1f] border-[#2d2d2d]">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-white flex items-center">
+            <CardTitle className="flex items-center">
               <Building className="w-5 h-5 mr-2" />
               部门列表
             </CardTitle>
-            <CardDescription className="text-gray-400">
+            <CardDescription>
               当前共有 {departments.length} 个部门
             </CardDescription>
           </CardHeader>
           <CardContent>
             {departments.length === 0 ? (
               <div className="text-center py-8">
-                <Building className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-                <p className="text-gray-400">暂无部门，点击上方按钮添加第一个部门</p>
+                <Building className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">暂无部门，点击上方按钮添加第一个部门</p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
-                  <TableRow className="border-[#2d2d2d]">
-                    <TableHead className="text-gray-300">部门信息</TableHead>
-                    <TableHead className="text-gray-300">描述</TableHead>
-                    <TableHead className="text-gray-300">Agent数量</TableHead>
-                    <TableHead className="text-gray-300">排序</TableHead>
-                    <TableHead className="text-gray-300">操作</TableHead>
+                  <TableRow>
+                    <TableHead>部门信息</TableHead>
+                    <TableHead>描述</TableHead>
+                    <TableHead>Agent数量</TableHead>
+                    <TableHead>排序</TableHead>
+                    <TableHead>操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {departments.map((department) => {
                     const IconComponent = getIconComponent(department.icon)
                     return (
-                      <TableRow key={department.id} className="border-[#2d2d2d]">
+                      <TableRow key={department.id}>
                         <TableCell>
                           <div className="flex items-center space-x-3">
-                            <div className="w-8 h-8 bg-[#6a5acd]/20 rounded-lg flex items-center justify-center">
-                              <IconComponent className="w-4 h-4 text-[#8ab4f8]" />
+                            <div className="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center">
+                              <IconComponent className="w-4 h-4 text-primary" />
                             </div>
                             <div>
-                              <div className="font-medium text-white">{department.name}</div>
-                              <div className="text-xs text-gray-400">
+                              <div className="font-medium text-foreground">{department.name}</div>
+                              <div className="text-xs text-muted-foreground">
                                 创建于 {new Date(department.createdAt).toLocaleDateString()}
                               </div>
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-gray-300">
+                        <TableCell>
                           {department.description || '暂无描述'}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center space-x-2">
-                            <Badge variant="outline" className="border-[#3c4043] text-gray-300">
+                            <Badge variant="outline">
                               总计 {department.agentCount}
                             </Badge>
                             {department.onlineAgentCount > 0 && (
@@ -412,7 +409,7 @@ export default function DepartmentsPage() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="text-gray-300">
+                        <TableCell>
                           {department.sortOrder}
                         </TableCell>
                         <TableCell>
@@ -421,7 +418,6 @@ export default function DepartmentsPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => openEditDialog(department)}
-                              className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
                             >
                               <Edit className="w-4 h-4" />
                             </Button>
@@ -430,7 +426,7 @@ export default function DepartmentsPage() {
                               size="sm"
                               onClick={() => handleDelete(department)}
                               disabled={isDeleting === department.id}
-                              className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+                              className="border-red-500/30 text-red-600 hover:bg-red-500/10 dark:text-red-400"
                             >
                               {isDeleting === department.id ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -451,49 +447,47 @@ export default function DepartmentsPage() {
 
         {/* 创建部门弹窗 */}
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogContent className="bg-[#1f1f1f] border-[#2d2d2d] text-white">
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>添加部门</DialogTitle>
-              <DialogDescription className="text-gray-400">
+              <DialogDescription>
                 创建新的部门，完善组织架构
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="create-name" className="text-white">部门名称</Label>
+                <Label htmlFor="create-name">部门名称</Label>
                 <Input
                   id="create-name"
                   placeholder="请输入部门名称"
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="create-description" className="text-white">部门描述</Label>
+                <Label htmlFor="create-description">部门描述</Label>
                 <Textarea
                   id="create-description"
                   placeholder="请输入部门描述（可选）"
                   value={formData.description}
                   onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                   rows={3}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="create-icon" className="text-white">部门图标</Label>
+                <Label htmlFor="create-icon">部门图标</Label>
                 <Select
                   value={formData.icon}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, icon: value }))}
                 >
-                  <SelectTrigger className="bg-[#2a2a2a] border-[#3c4043] text-white">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#2a2a2a] border-[#3c4043]">
+                  <SelectContent>
                     {iconOptions.map((option) => {
                       const IconComponent = option.icon
                       return (
-                        <SelectItem key={option.value} value={option.value} className="text-white hover:bg-[#3c4043]">
+                        <SelectItem key={option.value} value={option.value}>
                           <div className="flex items-center space-x-2">
                             <IconComponent className="w-4 h-4" />
                             <span>{option.label}</span>
@@ -505,7 +499,7 @@ export default function DepartmentsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="create-sort" className="text-white">排序顺序</Label>
+                <Label htmlFor="create-sort">排序顺序</Label>
                 <Input
                   id="create-sort"
                   type="number"
@@ -513,7 +507,6 @@ export default function DepartmentsPage() {
                   placeholder="排序顺序"
                   value={formData.sortOrder}
                   onChange={(e) => setFormData(prev => ({ ...prev, sortOrder: parseInt(e.target.value) || 0 }))}
-                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                 />
               </div>
             </div>
@@ -521,15 +514,10 @@ export default function DepartmentsPage() {
               <Button
                 variant="outline"
                 onClick={() => setIsCreateDialogOpen(false)}
-                className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
               >
                 取消
               </Button>
-              <Button
-                onClick={handleCreate}
-                disabled={isSaving}
-                className="bg-[#6a5acd] hover:bg-[#5a4abd] text-white"
-              >
+              <Button onClick={handleCreate} disabled={isSaving}>
                 {isSaving ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -545,49 +533,47 @@ export default function DepartmentsPage() {
 
         {/* 编辑部门弹窗 */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="bg-[#1f1f1f] border-[#2d2d2d] text-white">
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>编辑部门</DialogTitle>
-              <DialogDescription className="text-gray-400">
+              <DialogDescription>
                 修改部门信息
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="edit-name" className="text-white">部门名称</Label>
+                <Label htmlFor="edit-name">部门名称</Label>
                 <Input
                   id="edit-name"
                   placeholder="请输入部门名称"
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-description" className="text-white">部门描述</Label>
+                <Label htmlFor="edit-description">部门描述</Label>
                 <Textarea
                   id="edit-description"
                   placeholder="请输入部门描述（可选）"
                   value={formData.description}
                   onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                   rows={3}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-icon" className="text-white">部门图标</Label>
+                <Label htmlFor="edit-icon">部门图标</Label>
                 <Select
                   value={formData.icon}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, icon: value }))}
                 >
-                  <SelectTrigger className="bg-[#2a2a2a] border-[#3c4043] text-white">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#2a2a2a] border-[#3c4043]">
+                  <SelectContent>
                     {iconOptions.map((option) => {
                       const IconComponent = option.icon
                       return (
-                        <SelectItem key={option.value} value={option.value} className="text-white hover:bg-[#3c4043]">
+                        <SelectItem key={option.value} value={option.value}>
                           <div className="flex items-center space-x-2">
                             <IconComponent className="w-4 h-4" />
                             <span>{option.label}</span>
@@ -599,7 +585,7 @@ export default function DepartmentsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-sort" className="text-white">排序顺序</Label>
+                <Label htmlFor="edit-sort">排序顺序</Label>
                 <Input
                   id="edit-sort"
                   type="number"
@@ -607,7 +593,6 @@ export default function DepartmentsPage() {
                   placeholder="排序顺序"
                   value={formData.sortOrder}
                   onChange={(e) => setFormData(prev => ({ ...prev, sortOrder: parseInt(e.target.value) || 0 }))}
-                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                 />
               </div>
             </div>
@@ -615,15 +600,10 @@ export default function DepartmentsPage() {
               <Button
                 variant="outline"
                 onClick={() => setIsEditDialogOpen(false)}
-                className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
               >
                 取消
               </Button>
-              <Button
-                onClick={handleUpdate}
-                disabled={isSaving}
-                className="bg-[#6a5acd] hover:bg-[#5a4abd] text-white"
-              >
+              <Button onClick={handleUpdate} disabled={isSaving}>
                 {isSaving ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />

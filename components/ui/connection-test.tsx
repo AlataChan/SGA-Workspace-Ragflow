@@ -99,13 +99,13 @@ export function ConnectionTest({
     }
     
     if (!testResult.tested) {
-      return <Wifi className="w-4 h-4 text-gray-400" />
+      return <Wifi className="w-4 h-4 text-muted-foreground" />
     }
     
     return testResult.success ? (
-      <CheckCircle className="w-4 h-4 text-green-400" />
+      <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
     ) : (
-      <XCircle className="w-4 h-4 text-red-400" />
+      <XCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
     )
   }
 
@@ -116,9 +116,9 @@ export function ConnectionTest({
   }
 
   const getStatusColor = () => {
-    if (isTesting) return 'text-blue-400'
-    if (!testResult.tested) return 'text-gray-400'
-    return testResult.success ? 'text-green-400' : 'text-red-400'
+    if (isTesting) return 'text-primary'
+    if (!testResult.tested) return 'text-muted-foreground'
+    return testResult.success ? 'text-green-700 dark:text-green-200' : 'text-red-700 dark:text-red-200'
   }
 
   return (
@@ -137,7 +137,6 @@ export function ConnectionTest({
           size="sm"
           onClick={testConnection}
           disabled={isTesting}
-          className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
         >
           {isTesting ? (
             <>
@@ -156,8 +155,8 @@ export function ConnectionTest({
       {testResult.tested && testResult.message && (
         <div className={`text-xs p-2 rounded border ${
           testResult.success 
-            ? 'border-green-500/30 bg-green-500/10 text-green-300'
-            : 'border-red-500/30 bg-red-500/10 text-red-300'
+            ? 'border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-200'
+            : 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-200'
         }`}>
           {testResult.message}
         </div>

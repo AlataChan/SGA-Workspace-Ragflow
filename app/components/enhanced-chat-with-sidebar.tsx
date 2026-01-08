@@ -23,7 +23,6 @@ import {
   Edit3,
   Check,
   MoreVertical,
-  Copy
 } from "lucide-react"
 import { nanoid } from 'nanoid'
 import { marked } from 'marked'
@@ -34,13 +33,14 @@ import { EnhancedDifyClient, DifyStreamMessage } from '@/lib/enhanced-dify-clien
 import { RAGFlowBlockingClient, RAGFlowMessage } from '@/lib/ragflow-blocking-client'
 import { RAGFlowProxyClient, RAGFlowProxyMessage } from '@/lib/ragflow-proxy-client'
 import RAGFlowReferenceCard from '@/components/chat/ragflow-reference-card'
+import { splitThinkTags } from '@/lib/thinking'
 import {
   hasRagflowInlineReferenceMarkers,
   normalizeRagflowContent,
   stripRagflowInlineReferenceMarkers
 } from '@/lib/ragflow-utils'
 import TempKbDialog from '@/components/temp-kb/temp-kb-dialog'
-import SaveKnowledgeButton from '@/components/chat/save-knowledge-button'
+import KnowledgeGraphActions from '@/components/chat/knowledge-graph-actions'
 
 // 配置 marked 为同步模式
 marked.setOptions({
@@ -163,11 +163,11 @@ const TypewriterEffect: React.FC<TypewriterEffectProps> = ({
 const TypingIndicator = () => (
   <div className="flex items-center space-x-1 p-3">
     <div className="flex space-x-1">
-      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+      <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+      <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+      <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
     </div>
-    <span className="text-xs text-slate-400 ml-2">正在思考中...</span>
+    <span className="text-xs text-muted-foreground ml-2">正在思考中...</span>
   </div>
 )
 
@@ -300,16 +300,16 @@ const EnhancedMessageContent: React.FC<EnhancedMessageContentProps> = ({ content
   }, [])
 
   // 安全地解析 Markdown - 处理 marked v16+ 可能返回 Promise 的情况
-  const getHtmlContent = () => {
-    if (!content) return ''
+  const getHtmlContent = (src: string) => {
+    if (!src) return ''
 
     try {
-      const result = marked.parse(content)
+      const result = marked.parse(src)
 
       // 如果返回Promise,降级处理
       if (result instanceof Promise) {
         console.error('[EnhancedMessageContent] marked.parse 返回了Promise,降级处理')
-        return content.replace(/\n/g, '<br>')
+        return src.replace(/\n/g, '<br>')
       }
 
       // 确保是字符串
@@ -318,29 +318,58 @@ const EnhancedMessageContent: React.FC<EnhancedMessageContentProps> = ({ content
       }
 
       console.warn('[EnhancedMessageContent] marked.parse 返回了非字符串:', typeof result)
-      return content.replace(/\n/g, '<br>')
+      return src.replace(/\n/g, '<br>')
     } catch (error) {
       console.error('[EnhancedMessageContent] Markdown解析失败:', error)
-      return content.replace(/\n/g, '<br>')
+      return src.replace(/\n/g, '<br>')
     }
   }
 
-  const htmlContent = getHtmlContent()
-  const processedContent = processCodeBlocks(htmlContent)
+  const { thinking, answer, hasThink, isThinkingOpen } = splitThinkTags(content)
+  const answerHtmlContent = getHtmlContent(answer)
+  const processedAnswerContent = processCodeBlocks(answerHtmlContent)
+
+  const thinkingHtmlContent = hasThink && thinking ? getHtmlContent(thinking) : ''
+  const processedThinkingContent =
+    thinkingHtmlContent ? processCodeBlocks(thinkingHtmlContent) : ''
 
   return (
-    <div
-      ref={contentRef}
-      className="message-content"
-      style={{
-        maxWidth: '100%',
-        wordWrap: 'break-word',
-        overflowWrap: 'break-word'
-      }}
-      dangerouslySetInnerHTML={{
-        __html: processedContent
-      }}
-    />
+    <div className="space-y-3">
+      {hasThink && thinking && (
+        <details
+          open={isThinkingOpen}
+          className="rounded-md border border-border/60 bg-muted/30 p-3"
+        >
+          <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground">
+            思考过程
+          </summary>
+          <div
+            className="message-content mt-2"
+            style={{
+              maxWidth: '100%',
+              wordWrap: 'break-word',
+              overflowWrap: 'break-word'
+            }}
+            dangerouslySetInnerHTML={{
+              __html: processedThinkingContent
+            }}
+          />
+        </details>
+      )}
+
+      <div
+        ref={contentRef}
+        className="message-content"
+        style={{
+          maxWidth: '100%',
+          wordWrap: 'break-word',
+          overflowWrap: 'break-word'
+        }}
+        dangerouslySetInnerHTML={{
+          __html: processedAnswerContent
+        }}
+      />
+    </div>
   )
 }
 
@@ -414,7 +443,7 @@ const AttachmentRenderer: React.FC<AttachmentRendererProps> = ({
           <img
             src={imageSrc}
             alt={attachment.name}
-            className="max-w-48 max-h-32 rounded-lg border border-slate-600/30 cursor-pointer hover:border-blue-400/50 transition-colors"
+            className="max-w-48 max-h-32 rounded-lg border border-border/40 cursor-pointer hover:border-primary/40 transition-colors"
             onError={(e) => {
               console.error(`[AttachmentRenderer] 图片加载失败: ${attachment.name}`, {
                 originalUrl: attachment.url,
@@ -476,7 +505,7 @@ const AttachmentRenderer: React.FC<AttachmentRendererProps> = ({
             <img
               src={imageSrc}
               alt={attachment.name}
-              className="max-w-48 max-h-32 rounded-lg border border-slate-600/30 cursor-pointer hover:border-blue-400/50 transition-colors"
+              className="max-w-48 max-h-32 rounded-lg border border-border/40 cursor-pointer hover:border-primary/40 transition-colors"
               onError={(e) => {
                 console.error(`[AttachmentRenderer] Agent图片加载失败: ${attachment.name}`, {
                   originalUrl: attachment.url,
@@ -2346,35 +2375,35 @@ export default function EnhancedChatWithSidebar({
           width: 100% !important;
           border-collapse: collapse !important;
           margin: 20px 0 !important;
-          background: #ffffff !important;
-          border: 2px solid #000000 !important;
+          background: hsl(var(--background)) !important;
+          border: 2px solid hsl(var(--border)) !important;
           border-radius: 8px !important;
           overflow: hidden !important;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+          box-shadow: 0 2px 8px hsl(var(--foreground) / 0.12) !important;
         }
 
         .message-content th,
         .message-content td {
           padding: 12px 16px !important;
           text-align: left !important;
-          border: 1px solid #000000 !important;
-          color: #000000 !important;
-          background: #ffffff !important;
+          border: 1px solid hsl(var(--border)) !important;
+          color: hsl(var(--foreground)) !important;
+          background: hsl(var(--background)) !important;
         }
 
         .message-content th {
-          background: #f8f9fa !important;
+          background: hsl(var(--muted)) !important;
           font-weight: 600 !important;
-          color: #000000 !important;
-          border-bottom: 2px solid #000000 !important;
+          color: hsl(var(--foreground)) !important;
+          border-bottom: 2px solid hsl(var(--border)) !important;
         }
 
         .message-content tr:nth-child(even) td {
-          background: #f8f9fa !important;
+          background: hsl(var(--muted) / 0.6) !important;
         }
 
         .message-content tr:hover td {
-          background: #e9ecef !important;
+          background: hsl(var(--accent)) !important;
         }
 
         /* 标题样式 - 黑色文字 */
@@ -2384,7 +2413,7 @@ export default function EnhancedChatWithSidebar({
         .message-content h4,
         .message-content h5,
         .message-content h6 {
-          color: #000000 !important;
+          color: hsl(var(--foreground)) !important;
           margin: 20px 0 16px 0;
           font-weight: 600;
           line-height: 1.3;
@@ -2392,7 +2421,7 @@ export default function EnhancedChatWithSidebar({
 
         .message-content h2 {
           font-size: 20px;
-          border-bottom: 2px solid #000000;
+          border-bottom: 2px solid hsl(var(--border));
           padding-bottom: 8px;
         }
 
@@ -2406,7 +2435,7 @@ export default function EnhancedChatWithSidebar({
         .message-content p {
           margin: 10px 0;
           line-height: 1.5;
-          color: #000000 !important;
+          color: hsl(var(--foreground)) !important;
           font-size: 13px !important;
         }
 
@@ -2419,7 +2448,7 @@ export default function EnhancedChatWithSidebar({
         .user-message .message-content h4,
         .user-message .message-content h5,
         .user-message .message-content h6 {
-          color: #ffffff !important;
+          color: hsl(var(--primary-foreground)) !important;
         }
 
         /* 代码块容器样式 */
@@ -2432,11 +2461,11 @@ export default function EnhancedChatWithSidebar({
           position: absolute !important;
           top: 8px !important;
           right: 8px !important;
-          background: rgba(255, 255, 255, 0.1) !important;
-          border: 1px solid rgba(255, 255, 255, 0.2) !important;
+          background: hsl(var(--background) / 0.35) !important;
+          border: 1px solid hsl(var(--border) / 0.7) !important;
           border-radius: 4px !important;
           padding: 4px 8px !important;
-          color: #f8f8f2 !important;
+          color: hsl(var(--foreground)) !important;
           font-size: 12px !important;
           cursor: pointer !important;
           transition: all 0.2s ease !important;
@@ -2445,20 +2474,20 @@ export default function EnhancedChatWithSidebar({
         }
 
         .message-content .copy-button:hover {
-          background: rgba(255, 255, 255, 0.2) !important;
-          border-color: rgba(255, 255, 255, 0.3) !important;
+          background: hsl(var(--background) / 0.5) !important;
+          border-color: hsl(var(--border)) !important;
         }
 
         .message-content .copy-button.copied {
-          background: rgba(34, 197, 94, 0.2) !important;
-          border-color: rgba(34, 197, 94, 0.3) !important;
-          color: #22c55e !important;
+          background: hsl(var(--chart-2) / 0.18) !important;
+          border-color: hsl(var(--chart-2) / 0.35) !important;
+          color: hsl(var(--chart-2)) !important;
         }
 
         /* 代码块样式 */
         .message-content pre {
-          background: #1e1e1e !important;
-          border: 1px solid #333 !important;
+          background: hsl(var(--muted)) !important;
+          border: 1px solid hsl(var(--border)) !important;
           border-radius: 8px !important;
           padding: 16px !important;
           margin: 0 !important;
@@ -2469,8 +2498,8 @@ export default function EnhancedChatWithSidebar({
         }
 
         .message-content code {
-          background: #2d2d2d !important;
-          color: #f8f8f2 !important;
+          background: hsl(var(--accent)) !important;
+          color: hsl(var(--foreground)) !important;
           padding: 2px 6px !important;
           border-radius: 4px !important;
           font-family: 'Fira Code', 'Monaco', 'Consolas', monospace !important;
@@ -2491,7 +2520,7 @@ export default function EnhancedChatWithSidebar({
           height: auto !important;
           object-fit: contain !important;
           border-radius: 8px !important;
-          border: 1px solid #e5e7eb !important;
+          border: 1px solid hsl(var(--border)) !important;
           margin: 8px 0 !important;
           cursor: pointer !important;
           transition: transform 0.2s ease !important;
@@ -2499,7 +2528,7 @@ export default function EnhancedChatWithSidebar({
 
         .message-content img:hover {
           transform: scale(1.02) !important;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+          box-shadow: 0 4px 12px hsl(var(--foreground) / 0.12) !important;
         }
 
         /* 列表样式优化 - 仿Dify样式，保持原生编号 */
@@ -2527,11 +2556,11 @@ export default function EnhancedChatWithSidebar({
         /* 列表标记样式 */
         .message-content ol li::marker {
           font-weight: 600 !important;
-          color: #1f2937 !important;
+          color: hsl(var(--foreground)) !important;
         }
 
         .message-content ul li::marker {
-          color: #1f2937 !important;
+          color: hsl(var(--foreground)) !important;
         }
 
         /* 嵌套列表 */
@@ -2545,7 +2574,7 @@ export default function EnhancedChatWithSidebar({
 
         /* 链接样式优化 - 仿Dify */
         .message-content a {
-          color: #1a73e8 !important;
+          color: hsl(var(--primary)) !important;
           text-decoration: none !important;
           border-bottom: 1px solid transparent !important;
           transition: all 0.2s ease !important;
@@ -2554,14 +2583,14 @@ export default function EnhancedChatWithSidebar({
         }
 
         .message-content a:hover {
-          background-color: rgba(26, 115, 232, 0.1) !important;
-          border-bottom-color: #1a73e8 !important;
+          background-color: hsl(var(--primary) / 0.12) !important;
+          border-bottom-color: hsl(var(--primary)) !important;
         }
 
         /* 强调文本样式 - 仿Dify */
         .message-content strong {
           font-weight: 600 !important;
-          color: #1f2937 !important;
+          color: hsl(var(--foreground)) !important;
         }
 
         /* 分类标题样式 */
@@ -2571,28 +2600,28 @@ export default function EnhancedChatWithSidebar({
 
         /* 引用块样式 */
         .message-content blockquote {
-          border-left: 4px solid #3b82f6 !important;
+          border-left: 4px solid hsl(var(--primary)) !important;
           padding-left: 16px !important;
           margin: 16px 0 !important;
-          color: #6b7280 !important;
+          color: hsl(var(--muted-foreground)) !important;
           font-style: italic !important;
-          background-color: #f8fafc !important;
+          background-color: hsl(var(--muted)) !important;
           padding: 12px 16px !important;
           border-radius: 0 8px 8px 0 !important;
         }
       `}</style>
 
-      <div className="h-full flex bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <div className="h-full flex bg-background">
         {/* 侧边栏 */}
-        <div className={`${sidebarCollapsed ? 'w-16' : 'w-80'} transition-all duration-300 bg-slate-900/50 backdrop-blur-sm border-r border-blue-500/20 flex flex-col`}>
+        <div className={`${sidebarCollapsed ? 'w-16' : 'w-80'} transition-all duration-300 bg-card/60 backdrop-blur-sm border-r border-border flex flex-col`}>
           {/* 侧边栏头部 */}
-          <div className="p-4 border-b border-blue-500/20">
+          <div className="p-4 border-b border-border">
             <div className="flex items-center justify-between">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={onBack}
-                className="text-blue-200 hover:text-white hover:bg-blue-500/10"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted/50"
               >
                 <ArrowLeft className="w-4 h-4" />
                 {!sidebarCollapsed && <span className="ml-2">返回</span>}
@@ -2601,7 +2630,7 @@ export default function EnhancedChatWithSidebar({
                 variant="ghost"
                 size="sm"
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="text-blue-200 hover:text-white hover:bg-blue-500/10"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted/50"
               >
                 <MessageSquare className="w-4 h-4" />
               </Button>
@@ -2610,7 +2639,7 @@ export default function EnhancedChatWithSidebar({
               <div className="mt-4">
                 <Button
                   onClick={createNewSession}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   新对话
@@ -2629,17 +2658,17 @@ export default function EnhancedChatWithSidebar({
                 {/* 历史会话 - 简化后的唯一会话列表 */}
                 <div>
                   <div className="flex items-center justify-between px-2 mb-2">
-                    <h3 className="text-xs font-medium text-blue-200/70">历史会话</h3>
+                    <h3 className="text-xs font-medium text-muted-foreground">历史会话</h3>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => fetchHistoryConversations(true)}
                       disabled={isLoadingHistory}
-                      className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 h-6 px-2"
+                      className="text-muted-foreground hover:text-foreground hover:bg-muted/50 h-6 px-2"
                     >
                       {isLoadingHistory ? (
                         <div className="flex items-center space-x-1">
-                          <div className="animate-spin w-3 h-3 border border-blue-400 border-t-transparent rounded-full" />
+                          <div className="animate-spin w-3 h-3 border border-muted-foreground border-t-transparent rounded-full" />
                           <span>加载中</span>
                         </div>
                       ) : '刷新'}
@@ -2668,8 +2697,8 @@ export default function EnhancedChatWithSidebar({
                           key={`history_${historyConv.id}`}
                           className={`p-3 rounded-lg transition-colors group ${
                             isCurrentSession
-                              ? 'bg-blue-600/20 border border-blue-500/30'
-                              : 'bg-slate-800/20 hover:bg-slate-700/30 border border-slate-600/30'
+                              ? 'bg-primary/10 border border-primary/25'
+                              : 'bg-muted/30 hover:bg-muted/50 border border-border/60'
                           }`}
                         >
                           <div className="flex items-center justify-between">
@@ -2683,7 +2712,7 @@ export default function EnhancedChatWithSidebar({
                                     type="text"
                                     value={renamingHistoryTitle}
                                     onChange={(e) => setRenamingHistoryTitle(e.target.value)}
-                                    className="w-full px-2 py-1 text-sm bg-slate-700 text-white border border-slate-600 rounded focus:outline-none focus:border-blue-400"
+                                    className="w-full px-2 py-1 text-sm bg-background text-foreground border border-border rounded focus:outline-none focus:border-ring"
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter') {
                                         renameHistoryConversation(historyConv.id, renamingHistoryTitle)
@@ -2701,7 +2730,7 @@ export default function EnhancedChatWithSidebar({
                                         renameHistoryConversation(historyConv.id, renamingHistoryTitle)
                                         setRenamingHistoryId(null)
                                       }}
-                                      className="h-6 px-2 text-xs bg-blue-600 hover:bg-blue-700"
+                                      className="h-6 px-2 text-xs"
                                     >
                                       <Check className="w-3 h-3" />
                                     </Button>
@@ -2709,7 +2738,7 @@ export default function EnhancedChatWithSidebar({
                                       variant="ghost"
                                       size="sm"
                                       onClick={() => setRenamingHistoryId(null)}
-                                      className="h-6 px-2 text-xs text-slate-400 hover:text-white"
+                                      className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
                                     >
                                       <X className="w-3 h-3" />
                                     </Button>
@@ -2717,10 +2746,10 @@ export default function EnhancedChatWithSidebar({
                                 </div>
                               ) : (
                                 <>
-                                  <h4 className="text-sm font-medium text-slate-300 truncate">
+                                  <h4 className="text-sm font-medium text-foreground truncate">
                                     {historyConv.name || '未命名对话'}
                                   </h4>
-                                  <p className="text-xs text-slate-400 mt-1">
+                                  <p className="text-xs text-muted-foreground mt-1">
                                     {(() => {
                                       if (!historyConv.created_at) return '未知时间'
 
@@ -2756,18 +2785,18 @@ export default function EnhancedChatWithSidebar({
                             </div>
                             {renamingHistoryId !== historyConv.id && (
                               <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setRenamingHistoryId(historyConv.id)
-                                    setRenamingHistoryTitle(historyConv.name || '未命名对话')
-                                  }}
-                                  className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 p-1"
-                                >
-                                  <Edit3 className="w-3 h-3" />
-                                </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setRenamingHistoryId(historyConv.id)
+                                      setRenamingHistoryTitle(historyConv.name || '未命名对话')
+                                    }}
+                                    className="text-muted-foreground hover:text-foreground hover:bg-muted/50 p-1"
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                  </Button>
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -2793,7 +2822,7 @@ export default function EnhancedChatWithSidebar({
                           variant="ghost"
                           size="sm"
                           onClick={() => fetchHistoryConversations(false, true)}
-                          className="w-full text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 border border-blue-500/20"
+                          className="w-full text-muted-foreground hover:text-foreground hover:bg-muted/50 border border-border"
                         >
                           加载更多
                         </Button>
@@ -2807,18 +2836,18 @@ export default function EnhancedChatWithSidebar({
         </div>
 
         {/* 主聊天区域 */}
-        <div className="flex-1 flex flex-col">
-          <div className="p-4 border-b border-blue-500/20 bg-slate-900/30 backdrop-blur-sm">
+          <div className="flex-1 flex flex-col">
+          <div className="p-4 border-b border-border bg-card/70 backdrop-blur-sm">
             <div className="flex items-center space-x-4">
-              <Avatar className="w-12 h-12 ring-2 ring-blue-500/30">
+              <Avatar className="w-12 h-12 ring-2 ring-primary/30">
                 <AvatarImage src={actualAgentAvatar} />
-                <AvatarFallback className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-lg font-semibold">
+                <AvatarFallback className="bg-gradient-to-r from-primary to-accent text-primary-foreground text-lg font-semibold">
                   {agentName?.[0] || 'A'}
                 </AvatarFallback>
               </Avatar>
               <div>
-                <h3 className="font-semibold text-white">{agentName || 'AI助手'}</h3>
-                <p className="text-sm text-blue-200/70">
+                <h3 className="font-semibold text-foreground">{agentName || 'AI助手'}</h3>
+                <p className="text-sm text-muted-foreground">
                   {currentSession?.title || '新对话'}
                 </p>
               </div>
@@ -2841,18 +2870,18 @@ export default function EnhancedChatWithSidebar({
                     <div className={`flex ${isUser ? 'flex-row-reverse' : 'flex-row'} items-start space-x-4 ${isUser ? 'space-x-reverse' : ''} max-w-[75%]`}>
                       <Avatar className="w-[50px] h-[50px] flex-shrink-0 mt-1">
                         <AvatarImage src={isUser ? actualUserAvatar : actualAgentAvatar} />
-                        <AvatarFallback className={`text-white text-lg ${isUser
-                          ? 'bg-gradient-to-r from-green-500 to-emerald-500'
-                          : 'bg-gradient-to-r from-blue-500 to-cyan-500'
+                          <AvatarFallback className={`text-white text-lg ${isUser
+                            ? 'bg-gradient-to-r from-green-500 to-emerald-500'
+                          : 'bg-gradient-to-r from-primary to-accent'
                           }`}>
-                          {isUser ? (actualUserAvatar ? 'U' : '用') : agentName[0]}
-                        </AvatarFallback>
+                            {isUser ? (actualUserAvatar ? 'U' : '用') : agentName[0]}
+                          </AvatarFallback>
                       </Avatar>
 
                       <div className="flex-1 min-w-0">
                         <div className={`rounded-xl px-4 py-3 text-base leading-relaxed ${isUser
-                          ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg user-message'
-                          : 'bg-white/95 text-gray-800 border border-gray-200 shadow-sm'
+                          ? 'bg-primary text-primary-foreground shadow-lg user-message'
+                          : 'bg-card text-foreground border border-border shadow-sm'
                           }`} style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                           {message.isStreaming ? (
                             (message as any).isThinking || !message.content ? (
@@ -2952,38 +2981,18 @@ export default function EnhancedChatWithSidebar({
 
                           {/* 助手消息操作按钮 - 错误消息不显示 */}
                           {!isUser && !message.isStreaming && message.content && !message.hasError && (
-                            <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                                onClick={async () => {
-                                  try {
-                                    await navigator.clipboard.writeText(displayContent)
-                                    toast.success('已复制到剪贴板')
-                                  } catch (err) {
-                                    console.error('复制失败:', err)
-                                    toast.error('复制失败')
-                                  }
-                                }}
-                              >
-                                <Copy className="h-3.5 w-3.5 mr-1" />
-                                复制
-                              </Button>
-                              <SaveKnowledgeButton
+                            <div className="mt-2 pt-2 border-t border-border">
+                              <KnowledgeGraphActions
                                 content={displayContent}
                                 sourceMessageId={message.id}
-                                sourceType="assistant_reply"
-                                size="sm"
-                                showLabel
-                                className="h-7 px-2 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                                disabled={isLoading || isStreaming}
                               />
                             </div>
                           )}
                         </div>
 
                         {/* 时间戳 */}
-                        <div className={`text-xs text-blue-200/50 mt-2 ${isUser ? 'text-right' : 'text-left'}`}>
+                        <div className={`text-xs text-muted-foreground/70 mt-2 ${isUser ? 'text-right' : 'text-left'}`}>
                           {message.timestamp && !isNaN(message.timestamp)
                             ? new Date(message.timestamp).toLocaleTimeString('zh-CN', {
                               hour: '2-digit',
@@ -3018,20 +3027,20 @@ export default function EnhancedChatWithSidebar({
             </div>
           </ScrollArea>
 
-          <div className="p-4 border-t border-blue-500/20 bg-slate-900/30 backdrop-blur-sm">
+          <div className="p-4 border-t border-border bg-card/70 backdrop-blur-sm">
             {/* 附件预览 */}
             {attachments.length > 0 && (
               <div className="mb-4 space-y-2">
                 {attachments.map((attachment) => (
-                  <div key={attachment.id} className="flex items-center space-x-2 bg-slate-800/50 rounded-lg p-2">
+                  <div key={attachment.id} className="flex items-center space-x-2 bg-muted/40 rounded-lg p-2 border border-border/60">
                     {attachment.type.startsWith('image/') ? (
-                      <Image size={16} className="text-blue-400" />
+                      <Image size={16} className="text-primary" />
                     ) : (
                       <FileText size={16} className="text-green-400" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-white truncate">{attachment.name}</div>
-                      <div className="text-xs text-blue-200/70">
+                      <div className="text-sm text-foreground truncate">{attachment.name}</div>
+                      <div className="text-xs text-muted-foreground">
                         {(attachment.size / 1024).toFixed(1)}KB
                         {attachment.uploadFileId ? (
                           <span className="text-green-400 ml-2">✓ 已上传</span>
@@ -3053,7 +3062,7 @@ export default function EnhancedChatWithSidebar({
               </div>
             )}
 
-            <div className="flex items-center space-x-2 bg-white/5 rounded-full p-2 border border-white/10">
+            <div className="flex items-center space-x-2 bg-muted/50 rounded-full p-2 border border-border">
               {/* 文件上传按钮 */}
               <input
                 type="file"
@@ -3068,11 +3077,11 @@ export default function EnhancedChatWithSidebar({
                 size="sm"
                 onClick={() => document.getElementById('file-upload')?.click()}
                 disabled={isUploading}
-                className="text-blue-200 hover:text-white hover:bg-blue-500/10 h-8 w-8 p-0 rounded-full"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted/50 h-8 w-8 p-0 rounded-full"
                 title={isUploading ? "正在上传文件..." : "上传文件"}
               >
                 {isUploading ? (
-                  <div className="animate-spin w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full" />
+                  <div className="animate-spin w-4 h-4 border-2 border-muted-foreground border-t-transparent rounded-full" />
                 ) : (
                   <Paperclip size={16} />
                 )}
@@ -3084,7 +3093,7 @@ export default function EnhancedChatWithSidebar({
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder={`向${agentName}发送消息...`}
-                  className="min-h-[36px] max-h-24 resize-none bg-transparent border-none text-white placeholder:text-blue-200/50 focus:outline-none focus:ring-0 px-2 text-base"
+                  className="min-h-[36px] max-h-24 resize-none bg-transparent border-none text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0 px-2 text-base"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
@@ -3099,7 +3108,7 @@ export default function EnhancedChatWithSidebar({
               {isStreaming ? (
                 <Button
                   onClick={stopGeneration}
-                  className="bg-red-600 hover:bg-red-700 text-white h-8 w-8 p-0 rounded-full"
+                  className="bg-destructive hover:bg-destructive/90 text-destructive-foreground h-8 w-8 p-0 rounded-full"
                   title="停止生成"
                 >
                   <StopCircle size={16} />
@@ -3108,10 +3117,10 @@ export default function EnhancedChatWithSidebar({
                 <Button
                   onClick={sendMessage}
                   disabled={isLoading || (!input.trim() && attachments.length === 0)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white h-8 w-8 p-0 rounded-full disabled:opacity-50"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground h-8 w-8 p-0 rounded-full disabled:opacity-50"
                 >
                   {isLoading ? (
-                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                    <div className="animate-spin w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full" />
                   ) : (
                     <Send size={16} />
                   )}

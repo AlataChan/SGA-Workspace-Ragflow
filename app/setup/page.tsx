@@ -76,13 +76,13 @@ export default function SystemSetupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
       {/* 动画背景 */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.1)_1px,transparent_1px)] bg-[size:50px_50px] animate-pulse" />
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-br from-blue-500/10 to-indigo-600/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute inset-0 bg-[linear-gradient(hsl(var(--primary)/0.08)_1px,transparent_1px),linear-gradient(90deg,hsl(var(--primary)/0.08)_1px,transparent_1px)] bg-[size:50px_50px] animate-pulse" />
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-br from-primary/10 to-accent/10 rounded-full blur-3xl animate-pulse" />
         <div
-          className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-tr from-indigo-500/10 to-cyan-600/10 rounded-full blur-3xl animate-pulse"
+          className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-tr from-accent/10 to-secondary/10 rounded-full blur-3xl animate-pulse"
           style={{ animationDelay: "2s" }}
         />
       </div>
@@ -90,22 +90,22 @@ export default function SystemSetupPage() {
       <div className="w-full max-w-md relative z-10">
         {/* Logo 预留位置 */}
         <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-xl shadow-blue-500/25">
-            <Building className="w-10 h-10 text-white" />
+          <div className="w-20 h-20 bg-gradient-to-br from-primary to-accent rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-xl shadow-primary/25">
+            <Building className="w-10 h-10 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">系统初始化</h1>
-          <p className="text-blue-200/70 mt-2">创建第一个管理员账户</p>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent">系统初始化</h1>
+          <p className="text-muted-foreground mt-2">创建第一个管理员账户</p>
         </div>
 
-        <Card className="border border-blue-500/20 shadow-2xl bg-slate-900/80 backdrop-blur-xl">
+        <Card className="border border-border shadow-2xl bg-card/80 backdrop-blur-xl">
           {/* 顶部光线效果 */}
-          <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-400/50 to-transparent" />
+          <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
           <CardHeader className="text-center">
-            <CardTitle className="flex items-center justify-center gap-2 text-2xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
-              <Shield className="w-5 h-5 text-blue-400" />
+            <CardTitle className="flex items-center justify-center gap-2 text-2xl font-bold bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent">
+              <Shield className="w-5 h-5 text-primary" />
               管理员账户设置
             </CardTitle>
-            <CardDescription className="text-blue-200/70">
+            <CardDescription className="text-muted-foreground">
               这将是系统的第一个管理员账户，拥有所有权限
             </CardDescription>
           </CardHeader>
@@ -118,7 +118,7 @@ export default function SystemSetupPage() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="username" className="flex items-center gap-2 text-blue-200">
+                <Label htmlFor="username" className="flex items-center gap-2 text-foreground">
                   <User className="w-4 h-4" />
                   用户名
                 </Label>
@@ -131,12 +131,12 @@ export default function SystemSetupPage() {
                   placeholder="输入用户名（用于登录）"
                   required
                   disabled={isLoading}
-                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
+                  className="bg-background/60 border-input text-foreground placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="userId" className="flex items-center gap-2 text-blue-200">
+                <Label htmlFor="userId" className="flex items-center gap-2 text-foreground">
                   <User className="w-4 h-4" />
                   用户ID
                 </Label>
@@ -149,12 +149,12 @@ export default function SystemSetupPage() {
                   placeholder="输入用户ID（系统标识）"
                   required
                   disabled={isLoading}
-                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
+                  className="bg-background/60 border-input text-foreground placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone" className="flex items-center gap-2 text-blue-200">
+                <Label htmlFor="phone" className="flex items-center gap-2 text-foreground">
                   <User className="w-4 h-4" />
                   手机号
                 </Label>
@@ -167,12 +167,12 @@ export default function SystemSetupPage() {
                   placeholder="输入手机号"
                   required
                   disabled={isLoading}
-                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
+                  className="bg-background/60 border-input text-foreground placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email" className="flex items-center gap-2 text-blue-200">
+                <Label htmlFor="email" className="flex items-center gap-2 text-foreground">
                   <Mail className="w-4 h-4" />
                   邮箱
                 </Label>
@@ -185,12 +185,12 @@ export default function SystemSetupPage() {
                   placeholder="输入邮箱地址"
                   required
                   disabled={isLoading}
-                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
+                  className="bg-background/60 border-input text-foreground placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="displayName" className="flex items-center gap-2 text-blue-200">
+                <Label htmlFor="displayName" className="flex items-center gap-2 text-foreground">
                   <User className="w-4 h-4" />
                   显示名称
                 </Label>
@@ -203,12 +203,12 @@ export default function SystemSetupPage() {
                   placeholder="输入显示名称"
                   required
                   disabled={isLoading}
-                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
+                  className="bg-background/60 border-input text-foreground placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="position" className="flex items-center gap-2 text-blue-200">
+                <Label htmlFor="position" className="flex items-center gap-2 text-foreground">
                   <Briefcase className="w-4 h-4" />
                   职位
                 </Label>
@@ -221,12 +221,12 @@ export default function SystemSetupPage() {
                   placeholder="输入职位"
                   required
                   disabled={isLoading}
-                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
+                  className="bg-background/60 border-input text-foreground placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password" className="flex items-center gap-2 text-blue-200">
+                <Label htmlFor="password" className="flex items-center gap-2 text-foreground">
                   <Lock className="w-4 h-4" />
                   密码
                 </Label>
@@ -239,12 +239,12 @@ export default function SystemSetupPage() {
                   placeholder="输入密码"
                   required
                   disabled={isLoading}
-                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
+                  className="bg-background/60 border-input text-foreground placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="flex items-center gap-2 text-blue-200">
+                <Label htmlFor="confirmPassword" className="flex items-center gap-2 text-foreground">
                   <Lock className="w-4 h-4" />
                   确认密码
                 </Label>
@@ -257,13 +257,13 @@ export default function SystemSetupPage() {
                   placeholder="再次输入密码"
                   required
                   disabled={isLoading}
-                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
+                  className="bg-background/60 border-input text-foreground placeholder:text-muted-foreground focus:border-ring focus:ring-ring/20"
                 />
               </div>
 
               <Button
                 type="submit"
-                className="w-full h-12 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-medium shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 transition-all duration-300"
+                className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all duration-300"
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -279,7 +279,7 @@ export default function SystemSetupPage() {
           </CardContent>
         </Card>
 
-        <div className="text-center mt-6 text-sm text-blue-200/70">
+        <div className="text-center mt-6 text-sm text-muted-foreground">
           <p>系统初始化后，您可以使用此账户登录管理系统</p>
         </div>
       </div>

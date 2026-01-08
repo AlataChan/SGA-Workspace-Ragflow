@@ -54,7 +54,7 @@ export function ReliableImageUpload({ onUpload, photoUrl, avatarUrl }: ReliableI
 
   return (
     <div className="space-y-4">
-      <Label className="text-white text-base font-medium">Agent照片上传</Label>
+      <Label className="text-base font-medium">Agent照片上传</Label>
 
       {/* 最简单的方案：直接使用label包裹input */}
       <label className="block cursor-pointer">
@@ -66,14 +66,14 @@ export function ReliableImageUpload({ onUpload, photoUrl, avatarUrl }: ReliableI
         />
 
         {/* 上传区域 */}
-        <div className="border-2 border-dashed border-[#3c4043] rounded-lg p-6 text-center bg-[#1a1a1a] hover:bg-[#202020] transition-colors">
+        <div className="border-2 border-dashed border-border rounded-lg p-6 text-center bg-muted/30 hover:bg-muted/50 transition-colors">
           <div className="space-y-3">
-            <Upload className="w-12 h-12 text-gray-400 mx-auto" />
+            <Upload className="w-12 h-12 text-muted-foreground mx-auto" />
             <div className="space-y-1">
-              <p className="text-white font-medium">
+              <p className="text-foreground font-medium">
                 {isUploading ? "正在上传..." : "点击选择图片"}
               </p>
-              <p className="text-gray-400 text-xs">
+              <p className="text-muted-foreground text-xs">
                 上传后将自动生成展示照片和聊天头像
               </p>
             </div>
@@ -83,24 +83,24 @@ export function ReliableImageUpload({ onUpload, photoUrl, avatarUrl }: ReliableI
 
       {/* 预览区域 */}
       {(photoUrl || avatarUrl) && (
-        <div className="grid grid-cols-2 gap-4 p-4 bg-[#1a1a1a] rounded-lg border border-[#3c4043]">
+        <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg border border-border">
           <div className="space-y-2">
-            <Label className="text-white text-sm">展示照片</Label>
-            <div className="aspect-[3/4] border border-[#3c4043] rounded-lg overflow-hidden bg-[#2a2a2a] flex items-center justify-center">
+            <Label className="text-sm">展示照片</Label>
+            <div className="aspect-[3/4] border border-border rounded-lg overflow-hidden bg-background flex items-center justify-center">
               {photoUrl ? (
                 <img src={photoUrl} alt="展示照片预览" className="w-full h-full object-cover" />
               ) : (
-                <ImageIcon className="w-8 h-8 text-gray-500" />
+                <ImageIcon className="w-8 h-8 text-muted-foreground" />
               )}
             </div>
           </div>
           <div className="space-y-2">
-            <Label className="text-white text-sm">聊天头像</Label>
-            <div className="aspect-square border border-[#3c4043] rounded-full overflow-hidden bg-[#2a2a2a] flex items-center justify-center">
+            <Label className="text-sm">聊天头像</Label>
+            <div className="aspect-square border border-border rounded-full overflow-hidden bg-background flex items-center justify-center">
               {avatarUrl ? (
                 <img src={avatarUrl} alt="聊天头像预览" className="w-full h-full object-cover" />
               ) : (
-                <User className="w-8 h-8 text-gray-500" />
+                <User className="w-8 h-8 text-muted-foreground" />
               )}
             </div>
           </div>
