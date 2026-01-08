@@ -43,6 +43,8 @@ interface TempKbPanelProps {
   className?: string
   /** 紧凑模式，隐藏标题并减少间距 */
   compact?: boolean
+  /** 默认展示的标签页 */
+  defaultTab?: 'chunks' | 'graph'
   onGraphReady?: () => void
   onKbChange?: (info: { chunkCount: number; nodeCount: number; edgeCount: number }) => void
 }
@@ -54,6 +56,7 @@ interface TempKbPanelProps {
 export default function TempKbPanel({
   className,
   compact = false,
+  defaultTab = 'chunks',
   onGraphReady,
   onKbChange
 }: TempKbPanelProps) {
@@ -62,7 +65,7 @@ export default function TempKbPanel({
   const [isBuilding, setIsBuilding] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState('chunks')
+  const [activeTab, setActiveTab] = useState(() => defaultTab)
 
   // 当知识库信息变化时通知父组件
   useEffect(() => {

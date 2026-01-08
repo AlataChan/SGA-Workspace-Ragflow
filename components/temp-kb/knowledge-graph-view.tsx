@@ -42,6 +42,8 @@ interface GraphData {
 
 interface KnowledgeGraphViewProps {
   className?: string
+  /** 容器高度（px），默认 300 */
+  height?: number
 }
 
 /**
@@ -53,7 +55,7 @@ function getNodeRadius(pagerank?: number): number {
   return Math.max(20, Math.min(50, 20 + pagerank * 30))
 }
 
-export default function KnowledgeGraphView({ className }: KnowledgeGraphViewProps) {
+export default function KnowledgeGraphView({ className, height = 300 }: KnowledgeGraphViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -311,7 +313,8 @@ export default function KnowledgeGraphView({ className }: KnowledgeGraphViewProp
       {/* 图谱容器 */}
       <div 
         ref={containerRef} 
-        className="w-full h-[300px] bg-card rounded-lg overflow-hidden border border-border"
+        className="w-full bg-card rounded-lg overflow-hidden border border-border"
+        style={{ height }}
       >
         <svg ref={svgRef} className="w-full h-full" />
       </div>

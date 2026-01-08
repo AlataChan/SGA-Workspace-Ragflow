@@ -234,6 +234,37 @@ export class TempKbService {
         }
       }
 
+      // 去重：同一来源消息只保存一次
+      if (params.sourceMessageId) {
+        const existingChunk = await prisma.userSavedChunk.findFirst({
+          where: {
+            tempKbId: tempKb.id,
+            sourceMessageId: params.sourceMessageId,
+          },
+          select: {
+            id: true,
+            ragflowChunkId: true,
+          },
+        })
+
+        if (existingChunk) {
+          // 仅更新活跃时间，避免重复计数/重复写入 RAGFlow
+          await prisma.userTempKnowledgeBase.update({
+            where: { id: tempKb.id },
+            data: { lastActiveAt: new Date() },
+          })
+
+          return {
+            success: true,
+            data: {
+              chunkId: existingChunk.id,
+              tempKbId: tempKb.id,
+              ragflowChunkId: existingChunk.ragflowChunkId || undefined,
+            },
+          }
+        }
+      }
+
       // 2. 添加到RAGFlow
       const addResult = await this.client.addChunk({
         datasetId: tempKb.ragflowKbId,
@@ -612,4 +643,3 @@ export class TempKbService {
 
 // 导出单例
 export const tempKbService = new TempKbService()
-

@@ -23,7 +23,6 @@ import {
   Edit3,
   Check,
   MoreVertical,
-  Copy
 } from "lucide-react"
 import { nanoid } from 'nanoid'
 import { marked } from 'marked'
@@ -34,13 +33,14 @@ import { EnhancedDifyClient, DifyStreamMessage } from '@/lib/enhanced-dify-clien
 import { RAGFlowBlockingClient, RAGFlowMessage } from '@/lib/ragflow-blocking-client'
 import { RAGFlowProxyClient, RAGFlowProxyMessage } from '@/lib/ragflow-proxy-client'
 import RAGFlowReferenceCard from '@/components/chat/ragflow-reference-card'
+import { splitThinkTags } from '@/lib/thinking'
 import {
   hasRagflowInlineReferenceMarkers,
   normalizeRagflowContent,
   stripRagflowInlineReferenceMarkers
 } from '@/lib/ragflow-utils'
 import TempKbDialog from '@/components/temp-kb/temp-kb-dialog'
-import SaveKnowledgeButton from '@/components/chat/save-knowledge-button'
+import KnowledgeGraphActions from '@/components/chat/knowledge-graph-actions'
 
 // 配置 marked 为同步模式
 marked.setOptions({
@@ -300,16 +300,16 @@ const EnhancedMessageContent: React.FC<EnhancedMessageContentProps> = ({ content
   }, [])
 
   // 安全地解析 Markdown - 处理 marked v16+ 可能返回 Promise 的情况
-  const getHtmlContent = () => {
-    if (!content) return ''
+  const getHtmlContent = (src: string) => {
+    if (!src) return ''
 
     try {
-      const result = marked.parse(content)
+      const result = marked.parse(src)
 
       // 如果返回Promise,降级处理
       if (result instanceof Promise) {
         console.error('[EnhancedMessageContent] marked.parse 返回了Promise,降级处理')
-        return content.replace(/\n/g, '<br>')
+        return src.replace(/\n/g, '<br>')
       }
 
       // 确保是字符串
@@ -318,29 +318,58 @@ const EnhancedMessageContent: React.FC<EnhancedMessageContentProps> = ({ content
       }
 
       console.warn('[EnhancedMessageContent] marked.parse 返回了非字符串:', typeof result)
-      return content.replace(/\n/g, '<br>')
+      return src.replace(/\n/g, '<br>')
     } catch (error) {
       console.error('[EnhancedMessageContent] Markdown解析失败:', error)
-      return content.replace(/\n/g, '<br>')
+      return src.replace(/\n/g, '<br>')
     }
   }
 
-  const htmlContent = getHtmlContent()
-  const processedContent = processCodeBlocks(htmlContent)
+  const { thinking, answer, hasThink, isThinkingOpen } = splitThinkTags(content)
+  const answerHtmlContent = getHtmlContent(answer)
+  const processedAnswerContent = processCodeBlocks(answerHtmlContent)
+
+  const thinkingHtmlContent = hasThink && thinking ? getHtmlContent(thinking) : ''
+  const processedThinkingContent =
+    thinkingHtmlContent ? processCodeBlocks(thinkingHtmlContent) : ''
 
   return (
-    <div
-      ref={contentRef}
-      className="message-content"
-      style={{
-        maxWidth: '100%',
-        wordWrap: 'break-word',
-        overflowWrap: 'break-word'
-      }}
-      dangerouslySetInnerHTML={{
-        __html: processedContent
-      }}
-    />
+    <div className="space-y-3">
+      {hasThink && thinking && (
+        <details
+          open={isThinkingOpen}
+          className="rounded-md border border-border/60 bg-muted/30 p-3"
+        >
+          <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground">
+            思考过程
+          </summary>
+          <div
+            className="message-content mt-2"
+            style={{
+              maxWidth: '100%',
+              wordWrap: 'break-word',
+              overflowWrap: 'break-word'
+            }}
+            dangerouslySetInnerHTML={{
+              __html: processedThinkingContent
+            }}
+          />
+        </details>
+      )}
+
+      <div
+        ref={contentRef}
+        className="message-content"
+        style={{
+          maxWidth: '100%',
+          wordWrap: 'break-word',
+          overflowWrap: 'break-word'
+        }}
+        dangerouslySetInnerHTML={{
+          __html: processedAnswerContent
+        }}
+      />
+    </div>
   )
 }
 
@@ -2952,31 +2981,11 @@ export default function EnhancedChatWithSidebar({
 
                           {/* 助手消息操作按钮 - 错误消息不显示 */}
                           {!isUser && !message.isStreaming && message.content && !message.hasError && (
-                            <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                                onClick={async () => {
-                                  try {
-                                    await navigator.clipboard.writeText(displayContent)
-                                    toast.success('已复制到剪贴板')
-                                  } catch (err) {
-                                    console.error('复制失败:', err)
-                                    toast.error('复制失败')
-                                  }
-                                }}
-                              >
-                                <Copy className="h-3.5 w-3.5 mr-1" />
-                                复制
-                              </Button>
-                              <SaveKnowledgeButton
+                            <div className="mt-2 pt-2 border-t border-border">
+                              <KnowledgeGraphActions
                                 content={displayContent}
                                 sourceMessageId={message.id}
-                                sourceType="assistant_reply"
-                                size="sm"
-                                showLabel
-                                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                disabled={isLoading || isStreaming}
                               />
                             </div>
                           )}

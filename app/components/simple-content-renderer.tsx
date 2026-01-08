@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo } from 'react'
 import { marked, Tokens } from 'marked'
+import { splitThinkTags } from '@/lib/thinking'
 
 interface SimpleContentRendererProps {
   content: string
@@ -107,27 +108,36 @@ export default function SimpleContentRenderer({ content }: SimpleContentRenderer
   }, [])
 
   // 使用 useMemo 缓存渲染结果，避免重复计算
-  const htmlContent = useMemo(() => {
-    if (!content) return '';
+  const { thinkingHtml, answerHtml, hasThink, isThinkingOpen } = useMemo(() => {
+    const split = splitThinkTags(content);
 
-    try {
-      const result = marked.parse(content);
+    const renderMarkdown = (text: string) => {
+      if (!text) return '';
+      try {
+        const result = marked.parse(text);
 
-      // 安全检查
-      if (result instanceof Promise) {
-        console.error('[SimpleContentRenderer] marked.parse 返回了Promise');
-        return content.replace(/\n/g, '<br>');
+        if (result instanceof Promise) {
+          console.error('[SimpleContentRenderer] marked.parse 返回了Promise');
+          return text.replace(/\n/g, '<br>');
+        }
+
+        if (typeof result === 'string') {
+          return result;
+        }
+
+        return text.replace(/\n/g, '<br>');
+      } catch (error) {
+        console.error('[SimpleContentRenderer] Markdown渲染失败:', error);
+        return text.replace(/\n/g, '<br>');
       }
+    };
 
-      if (typeof result === 'string') {
-        return result;
-      }
-
-      return content.replace(/\n/g, '<br>');
-    } catch (error) {
-      console.error('[SimpleContentRenderer] Markdown渲染失败:', error);
-      return content.replace(/\n/g, '<br>');
-    }
+    return {
+      thinkingHtml: renderMarkdown(split.thinking),
+      answerHtml: renderMarkdown(split.answer),
+      hasThink: split.hasThink && split.thinking.length > 0,
+      isThinkingOpen: split.isThinkingOpen,
+    };
   }, [content])
 
   return (
@@ -141,7 +151,23 @@ export default function SimpleContentRenderer({ content }: SimpleContentRenderer
         letterSpacing: '0.01em',
         wordSpacing: '0.05em'
       }}
-      dangerouslySetInnerHTML={{ __html: htmlContent }}
-    />
+    >
+      {hasThink && thinkingHtml && (
+        <details
+          open={isThinkingOpen}
+          className="mb-3 rounded-md border border-border/60 bg-muted/30 p-3"
+        >
+          <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground">
+            思考过程
+          </summary>
+          <div
+            className="mt-2"
+            dangerouslySetInnerHTML={{ __html: thinkingHtml }}
+          />
+        </details>
+      )}
+
+      <div dangerouslySetInnerHTML={{ __html: answerHtml }} />
+    </div>
   )
 }
