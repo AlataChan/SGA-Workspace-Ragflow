@@ -128,12 +128,12 @@ function H5ChatPageContent() {
   }, [agent, user, agentAvatar])
 
   if (isLoading) {
-    return <div className="min-h-[100dvh] flex items-center justify-center text-sm text-muted-foreground">加载中…</div>
+    return <div className="h-full min-h-0 flex items-center justify-center text-sm text-muted-foreground">加载中…</div>
   }
 
   if (error) {
     return (
-      <div className="min-h-[100dvh] flex flex-col items-center justify-center gap-3 px-6 text-center">
+      <div className="h-full min-h-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
         <div className="text-sm text-muted-foreground">{error}</div>
         <Button variant="outline" onClick={() => router.replace("/h5")}>
           返回列表
@@ -144,15 +144,15 @@ function H5ChatPageContent() {
 
   if (!agent || !agentConfig) {
     return (
-      <div className="min-h-[100dvh] flex items-center justify-center text-sm text-muted-foreground">
+      <div className="h-full min-h-0 flex items-center justify-center text-sm text-muted-foreground">
         暂无可用内容
       </div>
     )
   }
 
   return (
-    <div className="min-h-[100dvh] flex flex-col">
-      <div className="px-2 py-2 border-b bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/40">
+    <div className="h-full min-h-0 flex flex-col">
+      <div className="px-3 py-2 border-b bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/40">
         <Button variant="ghost" className="gap-2" onClick={() => router.push("/h5")}>
           <ArrowLeft className="w-4 h-4" />
           返回
@@ -176,7 +176,7 @@ export default function H5ChatPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-[100dvh] flex items-center justify-center text-sm text-muted-foreground">
+        <div className="h-full min-h-0 flex items-center justify-center text-sm text-muted-foreground">
           加载中…
         </div>
       }

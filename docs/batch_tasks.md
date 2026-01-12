@@ -2,12 +2,16 @@
 
 > 目标：在现有“单文件/单文档操作”能力基础上，新增“对多文件重复执行同一任务”的批处理体验；优先前端实现，尽量不改后端接口。
 
+> 本次审查聚焦场景：用户一次上传多个文件（PDF/Markdown）→ 前端启动批次处理 → 后端以 Dify Workflow 为主要执行引擎，对每个文件调用一次工作流 → 结果按上传文件一一对应在本项目前端渲染。
+
 ---
 
 ## 🎯 目标与非目标
 
 ### 目标
-- 多文件执行同一操作：上传、触发解析、删除、（未来可扩展：重新解析、批量移动目录等）。
+- 多文件执行同一“业务动作”（多文件 × 单一操作）：
+  - 本次场景：批量调用 Dify Workflow（每文件一次 `workflows/run`，输入为 PDF/Markdown）
+  - 可扩展：知识库类批量操作（上传/解析/删除/移动等）
 - 支持**并发控制**、暂停/继续、取消、失败重试、进度与结果汇总。
 - UI 侧有明确的“任务中心/任务队列”反馈，避免用户误以为卡死。
 
@@ -17,38 +21,433 @@
 
 ---
 
-## 🔎 方案审查：10-20 个文档批量上传到 Dify
+## 🔎 方案审查：10-20 个文件批量调用 Dify 工作流（PDF/Markdown）
 
-结论：**可以实现**。但需要补齐几个关键点，否则示例会“看起来能跑、实际上不可靠/不安全”。
+结论：**可以实现**。MVP 建议采用“前端队列 + 后端安全代理 + 每文件一次 `workflows/run`（blocking）”落地；如需要更细粒度进度/可视化执行过程，再升级为 `streaming` + 事件解析。
 
 ### 关键风险与遗漏
 
-1) **Dify API Key 暴露风险（必须避免）**
-- `docs/dify-batch-upload-example.tsx` 这种“前端直连 Dify + 明文 API Key”的写法不可用：Key 会被浏览器、日志、抓包、前端源码泄露。
-- 建议：前端只请求本域接口；由后端代理转发到 Dify，并在服务端读取 Key（环境变量或数据库）。
+1) **Dify API Key / Base URL 边界（必须避免前端持有）**
+- 任何让浏览器拿到 `api_key` 或直连 Dify 的方案都不可用：Key 会被前端源码、抓包、日志泄露。
+- 后端应作为唯一出口：统一注入 `Authorization: Bearer ...`，并明确禁止前端通过参数传入/覆盖 `difyKey`、`difyUrl`。
 
-2) **“上传成功”不等于“处理完成”（Dify 的索引是异步的）**
-- Dify 数据集上传接口返回 `document.id` 只能代表“创建成功”；真正完成要等 `indexing_status=completed`。
-- 批量场景需要一个“状态跟踪器”：对同一个 dataset（kb）统一轮询一次，更新多个文档状态，避免 20 个文档=20 个轮询器。
+2) **接口边界需要明确：Dify Chat vs Workflow vs Dataset**
+- 本场景是 Workflow：Dify 标准路径 `POST /v1/workflows/run`（若 `DEFAULT_DIFY_BASE_URL` 已包含 `/v1`，代码拼接用 `/workflows/run`）。
+- `chat-messages` 与 `datasets/*` 不是同一套能力/权限，不应混用；代理路由也不要把 Chat 的“OpenAI 格式转换”复用到 Workflow（会破坏 workflow 事件/输出）。
 
-3) **接口边界需要明确：Dify Chat vs Dataset 是两套接口/权限**
-- 本项目已有的 Dify Chat（`/v1/chat-messages`、`/v1/files/upload`）不等于 Dataset 文档上传。
-- Dataset 批量上传需要用 Dify Dataset API，例如：
-  - `POST /v1/datasets/{dataset_id}/document/create_by_file`
-  - `GET /v1/datasets/{dataset_id}/documents?page=1&limit=...`（读取 `indexing_status`）
-  - `DELETE /v1/datasets/{dataset_id}/documents/{document_id}`
+3) **文件输入方式已确认（file 变量：`files`，PDF/Markdown 直传）**
+- 统一流程：后端接收 multipart 文件 → 调用 Dify `files/upload` 获取 `upload_file_id` → 调用 `workflows/run`，将 `inputs.files` 引用该 `upload_file_id`。
+- PDF：已确认 Dify 支持直接上传（无需本地抽取文本）。
+- Markdown：建议按真实 MIME 传递（`text/markdown` / `text/plain`）；必要时后端可修正文件扩展名或 `Content-Type`，避免被 Dify 拒绝。
+- 可选 fallback：遇到扫描版 PDF/OCR、或 Dify 对特定格式拒收时，才考虑在服务端抽取/转码，并在 workflow 侧新增 text 变量作为备用输入（非 MVP）。
 
-4) **进度与体验：Dify 通常没有“真实进度条”**
-- Dify 多数情况下只给状态（waiting/parsing/indexing/completed/error），无法提供精确百分比；可以用“状态→估算进度”的方式展示（例如 parsing=30%，indexing=70%）。
-- 如果你一定要“上传字节进度”，`fetch` 不好做，需要改用 `XMLHttpRequest` 的 `upload.onprogress`（MVP 可先不做）。
+4) **“请求返回”不等于“可渲染结果”（输出协议缺失）**
+- Workflow 输出通常是结构化 `outputs`；需要在项目内定义统一的 `WorkflowRunResult`（成功/失败、主输出字段、原始响应、可渲染摘要）。
+- 输出可能包含 Markdown/JSON/HTML 片段；前端渲染需考虑 XSS（默认按纯文本/Markdown 渲染并做 sanitize）。
 
-5) **失败重试与限流**
-- 10-20 个文件并发直打 Dify 容易触发 429/超时；建议并发 `2~3`，并对 429/5xx 使用指数退避重试。
-- 401/403 这类权限问题应 fail-fast（直接提示并停止该组任务），避免无意义重试。
+5) **超时/限流/重试（批处理一定会撞到）**
+- 并发建议 `2~3`；对 429/5xx 采用指数退避重试；401/403 fail-fast（可选择阻断整组）。
+- blocking 模式要配套：服务端超时（建议 ≥180s）、请求中断（`AbortController`）、错误透传与可重试分类。
+
+6) **取消语义需要定义**
+- 前端“取消”至少应能中止当前 HTTP 请求并阻止后续调度；
+- 若要真正停止 Dify 侧执行，需要确认 Dify Workflow 是否提供 stop API（不同版本可能不同），否则只能做到“前端停止等待”。
 
 ### 实施建议（最小可落地）
-- 前端：使用一个并发受控的任务队列（或 promise pool）+ 一个 dataset 维度的轮询器；示例见 `docs/dify-batch-upload-example.tsx`。
-- 后端：新增 Dify Dataset API 的代理路由（建议路径形如 `/api/dify/v1/**`），由后端注入 `Authorization: Bearer ...`，并做基础超时/重试/错误透传。
+- 前端：并发受控任务队列（Promise pool / `TaskQueue`）+ 逐文件调用后端 workflow 代理接口；结果按 `taskId/fileName` 归档展示。
+- 后端：提供“workflow 专用代理”（不做 Chat/OpenAI 格式转换）：
+  - 不允许客户端传入 Key；
+  - blocking 返回 JSON；streaming 原样 `text/event-stream` pass-through；
+  - 本场景 file 输入：服务端先 `files/upload` 再 `workflows/run`。
+
+> 注：`docs/dify-batch-upload-example.tsx` 是 "Dify Dataset 批量上传"示例，与本次 "Workflow 批处理"场景不同，仅作为并发/轮询思路参考。
+
+---
+
+## 🔒 已确认的技术约束（2026-01-12）
+
+> **状态**: 已与用户确认 | **决定性质**: 阻塞性约束，决定代理路由与映射逻辑的实现方式
+
+### 约束总览
+
+| 约束项 | 确认值 | 实现影响 |
+|--------|--------|----------|
+| **输入方式** | `file` 类型变量（变量名：`files`） | 需两步调用：先 `files/upload` → 再 `workflows/run` |
+| **主输出字段** | `outputs.text` | 前端渲染主内容来自 `WorkflowRunResult.text`（由后端从 `data.outputs.text` 映射） |
+| **响应模式** | 仅 `blocking`（MVP） | 简化实现，无需处理 SSE 事件聚合 |
+
+### 1) 文件输入：两步调用流程
+
+由于 Dify 工作流使用 **file 类型变量**，后端代理需要实现两步调用：
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  前端                        后端代理                      Dify         │
+├─────────────────────────────────────────────────────────────────────────┤
+│  上传文件(multipart)  ──→  POST /files/upload  ──→  返回 file_id       │
+│                            │                                            │
+│                            ↓                                            │
+│                       POST /workflows/run                               │
+│                       {                                                 │
+│                         inputs: {                                       │
+│                           files: [{                                     │
+│                             type: "document",                           │
+│                             transfer_method: "local_file",              │
+│                             upload_file_id: "<file_id>"                 │
+│                           }]                                            │
+│                         },                                              │
+│                         response_mode: "blocking"                       │
+│                       }                                                 │
+│                            │                                            │
+│                            ↓                                            │
+│  ←──────────────────  返回 WorkflowRunResult  ←─────────────────────    │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Dify Files Upload API
+
+```bash
+POST {DIFY_BASE_URL}/files/upload
+Authorization: Bearer {DIFY_API_KEY}
+Content-Type: multipart/form-data
+
+file: <binary>           # 文件本体
+user: "batch-user"       # 必填，用户标识
+
+# 成功响应
+{
+  "id": "file-abc123",   # upload_file_id，用于 workflow 输入
+  "name": "document.pdf",
+  "size": 12345,
+  "extension": "pdf",
+  "mime_type": "application/pdf",
+  "created_by": "batch-user",
+  "created_at": 1736668800
+}
+```
+
+#### Dify Workflows Run API（引用 file 变量）
+
+```bash
+POST {DIFY_BASE_URL}/workflows/run
+Authorization: Bearer {DIFY_API_KEY}
+Content-Type: application/json
+
+{
+  "inputs": {
+    "files": [                              # 变量名：files（支持多文件数组）
+      {
+        "type": "document",
+        "transfer_method": "local_file",    # 使用已上传的文件
+        "upload_file_id": "file-abc123"     # files/upload 返回的 id
+      }
+    ]
+  },
+  "response_mode": "blocking",              # MVP 仅支持 blocking
+  "user": "batch-user"
+}
+
+# 成功响应
+{
+  "workflow_run_id": "run-xyz789",
+  "task_id": "task-123",
+  "data": {
+    "id": "run-xyz789",
+    "workflow_id": "workflow-abc",
+    "status": "succeeded",                  # succeeded | failed | stopped
+    "outputs": {
+      "text": "这是工作流的输出结果..."      # 主输出字段
+    },
+    "error": null,
+    "elapsed_time": 12.345,                 # 执行耗时（秒）
+    "total_tokens": 1500,
+    "total_steps": 3,
+    "created_at": 1736668800,
+    "finished_at": 1736668812
+  }
+}
+```
+
+### 2) 输出映射：WorkflowRunResult
+
+```typescript
+// lib/types/workflow.ts
+
+/**
+ * Dify Workflow 执行结果（统一格式）
+ */
+export interface WorkflowRunResult {
+  success: boolean;
+
+  /** Dify files/upload 返回的 id（用于排障/可选清理） */
+  uploadFileId?: string;
+
+  /** 主输出内容（从 outputs.text 提取） */
+  text?: string;
+
+  /** 完整的 outputs 对象（用于调试/高级场景） */
+  outputs?: Record<string, any>;
+
+  /** 执行耗时（毫秒） */
+  elapsedTimeMs?: number;
+
+  /** Token 使用量 */
+  usage?: {
+    totalTokens?: number;
+    totalSteps?: number;
+  };
+
+  /** 错误信息（仅失败时） */
+  error?: {
+    message: string;
+    code?: string;
+  };
+
+  /** 原始响应（用于调试） */
+  rawResponse?: any;
+}
+
+/**
+ * 将 Dify 原始响应映射为 WorkflowRunResult
+ */
+export function mapDifyWorkflowResponse(raw: any, uploadFileId?: string): WorkflowRunResult {
+  const data = raw.data;
+
+  if (!data) {
+    return {
+      success: false,
+      uploadFileId,
+      error: { message: '响应格式异常：缺少 data 字段' },
+      rawResponse: raw,
+    };
+  }
+
+  const isSuccess = data.status === 'succeeded';
+
+  return {
+    success: isSuccess,
+    uploadFileId,
+    text: data.outputs?.text,                              // 主输出字段
+    outputs: data.outputs,
+    elapsedTimeMs: data.elapsed_time ? Math.round(data.elapsed_time * 1000) : undefined,
+    usage: {
+      totalTokens: data.total_tokens,
+      totalSteps: data.total_steps,
+    },
+    error: !isSuccess ? {
+      message: data.error || `工作流执行失败：${data.status}`,
+      code: data.status,
+    } : undefined,
+    rawResponse: raw,
+  };
+}
+```
+
+### 3) 后端代理路由设计
+
+```typescript
+// app/api/dify/workflows/run/route.ts
+
+/**
+ * Dify Workflow 执行代理
+ *
+ * 职责：
+ * 1. 接收前端上传的文件
+ * 2. 调用 Dify files/upload 获取 file_id
+ * 3. 调用 Dify workflows/run（blocking 模式）
+ * 4. 映射响应为 WorkflowRunResult 返回
+ *
+ * 安全要求：
+ * - DEFAULT_DIFY_API_KEY 仅服务端持有，绝不下发到前端
+ * - 不接受前端传入的 difyKey/difyUrl 参数
+ */
+
+export async function POST(request: Request) {
+  // 1. 解析 multipart/form-data
+  const formData = await request.formData();
+  const file = formData.get('file') as File;
+  // 生产建议：从登录态/服务端会话中生成 userId，不要信任前端传入的 userId
+  const userId = formData.get('userId') as string || 'batch-user';
+  const inputsRaw = formData.get('inputs');
+
+  // 允许额外 inputs（JSON 字符串），用于给 workflow 传入除 files 之外的参数
+  let extraInputs: Record<string, any> = {};
+  if (typeof inputsRaw === 'string' && inputsRaw.trim()) {
+    try {
+      const parsed = JSON.parse(inputsRaw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        extraInputs = parsed;
+      }
+    } catch {
+      // 解析失败则忽略 extraInputs（也可选择返回 400）
+    }
+  }
+
+  // 2. 验证必填参数
+  if (!file) {
+    return Response.json(
+      { success: false, error: { message: '缺少必填参数：file' } },
+      { status: 400 }
+    );
+  }
+
+  // 3. 从环境变量读取 Dify 配置（不接受前端传入）
+  // 约定：DEFAULT_DIFY_BASE_URL 包含 /v1（例如 http://your-dify-server/v1）
+  const DIFY_BASE_URL = process.env.DEFAULT_DIFY_BASE_URL;
+  const DIFY_API_KEY = process.env.DEFAULT_DIFY_API_KEY;
+  const DIFY_TIMEOUT_MS = Number(process.env.DEFAULT_DIFY_TIMEOUT || 180000);
+
+  if (!DIFY_BASE_URL || !DIFY_API_KEY) {
+    return Response.json(
+      { success: false, error: { message: '服务端 Dify 配置缺失' } },
+      { status: 500 }
+    );
+  }
+
+  try {
+    // 4. 上传文件到 Dify
+    const uploadFormData = new FormData();
+    uploadFormData.append('file', file);
+    uploadFormData.append('user', userId);
+
+    const uploadAbort = new AbortController();
+    const uploadTimeout = setTimeout(() => uploadAbort.abort(), DIFY_TIMEOUT_MS);
+    const uploadResponse = await fetch(`${DIFY_BASE_URL}/files/upload`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${DIFY_API_KEY}` },
+      body: uploadFormData,
+      signal: uploadAbort.signal,
+    });
+    clearTimeout(uploadTimeout);
+
+    if (!uploadResponse.ok) {
+      const error = await uploadResponse.text();
+      return Response.json(
+        { success: false, error: { message: `文件上传失败: ${error}` } },
+        { status: uploadResponse.status }
+      );
+    }
+
+    const uploadResult = await uploadResponse.json();
+    const fileId = uploadResult.id;
+
+    // 5. 调用 Workflow（blocking 模式）
+    const runAbort = new AbortController();
+    const runTimeout = setTimeout(() => runAbort.abort(), DIFY_TIMEOUT_MS);
+    const workflowResponse = await fetch(`${DIFY_BASE_URL}/workflows/run`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${DIFY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        inputs: {
+          ...extraInputs,
+          files: [{
+            type: 'document',
+            transfer_method: 'local_file',
+            upload_file_id: fileId,
+          }],
+        },
+        response_mode: 'blocking',
+        user: userId,
+      }),
+      signal: runAbort.signal,
+    });
+    clearTimeout(runTimeout);
+
+    if (!workflowResponse.ok) {
+      const error = await workflowResponse.text();
+      return Response.json(
+        { success: false, error: { message: `工作流执行失败: ${error}` } },
+        { status: workflowResponse.status }
+      );
+    }
+
+    const workflowResult = await workflowResponse.json();
+
+    // 6. 映射为统一格式返回
+    return Response.json(mapDifyWorkflowResponse(workflowResult, fileId));
+
+  } catch (error: any) {
+    return Response.json(
+      { success: false, error: { message: error.message || '未知错误' } },
+      { status: 500 }
+    );
+  }
+}
+```
+
+### 4) 环境变量配置
+
+```env
+# .env.local (服务端专用，绝不提交到版本控制)
+
+# Dify Workflow 配置
+DEFAULT_DIFY_BASE_URL=https://api.dify.ai/v1  # 或自托管地址（包含 /v1）
+DEFAULT_DIFY_API_KEY=app-xxxxxxxxxxxxxxxx     # Workflow App 的 API Key（仅服务端使用）
+DEFAULT_DIFY_TIMEOUT=180000                   # 超时时间（毫秒），建议 ≥180s
+
+# 批量任务配置
+BATCH_TASK_CONCURRENCY=3                    # 并发数
+BATCH_TASK_RETRY_MAX=3                      # 最大重试次数
+```
+
+### 5) 前端结果渲染规范（按文件一一对应）
+
+> 目标：对每个上传文件，稳定展示其 `workflow.run` 的状态、主输出（`outputs.text`）、错误信息与可选调试信息。
+
+**推荐组件**：`components/workflow-result-viewer.tsx`（或集成到 Task Center 详情面板）
+
+渲染规则建议：
+- 主内容：优先渲染 `WorkflowRunResult.text`（已确认来自 `outputs.text`）。
+- 输出格式：
+  - 默认按 Markdown 渲染，但 **禁止渲染原始 HTML**（不要启用 `rehype-raw`）；如业务必须渲染 HTML，则必须先用 `isomorphic-dompurify` 做 sanitize。
+  - 同时提供“查看 outputs（JSON）”折叠面板（`WorkflowRunResult.outputs`），支持复制/下载。
+- 错误展示：展示 `WorkflowRunResult.error.message`，并允许展开 `rawResponse`（建议仅保留必要字段，避免 IndexedDB 膨胀）。
+- 元信息：展示 `elapsedTimeMs`、`usage.totalTokens/totalSteps`（如有）。
+
+### 6) 批量结果导出（MVP：JSON；可选 CSV）
+
+> 目标：用户一次跑完 10-20 个文件后，可一键导出“每文件一行”的结果汇总。
+
+**推荐 MVP 导出格式（JSON）**：
+
+```ts
+export type BatchExportResult = {
+  groupId: string;
+  exportedAt: string;
+  workflow: {
+    responseMode: "blocking";
+    primaryOutput: "outputs.text";
+  };
+  files: Array<{
+    fileName: string;
+    fileType?: string;
+    status: "succeeded" | "failed" | "canceled";
+    text?: string;
+    elapsedMs?: number;
+    totalTokens?: number;
+    totalSteps?: number;
+    error?: string;
+  }>;
+};
+```
+
+导出逻辑建议：
+- 基于 `groupId` 汇总 `TaskStore` 中同组任务；
+- 从 `Task.input.fileName/fileType` + `Task.status` + `Task.output(WorkflowRunResult)` 生成导出数据；
+- 文件名建议：`workflow-batch-${groupId}-${YYYYMMDD-HHmm}.json`；
+- CSV 作为可选增强：仅导出摘要列（`fileName,status,elapsedMs,totalTokens,error,text`），并对 `text` 做长度截断。
+
+### 7) Dify 上传文件留存与清理策略（必须明确）
+
+本场景每个文件会先调用一次 `files/upload`，Dify 侧会持久化文件（取决于 Dify 配置的存储后端）。
+
+建议：
+- **默认策略**：由 Dify 自身存储/生命周期负责清理；项目侧不做“上传后立即删除”，避免影响审计与复现。
+- **自托管建议**：若 Dify 使用 S3/MinIO，优先用 bucket 生命周期规则（TTL）清理历史文件（例如 7/30 天）；若使用本地存储，增加定期清理任务（按创建时间/大小）。
+- **最小可观测性**：建议在 `WorkflowRunResult` 中记录 `uploadFileId`（仅用于排障/可选清理），但不要记录文件内容到日志。
 
 ---
 
@@ -60,7 +459,7 @@
 - ✅ 优势：不改后端；状态统一管理；可对接多个业务场景。
 
 ### 第 2 层：UI 组件扩展
-- 🔧 增强：`components/knowledge-base/document-upload.tsx` - 使用队列执行批量上传
+- 🔧 增强：业务入口组件（示例：知识库上传 `components/knowledge-base/document-upload.tsx`；本次场景：工作流批量运行入口待新增）- 使用队列执行批量任务
 - 📦 新增：`components/task-center.tsx` - 悬浮任务中心（全局任务列表、控制）
 - 📦 新增：`components/batch-operation-bar.tsx` - 批量操作栏（对选中项执行同一操作）
 - ✅ 优势：复用现有 UI 组件体系，无需新依赖。
@@ -76,8 +475,8 @@
 ### 核心原理
 用户选择多个文件/文档  
 → `TaskQueue` 管理（并发控制 + 重试/取消/暂停）  
-→ 逐个调用现有 API  
-→ 统一的状态同步策略（避免每个任务各自轮询）  
+→ 逐个调用后端 API（知识库类操作 / Workflow `workflows/run`）  
+→ 统一的状态与结果同步策略（KB 场景用 poller；Workflow 场景用 blocking/streaming）  
 → 更新 `TaskStore`  
 → UI 实时展示（Task Center / 批量操作栏）
 
@@ -100,7 +499,8 @@ export type TaskStatus =
 export type TaskType =
   | "kb.uploadDocument"
   | "kb.parseDocument"
-  | "kb.deleteDocument";
+  | "kb.deleteDocument"
+  | "workflow.run"; // 运行工作流（Dify，按文件逐个执行）
 
 export type RetryPolicy = {
   maxRetries: number;
@@ -183,20 +583,38 @@ MVP 建议策略：
 ## 🧩 MVP 里程碑（建议按顺序交付）
 1. 统一任务模型（`Task/TaskStatus/TaskType`）与 store 持久化边界
 2. 落地 `TaskQueue`：并发 + 取消 + 重试（先不做 UI）
-3. 接入一个真实场景（建议先做"批量上传"或"批量触发解析"）
+3. 接入一个真实场景（本次：批量 `workflow.run`；或先做"批量上传/批量触发解析"）
 4. 引入全局 poller（按 kb 维度同步多个 doc 状态）
 5. 最小 Task Center：展示任务列表 + 取消/重试（再扩展 Batch Operation Bar）
 
 ---
 
-## 📋 技术规范（Technical Specification v1.0）
+## 📋 技术规范（Technical Specification v1.5）
 
-> **状态**: 实施就绪 | **更新时间**: 2025-12-19
+> **状态**: 审查更新 | **更新时间**: 2026-01-12
 > **目的**: 将设计草案转化为可直接实施的技术决策文档，解决所有阻塞性问题
 
 ---
 
 ### 🔴 阻塞性问题解决方案（必须先完成）
+
+#### 问题 0: Dify Workflow 批处理缺少明确的安全代理与协议 ⚠️ CRITICAL
+
+**现状分析**:
+- 本次场景需要后端代理调用 Dify Workflow，前端不应持有/传入 Dify Key。
+- 现有 Dify 相关路由若直接复用，容易出现“Key 来源不安全”或“响应格式被转换（面向 Chat/OpenAI）导致 workflow 输出不可用”等问题。
+- `workflow.run` 的输入/输出未在项目内标准化，前端渲染、错误分类与重试策略无法统一落地。
+
+**✅ 决策**:
+- 为 workflow 建立“专用代理路由”：只做鉴权/参数校验/超时与错误透传，不做 Chat/OpenAI 格式转换。
+- 定义统一的 `WorkflowRunResult` 响应结构（blocking/streaming 两种模式都能消费），用于前端按文件一一对应渲染结果。
+
+**实施步骤**:
+1. 统一配置来源：仅服务端读取 Dify 配置（环境变量或数据库配置），不接受前端传入 `difyKey`/`difyUrl` 覆盖。
+2. 后端新增（或重构）workflow 代理路由（建议）：
+   - `POST /api/dify/workflows/run`：blocking 返回 JSON；streaming 原样 `text/event-stream` pass-through
+   - 如 workflow 需要 file 变量：服务端先调用 `POST /v1/files/upload` 再发起 `POST /v1/workflows/run`（若 baseUrl 已包含 `/v1`，拼接时用 `/files/upload` 与 `/workflows/run`）
+3. 前端统一消费：`Task.output` 保存 `WorkflowRunResult`，UI 只依赖标准字段渲染与导出。
 
 #### 问题 1: 状态码格式不一致 ⚠️ CRITICAL
 
@@ -1202,14 +1620,14 @@ Phase 4: 集成测试与优化 (4 天)
 2. **后端队列集成**: 对接 BullMQ/Redis Queue，支持跨会话的持久化任务
 3. **更智能的重试**: 根据错误类型动态调整重试策略
 4. **任务优先级**: 用户可手动调整任务执行顺序
-5. **批量导出**: 导出任务执行报告（CSV/JSON）
+5. **批量导出**: MVP 已提供 JSON 汇总导出；后续补齐 CSV/更详细报告
 6. **WebSocket 推送**: 替代轮询，实时推送状态更新
 7. **任务依赖**: 支持"先上传后解析"的依赖链
 8. **配额管理**: 限制单用户/单 KB 的并发任务数
 
 ---
 
-## � 多后端适配器层设计（v1.1 新增）
+## 🧩 多后端适配器层设计（v1.1 新增）
 
 > **背景**: 批量任务需要支持 RAGFlow、Dify、Default 等多个后端，原设计直接耦合 RAGFlow API，需要引入适配器层实现解耦。
 
@@ -1738,7 +2156,7 @@ export class KBAdapterFactory {
 }
 ```
 
-### �📝 TaskQueue 集成适配器
+### 📝 TaskQueue 集成适配器
 
 ```typescript
 // lib/task-queue.ts (修改后)
@@ -1887,7 +2305,7 @@ Phase 4: 集成测试与优化 (4 天) - 新增多后端测试
 
 > **扩展说明**: 批量任务系统不仅支持知识库操作，还需支持 Chat 和 Agent API 的批量调用，用于批量测试、批量对话生成、API 压测等场景。
 
-### � Chat/Agent API 能力对比
+### 📊 Chat/Agent API 能力对比
 
 | 能力 | RAGFlow | Dify | Default |
 | ---- | ------- | ---- | ------- |
@@ -1921,6 +2339,53 @@ export type TaskType =
   // Workflow 操作（Dify 专属）
   | "workflow.run";        // 运行工作流
 ```
+
+### 🧩 Workflow 批处理（Dify）类型与接口约定（本次场景重点）
+
+> 目标：让“按文件一一对应展示结果”有稳定的数据结构，并让任务队列能统一处理 blocking/streaming 两种执行模式。
+
+#### 1) 统一任务输入（每文件一次 `workflow.run`）
+- `Task.input` 建议最少包含：`responseMode`、`inputs`、`fileName`、`fileType`；`workflowId` 可选（用于多工作流路由/记录）
+- `File` 本体不持久化：仅在运行期通过 `WeakMap`/`ref` 关联 `taskId -> File`；刷新后可展示任务记录，但无法自动重跑（除非额外实现 Blob/分片持久化，MVP 非目标）
+
+#### 2) 统一结果结构（用于渲染与导出）
+
+```ts
+export type WorkflowResponseMode = "blocking" | "streaming";
+
+export type WorkflowRunTaskInput = {
+  workflowId?: string; // 可选：用于多工作流路由/记录
+  responseMode: WorkflowResponseMode;
+  inputs: Record<string, any>;
+  fileName: string;
+  fileType: string;
+};
+
+export type WorkflowRunResult = {
+  success: boolean;
+  /** Dify files/upload 返回的 id（用于排障/可选清理） */
+  uploadFileId?: string;
+  /** workflow 的结构化输出，优先用于渲染/导出 */
+  outputs?: Record<string, any>;
+  /** 可选：将主输出提炼为文本，便于直接在 UI 里预览 */
+  text?: string;
+  /** 可选：运行耗时、token 等元信息 */
+  elapsedTimeMs?: number;
+  usage?: { totalTokens?: number; totalSteps?: number };
+  error?: { message: string; code?: string };
+  rawResponse?: any;
+};
+```
+
+#### 3) PDF/Markdown 推荐输入策略（降低不确定性）
+- 本场景已确认 workflow 使用 `files` 文件变量：默认统一走 `files/upload` → `workflows/run`，无需本地抽取文本。
+- Markdown：优先作为文件上传（`text/markdown`/`text/plain`）；必要时可在服务端修正 MIME/扩展名以保证可上传。
+- PDF：已确认 Dify 支持直接上传；如遇扫描版 PDF/OCR 等导致工作流效果不佳，可在后续迭代增加“文本抽取/摘要”作为额外 inputs（需要 workflow 侧增加对应变量）。
+
+#### 4) 后端代理接口建议（最小可落地）
+- `POST /api/dify/workflows/run`（建议以 multipart 接收 `file` + `inputs` JSON + `response_mode`；可选 `workflowId` 用于多工作流路由/记录）
+  - blocking：返回标准 JSON（建议后端转成 `WorkflowRunResult` 再返回给前端）
+  - streaming：保持 `text/event-stream` 原样透传，并在前端将事件聚合成 `WorkflowRunResult`
 
 ### 📐 Chat 适配器接口定义
 
@@ -2570,10 +3035,12 @@ export class ChatTaskExecutor {
 // lib/task-queue.ts (扩展后)
 
 import { ChatTaskExecutor } from './task-executors/chat-task-executor';
+import { WorkflowTaskExecutor } from './task-executors/workflow-task-executor';
 import { UnifiedAdapterFactory } from './adapters/adapter-factory';
 
 export class TaskQueue {
   private chatExecutor: ChatTaskExecutor | null = null;
+  private workflowExecutor: WorkflowTaskExecutor | null = null;
 
   constructor(adapterConfig: AdapterConfig) {
     // 知识库适配器
@@ -2588,6 +3055,14 @@ export class TaskQueue {
       this.chatExecutor = new ChatTaskExecutor(chatAdapter);
     }
     return this.chatExecutor;
+  }
+
+  private getWorkflowExecutor(): WorkflowTaskExecutor {
+    if (!this.workflowExecutor) {
+      const workflowAdapter = UnifiedAdapterFactory.getWorkflowAdapter(this.config);
+      this.workflowExecutor = new WorkflowTaskExecutor(workflowAdapter);
+    }
+    return this.workflowExecutor;
   }
 
   async executeTask(task: Task): Promise<void> {
@@ -2612,6 +3087,10 @@ export class TaskQueue {
       case 'agent.batchTest':
         return this.getChatExecutor().executeBatchTest(task);
 
+      // Workflow 任务（Dify）
+      case 'workflow.run':
+        return this.getWorkflowExecutor().executeRunWorkflow(task);
+
       default:
         throw new Error(`未知的任务类型: ${task.type}`);
     }
@@ -2619,30 +3098,46 @@ export class TaskQueue {
 }
 ```
 
-### 📅 更新后的实施路线图（v1.2）
+### 📅 更新后的实施路线图（v1.4）
 
 ```
+Phase -1: Dify Workflow 安全代理 (2 天) 🔴 CRITICAL - 必须最先完成
+├─ -1.1 建立 Dify Workflow 安全代理路由（pass-through）
+│   └─ app/api/dify/workflows/run/route.ts
+├─ -1.2 配置 Dify 环境变量（仅服务端使用）
+│   ├─ DEFAULT_DIFY_BASE_URL
+│   ├─ DEFAULT_DIFY_API_KEY
+│   ├─ DEFAULT_DIFY_TIMEOUT
+│   └─ DEFAULT_DIFY_WORKFLOW_ID（可选）
+└─ -1.3 验证代理路由可用性（手动测试单文件 workflow.run，blocking/streaming）
+
 Phase 0: 基础设施对齐 (5 天) ⚠️ 必须先完成
 ├─ 0.1 创建类型定义文件 ✅ 已完成
-├─ 0.2 扩展 TaskType 定义（新增 chat/agent 类型）
+├─ 0.2 扩展 TaskType 定义（新增 workflow.run；可选 chat/agent 类型）
 ├─ 0.3-0.7 知识库适配器层实现
 └─ 0.8-0.9 Chat 适配器层实现 (新增)
 
-Phase 1: 核心队列实现 (5 天)
+Phase 1: 核心队列实现 (6 天) [+1 天用于网络异常和内存管理]
 ├─ 1.1-1.4 TaskQueue 基础功能
-└─ 1.5 ChatTaskExecutor 集成 (新增)
+├─ 1.5 ChatTaskExecutor 集成 (新增)
+├─ 1.6 网络异常处理（离线检测、自动恢复）(新增)
+├─ 1.7 内存清理策略（File 对象生命周期管理）(新增)
+└─ 1.8 上传进度追踪（XMLHttpRequest 实现）(新增)
 
 Phase 2: 状态同步系统 (3 天) - 无变化
 
 Phase 3: UI 组件重构 (6 天)
 ├─ 3.1-3.4 知识库任务 UI
-└─ 3.5-3.6 Chat/Agent 测试 UI (新增)
+├─ 3.5-3.6 Chat/Agent 测试 UI (新增)
+└─ 3.7 错误详情面板（ErrorSummaryPanel）(新增)
 
-Phase 4: 集成测试与优化 (4 天)
+Phase 4: 集成测试与优化 (5 天) [+1 天用于网络/内存测试]
 ├─ 4.1-4.3 知识库功能测试
-└─ 4.4 Chat/Agent 批量测试验证 (新增)
+├─ 4.4 Chat/Agent 批量测试验证 (新增)
+├─ 4.5 网络异常场景测试（断网恢复、弱网重试）(新增)
+└─ 4.6 内存泄漏检测（长时间运行测试）(新增)
 
-总计: 23 工作日（约 5 周）
+总计: 27 工作日（约 5.5 周）[较 v1.2 增加 4 天]
 ```
 
 ---
@@ -2668,7 +3163,12 @@ Phase 4: 集成测试与优化 (4 天)
 | DocumentStatusPoller | `lib/document-status-poller.ts` | ❌ 不存在 | 状态轮询器未实现 |
 | Task Center UI | `components/task-center.tsx` | ❌ 不存在 | UI 组件未实现 |
 | chat/agent 任务类型 | `lib/types/task.ts` | ❌ 未扩展 | v1.2 设计中标记的 chat.* 和 agent.* 类型未添加 |
-| Dify 代理路由 | `app/api/dify/` | ❌ 不存在 | dify-batch-upload-example.tsx 依赖的后端代理 |
+| workflow 任务类型 | `lib/types/task.ts` | ❌ 未扩展 | 本次场景需要新增 `workflow.run` 类型（或拆分为独立 workflow 任务类型文件） |
+| WorkflowTaskExecutor | `lib/task-executors/workflow-task-executor.ts` | ❌ 不存在 | 本次场景核心执行器（调用 `/api/dify/workflows/run`） |
+| WorkflowResultViewer | `components/workflow-result-viewer.tsx` | ❌ 不存在 | 结果渲染组件（Markdown/JSON/纯文本） |
+| 批量导出 | `lib/batch-export.ts`（或集成到 TaskStore/UI） | ❌ 不存在 | MVP 建议提供 JSON 导出，CSV 可选 |
+| Dify 通用代理路由 | `app/api/dify/` | ⚠️ 已存在 | 当前实现含硬编码 Key / Chat 转换；Workflow/Dataset 建议使用专用 pass-through 代理 |
+| Dify Workflow 代理路由 | `app/api/dify/workflows/run/` | ❌ 不存在 | 本次场景（批量 `workflows/run`）需要，建议新增 |
 
 ### ⚠️ 环境变量遗漏
 当前 `.env.example` 缺少批量任务相关配置：
@@ -2678,13 +3178,17 @@ BATCH_TASK_CONCURRENCY=3           # 批量任务并发数
 BATCH_TASK_RETRY_MAX=3             # 最大重试次数
 BATCH_TASK_POLL_INTERVAL=3000      # 状态轮询间隔(ms)
 BATCH_TASK_CLEANUP_TTL=86400000    # 任务清理时间(ms) 24h
+
+#（本次场景）Dify Workflow 批处理建议配置
+DEFAULT_DIFY_API_KEY=              # Dify API Key（仅服务端使用，严禁下发到前端）
+DEFAULT_DIFY_WORKFLOW_ID=          # 默认工作流标识（可选：用于多工作流路由/记录）
 ```
 
 ### 📝 改进建议
 
 1. **工期估算偏乐观**: 考虑到适配器层、TaskStore、TaskQueue 都未开始，建议将 Phase 0 的工期从 4 天调整为 5-6 天。
 
-2. **依赖关系应明确**: dify-batch-upload-example.tsx 依赖的 `/api/dify/v1/...` 代理路由不存在，应在实施路线图中明确标出。
+2. **依赖关系应明确**: 当前存在 `app/api/dify/` 通用代理实现，但包含“硬编码 Key / 面向 Chat 的响应转换”；批量 `workflow.run` 建议增加专用 pass-through 代理（或对现有代理按 path 分流），并在实施路线图中作为前置任务标出。
 
 3. **RAGFlow 配置缺失**: DEPLOYMENT.md 缺少 RAGFlow 相关的部署配置说明，而这是项目的主要后端。
 
@@ -2694,17 +3198,42 @@ BATCH_TASK_CLEANUP_TTL=86400000    # 任务清理时间(ms) 24h
 
 ## 📝 变更记录
 
-### v1.4 (2026-01-12) - 方案深度审查与补全
-- 🔍 深度审查方案，识别 7 项关键遗漏
-- ✅ 新增「网络异常处理策略」章节
-- ✅ 新增「内存管理策略」章节
-- ✅ 新增「上传进度实现」详细方案
-- ✅ 新增「任务优先级调度」设计
-- ✅ 新增「错误详情 UX」组件设计
-- ✅ 新增「Dify 代理路由结构」定义
-- ✅ 新增「跨标签页同步」设计
-- ⚠️ 更新工期估算：23 天 → 27 天
-- ⚠️ 新增 Phase -1 阻塞性修复阶段
+### v1.7 (2026-01-12) - 补齐结果渲染/导出与留存策略
+- ✅ 明确前端结果渲染规范（Markdown 默认禁用 HTML、outputs JSON 面板）
+- ✅ 增加批量导出（MVP：JSON；可选 CSV 摘要）
+- ✅ 补充 Dify 上传文件留存与清理策略（推荐用存储 TTL / 生命周期规则）
+- 🧹 修正 Dify `/v1` 拼接说明与环境变量命名一致性
+
+### v1.6 (2026-01-12) - 确认技术约束并完善代理设计
+
+- 🔒 **确认输入方式**: `file` 类型变量，变量名 `files`（支持多文件数组）
+- 🔒 **确认输出字段**: `outputs.text` 作为主输出
+- 🔒 **确认响应模式**: MVP 仅支持 `blocking`
+- 📦 **新增章节**: "已确认的技术约束" - 包含完整的两步调用流程图
+- 📦 **补充 API 文档**: Dify `files/upload` 和 `workflows/run` 完整请求/响应格式
+- 📦 **补充代理实现**: `app/api/dify/workflows/run/route.ts` 完整代码示例
+- 📦 **补充类型定义**: `WorkflowRunResult` 接口和 `mapDifyWorkflowResponse` 映射函数
+- 📦 **补充环境变量**: `DEFAULT_DIFY_BASE_URL`、`DEFAULT_DIFY_API_KEY`、`DEFAULT_DIFY_TIMEOUT`
+
+### v1.5 (2026-01-12) - 按"多文件 → Dify Workflow"场景重审
+- ✅ 将审查场景从 "Dify Dataset 批量上传"调整为 "PDF/Markdown 批量调用 `workflows/run`"
+- 📦 补齐 Workflow 批处理的输入/输出协议（`WorkflowRunResult`）与接口建议（blocking/streaming）
+- 🧹 修复文档标题乱码（`�` 替换符）
+- 📝 修正项目现状：`app/api/dify/` 已存在，但需安全整改且不应复用 Chat 转换到 Workflow
+
+### v1.4 (2026-01-12) - 深度方案审查与完善
+- 🔴 **新增 Phase -1**: Dify 代理路由实现（阻塞性前置任务，2 天）
+- 📦 **新增网络异常处理章节**: 离线检测、弱网重试、断网恢复策略
+- 📦 **新增内存管理章节**: File 对象生命周期、孤儿引用清理、WeakMap 方案
+- 📦 **新增上传进度实现**: XMLHttpRequest `upload.onprogress` 详细实现
+- 📦 **新增任务优先级设计**: priority 字段、小文件优先策略
+- 📦 **新增错误详情面板设计**: ErrorSummaryPanel 组件规范
+- 📦 **新增方案完整性检查表**: 13 项功能检查清单
+- ⏰ **更新工期估算**: 从 23 天调整为 27 天（+4 天）
+  - Phase -1: +2 天（Dify 代理路由）
+  - Phase 1: +1 天（网络异常 + 内存管理）
+  - Phase 4: +1 天（额外测试场景）
+- 📝 移除误导性的"✅ 已完成"标记，统一使用谨慎表述
 
 ### v1.3 (2026-01-05) - 项目实际状态审查
 - 🔍 审查项目代码，发现多处"已完成"标记与实际不符

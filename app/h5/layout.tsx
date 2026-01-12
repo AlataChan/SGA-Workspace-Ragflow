@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next"
-import type { ReactNode } from "react"
+import { Suspense, type ReactNode } from "react"
+import H5BottomNav from "./components/h5-bottom-nav"
 
 export const metadata: Metadata = {
   title: "H5 Chat",
@@ -13,5 +14,12 @@ export const viewport: Viewport = {
 }
 
 export default function H5Layout({ children }: { children: ReactNode }) {
-  return <div className="min-h-[100dvh] bg-background text-foreground">{children}</div>
+  return (
+    <div className="min-h-[100dvh] flex flex-col bg-background text-foreground overflow-x-hidden">
+      <div className="flex-1 min-h-0">{children}</div>
+      <Suspense fallback={null}>
+        <H5BottomNav />
+      </Suspense>
+    </div>
+  )
 }
