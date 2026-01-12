@@ -65,6 +65,12 @@ export async function POST(request: NextRequest) {
             name: true,
             logoUrl: true,
           }
+        },
+        department: {
+          select: {
+            id: true,
+            isActive: true
+          }
         }
       }
     })
@@ -94,6 +100,19 @@ export async function POST(request: NextRequest) {
           error: {
             code: 'INVALID_PASSWORD',
             message: '密码错误'
+          }
+        },
+        { status: 401 }
+      )
+    }
+
+    // 部门停用：普通用户禁止登录；管理员不受影响
+    if (user.role !== 'ADMIN' && user.departmentId && user.department && !user.department.isActive) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'DEPARTMENT_DISABLED',
+            message: '已停用'
           }
         },
         { status: 401 }
@@ -189,11 +208,24 @@ export async function GET(request: NextRequest) {
             name: true,
             logoUrl: true,
           }
+        },
+        department: {
+          select: {
+            id: true,
+            isActive: true
+          }
         }
       }
     })
 
     if (!user || !user.isActive) {
+      return NextResponse.json({
+        authenticated: false,
+        user: null
+      })
+    }
+
+    if (user.role !== 'ADMIN' && user.departmentId && user.department && !user.department.isActive) {
       return NextResponse.json({
         authenticated: false,
         user: null

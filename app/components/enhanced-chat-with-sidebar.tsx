@@ -630,6 +630,7 @@ export interface EnhancedChatWithSidebarProps {
   initialMessages?: Message[]
   sessionTitle?: string
   agentConfig?: AgentConfig
+  initialConversationId?: string
 }
 
 export default function EnhancedChatWithSidebar({
@@ -638,7 +639,8 @@ export default function EnhancedChatWithSidebar({
   onBack,
   initialMessages,
   sessionTitle,
-  agentConfig
+  agentConfig,
+  initialConversationId
 }: EnhancedChatWithSidebarProps) {
   // 基础状态
   const [sessions, setSessions] = useState<ChatSession[]>([{
@@ -1066,7 +1068,11 @@ export default function EnhancedChatWithSidebar({
 
   // 加载历史对话的消息（支持缓存）
   const loadHistoryConversation = useCallback(async (historyConv: DifyHistoryConversation) => {
-    if (!agentConfig?.difyUrl && !agentConfig?.baseUrl) return // 确保至少有一个平台配置
+    const canLoadHistory =
+      (agentConfig?.platform === 'DIFY' && agentConfig?.difyUrl && agentConfig?.difyKey)
+      || (agentConfig?.platform === 'RAGFLOW' && (agentConfig?.localAgentId || agentConfig?.agentId))
+
+    if (!canLoadHistory) return
 
     const loadSeq = ++sessionSwitchSeqRef.current
 
@@ -1298,21 +1304,41 @@ export default function EnhancedChatWithSidebar({
 
   // 初始化时获取历史对话
   useEffect(() => {
-    if (
-      (agentConfig?.difyUrl && agentConfig?.difyKey)
-      || (agentConfig?.baseUrl && agentConfig?.apiKey && (agentConfig?.localAgentId || agentConfig?.agentId))
-    ) {
-      fetchHistoryConversations()
+    if (agentConfig?.platform === 'DIFY') {
+      if (agentConfig?.difyUrl && agentConfig?.difyKey) fetchHistoryConversations()
+      return
+    }
+
+    if (agentConfig?.platform === 'RAGFLOW') {
+      if (agentConfig?.localAgentId || agentConfig?.agentId) fetchHistoryConversations()
     }
   }, [
+    agentConfig?.platform,
     agentConfig?.difyUrl,
     agentConfig?.difyKey,
-    agentConfig?.baseUrl,
-    agentConfig?.apiKey,
     agentConfig?.agentId,
     agentConfig?.localAgentId,
     fetchHistoryConversations
   ])
+
+  // 支持通过 URL 等方式直达某个会话
+  const initialConversationLoadedRef = useRef(false)
+  useEffect(() => {
+    if (!initialConversationId) return
+    if (initialConversationLoadedRef.current) return
+    if (!agentConfig?.platform) return
+
+    const found = historyConversations.find((c) => c.id === initialConversationId)
+    const fallback = found ?? {
+      id: initialConversationId,
+      name: "历史对话",
+      created_at: String(Date.now()),
+      inputs: {}
+    }
+
+    initialConversationLoadedRef.current = true
+    loadHistoryConversation(fallback)
+  }, [initialConversationId, agentConfig?.platform, historyConversations, loadHistoryConversation])
 
   // 删除历史对话（简化版：只操作 historyConversations）
   const deleteHistoryConversation = async (conversationId: string) => {

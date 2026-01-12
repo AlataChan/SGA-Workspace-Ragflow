@@ -42,11 +42,26 @@ export async function verifyUserAuth(request: NextRequest): Promise<AuthUser | n
         username: true,
         companyId: true,
         role: true,
-        isActive: true
+        isActive: true,
+        departmentId: true,
+        department: {
+          select: {
+            isActive: true
+          }
+        }
       }
     })
 
     if (!user || !user.isActive) {
+      return null
+    }
+
+    if (
+      user.role !== 'ADMIN'
+      && user.departmentId
+      && user.department
+      && !user.department.isActive
+    ) {
       return null
     }
 

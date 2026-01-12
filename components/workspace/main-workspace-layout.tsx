@@ -39,6 +39,7 @@ import {
   Wallet,
   GraduationCap,
   ChevronUp,
+  Pin,
   Mic,
   Video,
   Phone
@@ -114,7 +115,6 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
   const SHOW_AGENT_ACTION_BUTTONS = false
 
   const [searchQuery, setSearchQuery] = useState("")
-  const [currentRotation, setCurrentRotation] = useState(0)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [isAutoRotating, setIsAutoRotating] = useState(true)
   const [userInteracting, setUserInteracting] = useState(false)
@@ -135,15 +135,90 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
   const [knowledgeGraphsCollapsed, setKnowledgeGraphsCollapsed] = useState(false)
   const [graphData, setGraphData] = useState<{ nodes: any[], edges: any[] } | null>(null)
   const [kgSearchQuery, setKgSearchQuery] = useState('') // 知识图谱搜索
+  const [pinnedAgentIds, setPinnedAgentIds] = useState<Set<string>>(new Set())
+  const [pinnedKnowledgeGraphIds, setPinnedKnowledgeGraphIds] = useState<Set<string>>(new Set())
 
   const router = useRouter()
   const searchParams = useSearchParams()
 
+  const pinnedAgentsStorageKey = `sga:pinnedAgents:${user.id}`
+  const pinnedKnowledgeGraphsStorageKey = `sga:pinnedKnowledgeGraphs:${user.id}`
+
   // 使用传入的真实Agent数据
   const realAgents = agents || []
   const cardCount = realAgents.length
-  const angle = cardCount > 0 ? 360 / cardCount : 0
-  const radius = 300 // 调小半径，更精致的展示
+  const activeAgent = realAgents[selectedIndex]
+  const pinnedAgents = Array.from(pinnedAgentIds)
+    .map((agentId) => realAgents.find((agent) => agent.id === agentId))
+    .filter((agent): agent is Agent => Boolean(agent))
+
+  // 从 localStorage 加载置顶状态（按用户隔离）
+  useEffect(() => {
+    try {
+      const rawPinnedAgents = localStorage.getItem(pinnedAgentsStorageKey)
+      if (rawPinnedAgents) {
+        const parsed = JSON.parse(rawPinnedAgents)
+        if (Array.isArray(parsed)) {
+          setPinnedAgentIds(new Set(parsed.filter((id) => typeof id === 'string')))
+        }
+      }
+    } catch (error) {
+      console.warn('加载置顶智能体失败:', error)
+    }
+
+    try {
+      const rawPinnedKgs = localStorage.getItem(pinnedKnowledgeGraphsStorageKey)
+      if (rawPinnedKgs) {
+        const parsed = JSON.parse(rawPinnedKgs)
+        if (Array.isArray(parsed)) {
+          setPinnedKnowledgeGraphIds(new Set(parsed.filter((id) => typeof id === 'string')))
+        }
+      }
+    } catch (error) {
+      console.warn('加载置顶知识图谱失败:', error)
+    }
+  }, [pinnedAgentsStorageKey, pinnedKnowledgeGraphsStorageKey])
+
+  const togglePinnedAgent = (agentId: string) => {
+    setPinnedAgentIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(agentId)) {
+        next.delete(agentId)
+      } else {
+        next.add(agentId)
+      }
+      try {
+        localStorage.setItem(pinnedAgentsStorageKey, JSON.stringify(Array.from(next)))
+      } catch (error) {
+        console.warn('保存置顶智能体失败:', error)
+      }
+      return next
+    })
+  }
+
+  const togglePinnedKnowledgeGraph = (knowledgeGraphId: string) => {
+    setPinnedKnowledgeGraphIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(knowledgeGraphId)) {
+        next.delete(knowledgeGraphId)
+      } else {
+        next.add(knowledgeGraphId)
+      }
+      try {
+        localStorage.setItem(pinnedKnowledgeGraphsStorageKey, JSON.stringify(Array.from(next)))
+      } catch (error) {
+        console.warn('保存置顶知识图谱失败:', error)
+      }
+      return next
+    })
+  }
+
+  // 当 Agent 列表发生变化时，确保 selectedIndex 不越界
+  useEffect(() => {
+    if (cardCount > 0 && selectedIndex >= cardCount) {
+      setSelectedIndex(0)
+    }
+  }, [cardCount, selectedIndex])
 
   // 调试：打印Agent数据
   useEffect(() => {
@@ -248,17 +323,30 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
   }, [])
 
   // 动态生成组织架构
-  const orgStructure = departments.map(dept => ({
-    title: dept.name,
-    icon: getIconComponent(dept.icon),
-    members: realAgents
-      .filter(agent => agent.department.id === dept.id)
-      .map(agent => ({
+  const orgStructure = departments.map((dept) => {
+    const deptAgents = realAgents.filter(
+      (agent) => agent.department.id === dept.id && !pinnedAgentIds.has(agent.id)
+    )
+
+    return {
+      title: dept.name,
+      icon: getIconComponent(dept.icon),
+      members: deptAgents.map((agent) => ({
+        id: agent.id,
         name: agent.chineseName,
         role: agent.position,
-        icon: <User className="w-4 h-4" />
+        icon: <User className="w-4 h-4" />,
+        pinned: false
       }))
-  }))
+    }
+  })
+
+  const filteredKnowledgeGraphs = knowledgeGraphs.filter(
+    (kg) => !kgSearchQuery || kg.name.toLowerCase().includes(kgSearchQuery.toLowerCase())
+  )
+  const pinnedKnowledgeGraphs = filteredKnowledgeGraphs.filter((kg) => pinnedKnowledgeGraphIds.has(kg.id))
+  const unpinnedKnowledgeGraphs = filteredKnowledgeGraphs.filter((kg) => !pinnedKnowledgeGraphIds.has(kg.id))
+  const sortedKnowledgeGraphs = [...pinnedKnowledgeGraphs, ...unpinnedKnowledgeGraphs]
 
   // 图标映射函数
   function getIconComponent(iconName: string) {
@@ -314,11 +402,10 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
   }
 
   // 跳转到指定Agent
-  const jumpToAgent = (agentName: string) => {
-    const agentIndex = realAgents.findIndex(agent => agent.chineseName === agentName)
+  const jumpToAgent = (agentId: string) => {
+    const agentIndex = realAgents.findIndex(agent => agent.id === agentId)
     if (agentIndex !== -1) {
       setSelectedIndex(agentIndex)
-      setCurrentRotation(-agentIndex * angle)
       handleUserInteraction()
     }
   }
@@ -335,16 +422,16 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
   }
 
   const nextAgent = () => {
+    if (cardCount <= 1) return
     const newIndex = (selectedIndex + 1) % cardCount
     setSelectedIndex(newIndex)
-    setCurrentRotation(-newIndex * angle)
     handleUserInteraction()
   }
 
   const prevAgent = () => {
+    if (cardCount <= 1) return
     const newIndex = (selectedIndex - 1 + cardCount) % cardCount
     setSelectedIndex(newIndex)
-    setCurrentRotation(-newIndex * angle)
     handleUserInteraction()
   }
 
@@ -529,15 +616,14 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
 
   // 自动旋转效果
   useEffect(() => {
-    if (!isAutoRotating || cardCount === 0) return
+    if (!isAutoRotating || cardCount <= 1) return
 
     const interval = setInterval(() => {
-      setCurrentRotation(prev => prev - angle)
       setSelectedIndex(prev => (prev + 1) % cardCount)
     }, 4000)
 
     return () => clearInterval(interval)
-  }, [isAutoRotating, angle, cardCount])
+  }, [isAutoRotating, cardCount])
 
   // 页面可见性变化时恢复自动旋转
   useEffect(() => {
@@ -641,139 +727,248 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
             </div>
           </div>
 
-          {/* 导航内容 - 添加滚动 */}
-          <div className="flex-1 overflow-y-auto">
-            {/* 组织架构 */}
-            <div className="p-4 space-y-2">
-              {orgStructure.map((dept, index) => (
-                <div key={index} className="space-y-1">
-                  <button
-                    onClick={() => toggleDepartment(index)}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted transition-colors text-primary text-sm font-medium"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <span className="text-primary">{dept.icon}</span>
-                      <span>{dept.title}</span>
-                    </div>
-                    <ChevronDown
-                      className={`w-4 h-4 transition-transform ${
-                        collapsedDepts.has(index) ? '' : 'rotate-180'
-                      }`}
-                    />
-                  </button>
-                  {!collapsedDepts.has(index) && dept.members.length > 0 && (
-                    <div className="space-y-1 ml-2 animate-in slide-in-from-top-2 duration-200">
-                      {dept.members.map((member, memberIndex) => (
-                        <button
-                          key={memberIndex}
-                          onClick={() => jumpToAgent(member.name)}
-                          className="w-full flex items-center px-3 py-2 rounded-lg hover:bg-muted transition-all duration-200 group text-left"
-                        >
-                          <span className="text-primary mr-3 w-4 h-4 flex items-center justify-center opacity-70 group-hover:opacity-100 transition-opacity">
-                            {member.icon}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-foreground truncate">{member.name}</div>
-                            <div className="text-xs text-muted-foreground truncate">{member.role}</div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* 知识图谱 - 可折叠 */}
-          <div className="px-4 py-2">
-            <Collapsible
-              open={!knowledgeGraphsCollapsed}
-              onOpenChange={(open) => setKnowledgeGraphsCollapsed(!open)}
+          {/* 列表区域：智能体 / 知识图谱（固定分区，内部滚动） */}
+          <div className="flex-1 min-h-0 p-4">
+            <div
+              className={`h-full grid gap-3 ${
+                knowledgeGraphsCollapsed ? 'grid-rows-[1fr_auto]' : 'grid-rows-2'
+              }`}
             >
-              <CollapsibleTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-between p-2 h-auto text-left hover:bg-muted text-foreground"
-                >
+              {/* 智能体列表 */}
+              <div className="min-h-0 rounded-lg border border-border bg-card/50 flex flex-col">
+                <div className="px-3 py-2 border-b border-border flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <Network className="w-4 h-4" />
-                    <span className="font-medium">知识图谱</span>
+                    <Users className="w-4 h-4 text-primary" />
+                    <span className="font-medium text-foreground">智能体</span>
                     <Badge variant="secondary" className="text-xs">
-                      {knowledgeGraphs.length}
+                      {realAgents.length}
                     </Badge>
                   </div>
-                  {knowledgeGraphsCollapsed ? (
-                    <ChevronDown className="w-4 h-4" />
-                  ) : (
-                    <ChevronUp className="w-4 h-4" />
-                  )}
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2">
-                {knowledgeGraphs.length === 0 ? (
-                  <div className="text-center py-6">
-                    <Network className="w-10 h-10 mx-auto text-muted-foreground mb-2" />
-                    <p className="text-sm text-muted-foreground mb-2">暂无知识图谱</p>
-                    {user.role === "ADMIN" && (
-                      <Button variant="outline" size="sm" onClick={goToAdmin}>
-                        前往管理后台配置
-                      </Button>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    {/* 搜索框 - 仅当数量超过5个时显示 */}
-                    {knowledgeGraphs.length > 5 && (
-                      <div className="relative mb-2">
-                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                        <Input
-                          type="text"
-                          placeholder="搜索图谱..."
-                          value={kgSearchQuery}
-                          onChange={(e) => setKgSearchQuery(e.target.value)}
-                          className="pl-7 h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground"
-                        />
-                      </div>
-                    )}
-                    {/* 紧凑列表 - 带内部滚动 */}
-                    <div className="max-h-[240px] overflow-y-auto space-y-0.5 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
-                      {knowledgeGraphs
-                        .filter(kg => !kgSearchQuery || kg.name.toLowerCase().includes(kgSearchQuery.toLowerCase()))
-                        .map((kg) => (
-                          <div
-                            key={kg.id}
-                            className="group flex items-center px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted transition-colors"
-                            onClick={() => handleSelectKnowledgeGraph(kg)}
-                          >
-                            {/* 左侧小图标 */}
-                            <div className="w-5 h-5 rounded bg-gradient-to-br from-purple-500/80 to-pink-500/80 flex items-center justify-center flex-shrink-0">
-                              <Network className="w-3 h-3 text-white" />
-                            </div>
-                            {/* 中间名称 */}
-                            <span className="flex-1 ml-2 text-sm text-foreground truncate" title={kg.name}>
-                              {kg.name}
-                            </span>
-                            {/* 右侧节点数和活跃状态 */}
-                            <div className="flex items-center space-x-1 flex-shrink-0">
-                              <span className="text-xs text-muted-foreground">{kg.nodeCount}</span>
-                              {kg.isActive && (
-                                <div className="w-1.5 h-1.5 rounded-full bg-green-500" title="活跃" />
-                              )}
-                            </div>
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-y-auto space-y-2 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent p-2">
+                  {pinnedAgents.length > 0 && (
+                    <>
+                      <div className="space-y-1">
+                        <div className="px-3 py-2 rounded-lg bg-muted/30 flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <Pin className="w-3.5 h-3.5 text-primary" />
+                            <span className="text-xs font-medium text-foreground">置顶</span>
+                            <Badge variant="secondary" className="text-[10px]">
+                              {pinnedAgents.length}
+                            </Badge>
                           </div>
-                        ))}
-                      {/* 搜索无结果提示 */}
-                      {kgSearchQuery && knowledgeGraphs.filter(kg => kg.name.toLowerCase().includes(kgSearchQuery.toLowerCase())).length === 0 && (
-                        <div className="text-center py-3 text-xs text-muted-foreground">
-                          未找到匹配的图谱
+                        </div>
+
+                        <div className="space-y-1 ml-2">
+                          {pinnedAgents.map((agent) => (
+                            <div
+                              key={agent.id}
+                              className="flex items-center rounded-lg hover:bg-muted transition-all duration-200 group"
+                            >
+                              <button
+                                type="button"
+                                onClick={() => jumpToAgent(agent.id)}
+                                className="flex flex-1 items-center px-3 py-2 text-left"
+                              >
+                                <span className="text-primary mr-3 w-4 h-4 flex items-center justify-center opacity-70 group-hover:opacity-100 transition-opacity">
+                                  <User className="w-4 h-4" />
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-medium text-foreground truncate">
+                                    {agent.chineseName}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground truncate">
+                                    {agent.department.name} · {agent.position}
+                                  </div>
+                                </div>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => togglePinnedAgent(agent.id)}
+                                title="取消置顶"
+                                aria-label="取消置顶智能体"
+                                className="p-2 rounded-md hover:bg-muted/70 transition-colors"
+                              >
+                                <Pin className="w-4 h-4 text-primary" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="h-px bg-border my-2" />
+                    </>
+                  )}
+
+                  {orgStructure.map((dept, index) => (
+                    <div key={`${dept.title}-${index}`} className="space-y-1">
+                      <button
+                        onClick={() => toggleDepartment(index)}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted transition-colors text-primary text-sm font-medium"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <span className="text-primary">{dept.icon}</span>
+                          <span>{dept.title}</span>
+                        </div>
+                        <ChevronDown
+                          className={`w-4 h-4 transition-transform ${
+                            collapsedDepts.has(index) ? '' : 'rotate-180'
+                          }`}
+                        />
+                      </button>
+                      {!collapsedDepts.has(index) && dept.members.length > 0 && (
+                        <div className="space-y-1 ml-2 animate-in slide-in-from-top-2 duration-200">
+                          {dept.members.map((member) => (
+                            <div
+                              key={member.id}
+                              className="flex items-center rounded-lg hover:bg-muted transition-all duration-200 group"
+                            >
+                              <button
+                                type="button"
+                                onClick={() => jumpToAgent(member.id)}
+                                className="flex flex-1 items-center px-3 py-2 text-left"
+                              >
+                                <span className="text-primary mr-3 w-4 h-4 flex items-center justify-center opacity-70 group-hover:opacity-100 transition-opacity">
+                                  {member.icon}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-medium text-foreground truncate">{member.name}</div>
+                                  <div className="text-xs text-muted-foreground truncate">{member.role}</div>
+                                </div>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => togglePinnedAgent(member.id)}
+                                title="置顶"
+                                aria-label="置顶智能体"
+                                className="p-2 rounded-md hover:bg-muted/70 transition-colors"
+                              >
+                                <Pin className="w-4 h-4 text-muted-foreground/60" />
+                              </button>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
-                  </>
-                )}
-              </CollapsibleContent>
-            </Collapsible>
+                  ))}
+                </div>
+              </div>
+
+              {/* 知识图谱列表 - 可折叠 */}
+              <div className="min-h-0 rounded-lg border border-border bg-card/50 flex flex-col">
+                <Collapsible
+                  open={!knowledgeGraphsCollapsed}
+                  onOpenChange={(open) => setKnowledgeGraphsCollapsed(!open)}
+                  className="flex flex-col min-h-0"
+                >
+                  <CollapsibleTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-between px-3 py-2 h-auto text-left hover:bg-muted text-foreground"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <Network className="w-4 h-4" />
+                        <span className="font-medium">知识图谱</span>
+                        <Badge variant="secondary" className="text-xs">
+                          {knowledgeGraphs.length}
+                        </Badge>
+                      </div>
+                      {knowledgeGraphsCollapsed ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronUp className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="flex-1 min-h-0 px-3 pb-3 pt-1">
+                    {knowledgeGraphs.length === 0 ? (
+                      <div className="text-center py-6">
+                        <Network className="w-10 h-10 mx-auto text-muted-foreground mb-2" />
+                        <p className="text-sm text-muted-foreground mb-2">暂无知识图谱</p>
+                        {user.role === "ADMIN" && (
+                          <Button variant="outline" size="sm" onClick={goToAdmin}>
+                            前往管理后台配置
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col min-h-0">
+                        {/* 搜索框 - 仅当数量超过5个时显示 */}
+                        {knowledgeGraphs.length > 5 && (
+                          <div className="relative mb-2">
+                            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                            <Input
+                              type="text"
+                              placeholder="搜索图谱..."
+                              value={kgSearchQuery}
+                              onChange={(e) => setKgSearchQuery(e.target.value)}
+                              className="pl-7 h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground"
+                            />
+                          </div>
+                        )}
+
+                        {/* 列表 - 面板内滚动 */}
+                        <div className="flex-1 min-h-0 overflow-y-auto space-y-0.5 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+                          {sortedKnowledgeGraphs.map((kg) => {
+                            const isPinned = pinnedKnowledgeGraphIds.has(kg.id)
+
+                            return (
+                              <div
+                                key={kg.id}
+                                className="group flex items-center px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted transition-colors"
+                                onClick={() => handleSelectKnowledgeGraph(kg)}
+                              >
+                                {/* 左侧小图标 */}
+                                <div className="w-5 h-5 rounded bg-gradient-to-br from-purple-500/80 to-pink-500/80 flex items-center justify-center flex-shrink-0">
+                                  <Network className="w-3 h-3 text-white" />
+                                </div>
+                                {/* 中间名称 */}
+                                <span className="flex-1 ml-2 text-sm text-foreground truncate" title={kg.name}>
+                                  {kg.name}
+                                </span>
+                                {/* 右侧：置顶 / 节点数 / 活跃 */}
+                                <div className="flex items-center space-x-1.5 flex-shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      togglePinnedKnowledgeGraph(kg.id)
+                                    }}
+                                    title={isPinned ? '取消置顶' : '置顶'}
+                                    aria-label={isPinned ? '取消置顶知识图谱' : '置顶知识图谱'}
+                                    className="p-1 rounded hover:bg-muted/70 transition-colors"
+                                  >
+                                    <Pin
+                                      className={`w-3.5 h-3.5 ${
+                                        isPinned ? 'text-primary' : 'text-muted-foreground/60'
+                                      }`}
+                                    />
+                                  </button>
+                                  <span className="text-xs text-muted-foreground">{kg.nodeCount}</span>
+                                  {kg.isActive && (
+                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500" title="活跃" />
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+
+                          {/* 搜索无结果提示 */}
+                          {kgSearchQuery && sortedKnowledgeGraphs.length === 0 && (
+                            <div className="text-center py-3 text-xs text-muted-foreground">
+                              未找到匹配的图谱
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+            </div>
           </div>
 
           {/* 底部操作区域 - 主题切换和管理员权限控制 */}
@@ -808,68 +1003,76 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
           <div className="flex-1 flex flex-col min-h-0">
 
             {/* Agent展示区域 - 响应式精致布局 */}
-            <div className="flex-1 flex justify-center items-center relative overflow-hidden py-8 md:py-16" style={{ perspective: '1000px' }}>
+            <div className="flex-1 flex justify-center items-center relative overflow-hidden py-8 md:py-16">
               {/* 背景效果 */}
               <div className="absolute bottom-20 w-[450px] h-[110px] bg-gradient-to-r from-transparent via-primary/15 to-transparent rounded-full blur-2xl animate-pulse" />
               <div className="absolute bottom-16 w-[320px] h-[80px] bg-gradient-to-r from-secondary/10 via-primary/25 to-accent/10 rounded-full blur-xl animate-pulse" style={{ animationDelay: '1s' }} />
 
-              {/* 3D旋转容器 - 响应式尺寸 */}
-              <div
-                className="relative w-[200px] h-[300px] sm:w-[240px] sm:h-[360px] md:w-[260px] md:h-[400px] lg:w-[280px] lg:h-[420px] transition-transform duration-[600ms] ease-[cubic-bezier(0.25,0.46,0.45,0.94)]"
-                style={{
-                  transformStyle: 'preserve-3d',
-                  transform: `rotateY(${currentRotation}deg)`
-                }}
-              >
-                {realAgents.map((agent, index) => {
-                  const cardRotation = index * angle
-                  const isActive = index === selectedIndex
-
-                  return (
-                    <div
-                      key={agent.id}
-	                      className={`absolute w-full h-full rounded-[15px] overflow-hidden bg-card border-2 transition-all duration-500 flex flex-col ${
-	                        isActive
-	                          ? 'border-primary shadow-[0_0_25px_hsl(var(--primary)/0.35)] scale-105'
-	                          : 'border-border shadow-[0_0_10px_hsl(var(--foreground)/0.12)]'
-	                      }`}
-                      style={{
-                        transform: `rotateY(${cardRotation}deg) translateZ(${radius}px)`,
-                      }}
-                    >
-                      {/* 全身照片展示 */}
-                      <img
-                        src={agent.photoUrl || agent.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=600&fit=crop'}
-                        alt={agent.chineseName}
-                        className="w-full h-full object-cover object-center"
-                      />
-                      {/* 简洁的名字标签 */}
-                      <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-[rgba(0,0,0,0.9)] to-transparent">
-                        <div className="text-center">
-                          <h4 className="text-base font-semibold text-white truncate"
-                              style={{
-                                textShadow: '0 2px 4px rgba(0,0,0,0.8)'
-                              }}>
-                            {agent.chineseName}
-                          </h4>
-                        </div>
+              {/* 单卡正面展示 - 响应式尺寸 */}
+              <div className="relative flex flex-col items-center">
+                {activeAgent ? (
+                  <div className="relative w-[200px] h-[300px] sm:w-[240px] sm:h-[360px] md:w-[260px] md:h-[400px] lg:w-[280px] lg:h-[420px] rounded-[15px] overflow-hidden bg-card border-2 border-primary shadow-[0_0_25px_hsl(var(--primary)/0.35)]">
+                    {/* 全身照片展示 */}
+                    <img
+                      src={activeAgent.photoUrl || activeAgent.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=600&fit=crop'}
+                      alt={activeAgent.chineseName}
+                      className="w-full h-full object-cover object-center"
+                    />
+                    {/* 简洁的名字标签 */}
+                    <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-[rgba(0,0,0,0.9)] to-transparent">
+                      <div className="text-center">
+                        <h4
+                          className="text-base font-semibold text-white truncate"
+                          style={{
+                            textShadow: '0 2px 4px rgba(0,0,0,0.8)'
+                          }}
+                        >
+                          {activeAgent.chineseName}
+                        </h4>
                       </div>
                     </div>
-                  )
-                })}
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">暂无智能体</div>
+                )}
+
+                {/* 圆点指示器（可选导航） */}
+                {cardCount > 1 && (
+                  <div className="mt-4 flex flex-wrap justify-center gap-2 max-w-[320px]">
+                    {realAgents.map((agent, index) => (
+                      <button
+                        key={agent.id}
+                        type="button"
+                        aria-label={`切换到 ${agent.chineseName}`}
+                        aria-current={index === selectedIndex ? 'true' : undefined}
+                        onClick={() => {
+                          setSelectedIndex(index)
+                          handleUserInteraction()
+                        }}
+                        className={`h-2.5 w-2.5 rounded-full transition-colors ${
+                          index === selectedIndex
+                            ? 'bg-primary'
+                            : 'bg-muted-foreground/30 hover:bg-muted-foreground/50'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* 旋转控制按钮 - 响应式 */}
               <div className="absolute top-1/2 left-2 right-2 sm:left-5 sm:right-5 flex justify-between transform -translate-y-1/2 pointer-events-none">
                 <Button
                   onClick={prevAgent}
-                  className="pointer-events-auto w-[50px] h-[50px] sm:w-[60px] sm:h-[60px] rounded-full border-2 border-primary bg-card text-primary hover:bg-primary hover:text-primary-foreground transition-all duration-300"
+                  disabled={cardCount <= 1}
+                  className="pointer-events-auto w-[50px] h-[50px] sm:w-[60px] sm:h-[60px] rounded-full border-2 border-primary bg-card text-primary hover:bg-primary hover:text-primary-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-card disabled:hover:text-primary"
                 >
                   <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
                 </Button>
                 <Button
                   onClick={nextAgent}
-                  className="pointer-events-auto w-[50px] h-[50px] sm:w-[60px] sm:h-[60px] rounded-full border-2 border-primary bg-card text-primary hover:bg-primary hover:text-primary-foreground transition-all duration-300"
+                  disabled={cardCount <= 1}
+                  className="pointer-events-auto w-[50px] h-[50px] sm:w-[60px] sm:h-[60px] rounded-full border-2 border-primary bg-card text-primary hover:bg-primary hover:text-primary-foreground transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-card disabled:hover:text-primary"
                 >
                   <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
                 </Button>

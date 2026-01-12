@@ -51,7 +51,8 @@ import {
   Heart,
   Zap,
   Target,
-  Globe
+  Globe,
+  Ban
 } from "lucide-react"
 import NewAdminLayout from "@/components/admin/new-admin-layout"
 
@@ -61,6 +62,7 @@ interface Department {
   description?: string
   icon: string
   sortOrder: number
+  isActive: boolean
   agentCount: number
   onlineAgentCount: number
   agents: Array<{
@@ -102,6 +104,7 @@ export default function DepartmentsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
+  const [isTogglingActive, setIsTogglingActive] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   
   // 弹窗状态
@@ -300,6 +303,43 @@ export default function DepartmentsPage() {
     }
   }
 
+  const handleToggleActive = async (department: Department) => {
+    const nextActive = !department.isActive
+    const actionText = nextActive ? '启用' : '停用'
+
+    if (!confirm(`确定要${actionText}部门“${department.name}”吗？`)) {
+      return
+    }
+
+    setIsTogglingActive(department.id)
+    setMessage(null)
+
+    try {
+      const response = await fetch(`/api/admin/departments/${department.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: nextActive }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error?.message || `${actionText}失败`)
+      }
+
+      const data = await response.json()
+      setDepartments(prev => prev.map(d => (d.id === department.id ? data.data : d)))
+      setMessage({ type: 'success', text: `部门已${actionText}` })
+    } catch (error) {
+      console.error('切换部门状态失败:', error)
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : '操作失败，请稍后重试'
+      })
+    } finally {
+      setIsTogglingActive(null)
+    }
+  }
+
   // 获取图标组件
   const getIconComponent = (iconName: string) => {
     const iconOption = iconOptions.find(option => option.value === iconName)
@@ -387,7 +427,14 @@ export default function DepartmentsPage() {
                               <IconComponent className="w-4 h-4 text-primary" />
                             </div>
                             <div>
-                              <div className="font-medium text-foreground">{department.name}</div>
+                              <div className="flex items-center space-x-2">
+                                <div className="font-medium text-foreground">{department.name}</div>
+                                {!department.isActive && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    已停用
+                                  </Badge>
+                                )}
+                              </div>
                               <div className="text-xs text-muted-foreground">
                                 创建于 {new Date(department.createdAt).toLocaleDateString()}
                               </div>
@@ -420,6 +467,23 @@ export default function DepartmentsPage() {
                               onClick={() => openEditDialog(department)}
                             >
                               <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleToggleActive(department)}
+                              disabled={isTogglingActive === department.id}
+                              className={department.isActive ? 'border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400' : 'border-green-500/30 text-green-700 hover:bg-green-500/10 dark:text-green-400'}
+                              title={department.isActive ? '停用' : '启用'}
+                              aria-label={department.isActive ? '停用部门' : '启用部门'}
+                            >
+                              {isTogglingActive === department.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : department.isActive ? (
+                                <Ban className="w-4 h-4" />
+                              ) : (
+                                <CheckCircle className="w-4 h-4" />
+                              )}
                             </Button>
                             <Button
                               variant="outline"

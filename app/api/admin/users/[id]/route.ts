@@ -36,6 +36,7 @@ const updateUserSchema = z.object({
   role: z.nativeEnum(UserRole).optional(),
   password: z.string().min(6, "密码至少6位").optional(),
   avatarUrl: z.string().optional(),
+  isActive: z.boolean().optional(),
 })
 
 // PUT /api/admin/users/[id] - 更新用户
@@ -95,6 +96,19 @@ export const PUT = withAdminAuth(async (request, context) => {
       )
     }
 
+    // 不能停用当前登录管理员，避免误锁死
+    if (userData.isActive === false && targetUser.id === user.userId) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'CANNOT_DISABLE_SELF',
+            message: '不能停用当前登录管理员'
+          }
+        },
+        { status: 400, headers: corsHeaders }
+      )
+    }
+
     // 检查用户名和用户ID是否已被其他用户使用
     if (userData.username || userData.userId) {
       const existingUser = await prisma.user.findFirst({
@@ -139,6 +153,7 @@ export const PUT = withAdminAuth(async (request, context) => {
     if (userData.position !== undefined) updateData.position = userData.position
     if (userData.role) updateData.role = userData.role
     if (userData.avatarUrl !== undefined) updateData.avatarUrl = userData.avatarUrl
+    if (userData.isActive !== undefined) updateData.isActive = userData.isActive
     
     // 如果提供了密码，则加密
     if (userData.password) {

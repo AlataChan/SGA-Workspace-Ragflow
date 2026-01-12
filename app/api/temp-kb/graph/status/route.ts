@@ -7,6 +7,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { tempKbService } from '@/lib/services/temp-kb-service'
 import { verifyToken } from '@/lib/auth/jwt'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * 从请求中获取用户ID
  */
@@ -46,4 +48,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-
