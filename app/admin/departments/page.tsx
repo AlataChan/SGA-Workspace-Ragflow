@@ -518,14 +518,14 @@ export default function DepartmentsPage() {
                 创建新的部门，完善组织架构
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="create-name">部门名称</Label>
-                <Input
-                  id="create-name"
-                  placeholder="请输入部门名称"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+	            <div className="space-y-4">
+	              <div className="space-y-2">
+	                <Label htmlFor="create-name">部门名称 *</Label>
+	                <Input
+	                  id="create-name"
+	                  placeholder="请输入部门名称"
+	                  value={formData.name}
+	                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                 />
               </div>
               <div className="space-y-2">
@@ -604,14 +604,14 @@ export default function DepartmentsPage() {
                 修改部门信息
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-name">部门名称</Label>
-                <Input
-                  id="edit-name"
-                  placeholder="请输入部门名称"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+	            <div className="space-y-4">
+	              <div className="space-y-2">
+	                <Label htmlFor="edit-name">部门名称 *</Label>
+	                <Input
+	                  id="edit-name"
+	                  placeholder="请输入部门名称"
+	                  value={formData.name}
+	                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                 />
               </div>
               <div className="space-y-2">

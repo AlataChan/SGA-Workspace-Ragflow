@@ -481,13 +481,13 @@ export default function UsersPage() {
   }
 
   // 创建用户
-  const handleCreate = async () => {
-    // 验证必填字段
-    if (!formData.username.trim() || !formData.userId.trim() || !formData.phone.trim() || !formData.chineseName.trim() || !formData.password.trim()) {
-      setMessage({ type: 'error', text: '请填写必填字段' })
-      setTimeout(() => setMessage(null), 3000)
-      return
-    }
+	  const handleCreate = async () => {
+	    // 验证必填字段
+	    if (!formData.username.trim() || !formData.userId.trim() || !formData.phone.trim() || !formData.chineseName.trim() || !formData.position.trim() || !formData.password.trim()) {
+	      setMessage({ type: 'error', text: '请填写必填字段' })
+	      setTimeout(() => setMessage(null), 3000)
+	      return
+	    }
 
     setIsSaving(true)
     setMessage(null)
@@ -498,15 +498,15 @@ export default function UsersPage() {
         username: formData.username.trim(),
         userId: formData.userId.trim(),
         phone: formData.phone.trim(),
-        chineseName: formData.chineseName.trim(),
-        englishName: formData.englishName.trim() || undefined,
-        email: formData.email.trim() || undefined,
-        departmentId: formData.departmentId && formData.departmentId !== "none" ? formData.departmentId : undefined,
-        position: formData.position.trim() || undefined,
-        role: formData.role,
-        password: formData.password.trim(),
-        avatarUrl: formData.avatarUrl.trim() || undefined
-      }
+	        chineseName: formData.chineseName.trim(),
+	        englishName: formData.englishName.trim() || undefined,
+	        email: formData.email.trim() || undefined,
+	        departmentId: formData.departmentId && formData.departmentId !== "none" ? formData.departmentId : undefined,
+	        position: formData.position.trim(),
+	        role: formData.role,
+	        password: formData.password.trim(),
+	        avatarUrl: formData.avatarUrl.trim() || undefined
+	      }
 
       console.log('📤 发送请求数据:', requestData)
 
@@ -578,21 +578,26 @@ export default function UsersPage() {
   }
 
   // 更新用户
-  const handleUpdate = async () => {
-    if (!formData.username.trim() || !formData.userId.trim() || !formData.phone.trim() || !formData.chineseName.trim()) {
-      setMessage({ type: 'error', text: '请填写必填字段' })
-      return
-    }
+	  const handleUpdate = async () => {
+	    if (!formData.username.trim() || !formData.userId.trim() || !formData.phone.trim() || !formData.chineseName.trim() || !formData.position.trim()) {
+	      setMessage({ type: 'error', text: '请填写必填字段' })
+	      return
+	    }
 
     setIsSaving(true)
-    setMessage(null)
-
-    try {
-      const updateData: Record<string, any> = { ...formData }
-      // 如果密码为空，则不更新密码
-      if (!updateData.password) {
-        delete updateData.password
-      }
+	    setMessage(null)
+	
+	    try {
+	      const updateData: Record<string, any> = { ...formData }
+	      updateData.username = formData.username.trim()
+	      updateData.userId = formData.userId.trim()
+	      updateData.phone = formData.phone.trim()
+	      updateData.chineseName = formData.chineseName.trim()
+	      updateData.position = formData.position.trim()
+	      // 如果密码为空，则不更新密码
+	      if (!updateData.password) {
+	        delete updateData.password
+	      }
 
       const response = await fetch(`/api/admin/users/${editingUser.id}`, {
         method: 'PUT',
@@ -1391,13 +1396,13 @@ export default function UsersPage() {
                       </option>
                     ))}
                   </select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="create-position">职位</Label>
-                  <Input
-                    id="create-position"
-                    placeholder="请输入职位"
-                    value={formData.position}
+	                </div>
+	                <div className="space-y-2">
+	                  <Label htmlFor="create-position">职位 *</Label>
+	                  <Input
+	                    id="create-position"
+	                    placeholder="请输入职位"
+	                    value={formData.position}
                     onChange={(e) => setFormData(prev => ({ ...prev, position: e.target.value }))}
                   />
                 </div>
@@ -1583,13 +1588,13 @@ export default function UsersPage() {
                       </option>
                     ))}
                   </select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-position">职位</Label>
-                  <Input
-                    id="edit-position"
-                    placeholder="请输入职位"
-                    value={formData.position}
+	                </div>
+	                <div className="space-y-2">
+	                  <Label htmlFor="edit-position">职位 *</Label>
+	                  <Input
+	                    id="edit-position"
+	                    placeholder="请输入职位"
+	                    value={formData.position}
                     onChange={(e) => setFormData(prev => ({ ...prev, position: e.target.value }))}
                   />
                 </div>

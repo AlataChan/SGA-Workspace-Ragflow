@@ -217,7 +217,7 @@ export default function CompanySettingsPage() {
           <CardContent className="space-y-6">
             {/* 公司名称 */}
             <div className="space-y-2">
-              <Label htmlFor="companyName">公司名称</Label>
+              <Label htmlFor="companyName">公司名称 *</Label>
               <Input
                 id="companyName"
                 type="text"

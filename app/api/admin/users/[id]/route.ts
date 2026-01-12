@@ -32,7 +32,7 @@ const updateUserSchema = z.object({
   englishName: z.string().max(50, "英文姓名过长").optional(),
   email: z.string().email("邮箱格式不正确").optional(),
   departmentId: z.string().optional(),
-  position: z.string().max(100, "职位过长").optional(),
+  position: z.string().min(1, "职位不能为空").max(100, "职位过长").optional(),
   role: z.nativeEnum(UserRole).optional(),
   password: z.string().min(6, "密码至少6位").optional(),
   avatarUrl: z.string().optional(),

@@ -981,15 +981,15 @@ export default function AgentsPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              {/* 基本信息 */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="create-chinese-name">中文名称</Label>
-                  <Input
-                    id="create-chinese-name"
-                    placeholder="请输入Agent中文名称"
-                    value={formData.chineseName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, chineseName: e.target.value }))}
+	              {/* 基本信息 */}
+	              <div className="grid grid-cols-2 gap-4">
+	                <div className="space-y-2">
+	                  <Label htmlFor="create-chinese-name">中文名称 *</Label>
+	                  <Input
+	                    id="create-chinese-name"
+	                    placeholder="请输入Agent中文名称"
+	                    value={formData.chineseName}
+	                    onChange={(e) => setFormData(prev => ({ ...prev, chineseName: e.target.value }))}
                   />
                 </div>
                 <div className="space-y-2">
@@ -1061,20 +1061,20 @@ export default function AgentsPage() {
                         </div>
                       </div>
                     </div>
-                  )}
-                  {departments.length > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      当前有 {departments.length} 个部门可选
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="create-position">职位</Label>
-                  <Input
-                    id="create-position"
-                    placeholder="请输入Agent职位"
-                    value={formData.position}
-                    onChange={(e) => setFormData(prev => ({ ...prev, position: e.target.value }))}
+	                  )}
+	                  {departments.length > 0 && (
+	                    <p className="text-xs text-muted-foreground">
+	                      当前有 {departments.length} 个部门可选
+	                    </p>
+	                  )}
+	                </div>
+	                <div className="space-y-2">
+	                  <Label htmlFor="create-position">职位 *</Label>
+	                  <Input
+	                    id="create-position"
+	                    placeholder="请输入Agent职位"
+	                    value={formData.position}
+	                    onChange={(e) => setFormData(prev => ({ ...prev, position: e.target.value }))}
                   />
                 </div>
               </div>
@@ -1116,14 +1116,14 @@ export default function AgentsPage() {
                       {connectionTestResult.success ? '✅ 连接正常' : '❌ 连接失败'}
                     </div>
                   )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="create-platform">平台类型</Label>
-                  <Select
-                    value={formData.platform}
-                    onValueChange={handlePlatformChange}
-                  >
+	                </div>
+	
+	                <div className="space-y-2">
+	                  <Label htmlFor="create-platform">平台类型 *</Label>
+	                  <Select
+	                    value={formData.platform}
+	                    onValueChange={handlePlatformChange}
+	                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -1140,27 +1140,27 @@ export default function AgentsPage() {
                   </Select>
                 </div>
 
-                {/* 动态平台配置表单 */}
-                {formData.platform === 'DIFY' && (
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <Label>Dify Base URL</Label>
-                      <Input
-                        placeholder="https://api.dify.ai/v1"
-                        value={formData.platformConfig.baseUrl || ''}
-                        onChange={(e) => setFormData(prev => ({
-                          ...prev,
+	                {/* 动态平台配置表单 */}
+	                {formData.platform === 'DIFY' && (
+	                  <div className="space-y-3">
+	                    <div className="space-y-2">
+	                      <Label>Dify Base URL *</Label>
+	                      <Input
+	                        placeholder="https://api.dify.ai/v1"
+	                        value={formData.platformConfig.baseUrl || ''}
+	                        onChange={(e) => setFormData(prev => ({
+	                          ...prev,
                           platformConfig: { ...prev.platformConfig, baseUrl: e.target.value }
                         }))}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>API Key</Label>
-                      <Input
-                        type="password"
-                        placeholder="app-xxxxxxxxxxxxxxxx"
-                        value={formData.platformConfig.apiKey || ''}
-                        onChange={(e) => setFormData(prev => ({
+	                      />
+	                    </div>
+	                    <div className="space-y-2">
+	                      <Label>API Key *</Label>
+	                      <Input
+	                        type="password"
+	                        placeholder="app-xxxxxxxxxxxxxxxx"
+	                        value={formData.platformConfig.apiKey || ''}
+	                        onChange={(e) => setFormData(prev => ({
                           ...prev,
                           platformConfig: { ...prev.platformConfig, apiKey: e.target.value }
                         }))}
@@ -1173,28 +1173,28 @@ export default function AgentsPage() {
                     />
                   </div>
                 )}
-
-                {formData.platform === 'RAGFLOW' && (
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <Label>RAGFlow 服务地址</Label>
-                      <Input
-                        placeholder="http://your-ragflow-server:port"
-                        value={formData.platformConfig.baseUrl || ''}
-                        onChange={(e) => setFormData(prev => ({
-                          ...prev,
+	
+	                {formData.platform === 'RAGFLOW' && (
+	                  <div className="space-y-3">
+	                    <div className="space-y-2">
+	                      <Label>RAGFlow 服务地址 *</Label>
+	                      <Input
+	                        placeholder="http://your-ragflow-server:port"
+	                        value={formData.platformConfig.baseUrl || ''}
+	                        onChange={(e) => setFormData(prev => ({
+	                          ...prev,
                           platformConfig: { ...prev.platformConfig, baseUrl: e.target.value }
-                        }))}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>API Key</Label>
-                      <Input
-                        type="password"
-                        placeholder="ragflow-xxxxxxxxxxxxxxxx"
-                        value={formData.platformConfig.apiKey || ''}
-                        onChange={(e) => setFormData(prev => ({
-                          ...prev,
+	                        }))}
+	                      />
+	                    </div>
+	                    <div className="space-y-2">
+	                      <Label>API Key *</Label>
+	                      <Input
+	                        type="password"
+	                        placeholder="ragflow-xxxxxxxxxxxxxxxx"
+	                        value={formData.platformConfig.apiKey || ''}
+	                        onChange={(e) => setFormData(prev => ({
+	                          ...prev,
                           platformConfig: { ...prev.platformConfig, apiKey: e.target.value }
                         }))}
                       />
@@ -1219,16 +1219,16 @@ export default function AgentsPage() {
                             Agent ID（/api/v1/agents）
                           </SelectItem>
                         </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>
-                        {formData.platformConfig.idType === 'AGENT' ? 'Agent ID' : 'Chat Assistant ID'}
-                      </Label>
-                      <Input
-                        placeholder={
-                          formData.platformConfig.idType === 'AGENT'
-                            ? '请输入 RAGFlow 中的 Agent ID（/api/v1/agents 列表里的 id）'
+	                      </Select>
+	                    </div>
+	                    <div className="space-y-2">
+	                      <Label>
+	                        {formData.platformConfig.idType === 'AGENT' ? 'Agent ID' : 'Chat Assistant ID'} *
+	                      </Label>
+	                      <Input
+	                        placeholder={
+	                          formData.platformConfig.idType === 'AGENT'
+	                            ? '请输入 RAGFlow 中的 Agent ID（/api/v1/agents 列表里的 id）'
                             : '请输入 RAGFlow 中的 Chat Assistant ID（/api/v1/chats 列表里的 id）'
                         }
                         value={formData.platformConfig.agentId || ''}
@@ -1259,16 +1259,16 @@ export default function AgentsPage() {
                     />
                   </div>
                 )}
-
-                {formData.platform === 'OPENAI' && (
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <Label>API Key</Label>
-                      <Input
-                        type="password"
-                        placeholder="sk-xxxxxxxxxxxxxxxx"
-                        value={formData.platformConfig.apiKey || ''}
-                        onChange={(e) => setFormData(prev => ({
+	
+	                {formData.platform === 'OPENAI' && (
+	                  <div className="space-y-3">
+	                    <div className="space-y-2">
+	                      <Label>API Key *</Label>
+	                      <Input
+	                        type="password"
+	                        placeholder="sk-xxxxxxxxxxxxxxxx"
+	                        value={formData.platformConfig.apiKey || ''}
+	                        onChange={(e) => setFormData(prev => ({
                           ...prev,
                           platformConfig: { ...prev.platformConfig, apiKey: e.target.value }
                         }))}
@@ -1483,13 +1483,13 @@ export default function AgentsPage() {
                     </div>
                   )}
                 </div>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>平台类型</Label>
-                    <Select
-                      value={formData.platform}
-                      onValueChange={(value: AgentPlatform) => handlePlatformChange(value)}
-                    >
+	                  <div className="space-y-4">
+	                    <div className="space-y-2">
+	                      <Label>平台类型 *</Label>
+	                      <Select
+	                        value={formData.platform}
+	                        onValueChange={(value: AgentPlatform) => handlePlatformChange(value)}
+	                      >
                       <SelectTrigger>
                         <SelectValue>
                           <div className="flex items-center space-x-2">
@@ -1514,27 +1514,27 @@ export default function AgentsPage() {
                       </SelectContent>
                     </Select>
                   </div>
-
-                  {formData.platform === 'DIFY' && (
-                    <div className="space-y-3">
-                      <div className="space-y-2">
-                        <Label>Dify Base URL</Label>
-                        <Input
-                          placeholder="https://api.dify.ai/v1"
-                          value={formData.platformConfig.baseUrl || ''}
-                          onChange={(e) => setFormData(prev => ({
-                            ...prev,
+	
+	                    {formData.platform === 'DIFY' && (
+	                      <div className="space-y-3">
+	                        <div className="space-y-2">
+	                          <Label>Dify Base URL *</Label>
+	                          <Input
+	                            placeholder="https://api.dify.ai/v1"
+	                            value={formData.platformConfig.baseUrl || ''}
+	                            onChange={(e) => setFormData(prev => ({
+	                              ...prev,
                             platformConfig: { ...prev.platformConfig, baseUrl: e.target.value }
                           }))}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>API Key</Label>
-                        <Input
-                          type="password"
-                          placeholder="app-xxxxxxxxxxxxxxxx"
-                          value={formData.platformConfig.apiKey || ''}
-                          onChange={(e) => setFormData(prev => ({
+	                          />
+	                        </div>
+	                        <div className="space-y-2">
+	                          <Label>API Key *</Label>
+	                          <Input
+	                            type="password"
+	                            placeholder="app-xxxxxxxxxxxxxxxx"
+	                            value={formData.platformConfig.apiKey || ''}
+	                            onChange={(e) => setFormData(prev => ({
                             ...prev,
                             platformConfig: { ...prev.platformConfig, apiKey: e.target.value }
                           }))}
@@ -1547,27 +1547,27 @@ export default function AgentsPage() {
                       />
                     </div>
                   )}
-
-                  {formData.platform === 'RAGFLOW' && (
-                    <div className="space-y-3">
-                      <div className="space-y-2">
-                        <Label>RAGFlow 服务地址</Label>
-                        <Input
-                          placeholder="http://your-ragflow-server:port"
-                          value={formData.platformConfig.baseUrl || ''}
-                          onChange={(e) => setFormData(prev => ({
-                            ...prev,
+	
+	                    {formData.platform === 'RAGFLOW' && (
+	                      <div className="space-y-3">
+	                        <div className="space-y-2">
+	                          <Label>RAGFlow 服务地址 *</Label>
+	                          <Input
+	                            placeholder="http://your-ragflow-server:port"
+	                            value={formData.platformConfig.baseUrl || ''}
+	                            onChange={(e) => setFormData(prev => ({
+	                              ...prev,
                             platformConfig: { ...prev.platformConfig, baseUrl: e.target.value }
-                          }))}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>API Key</Label>
-                        <Input
-                          type="password"
-                          placeholder="ragflow-xxxxxxxxxxxxxxxx"
-                          value={formData.platformConfig.apiKey || ''}
-                          onChange={(e) => setFormData(prev => ({
+	                            }))}
+	                          />
+	                        </div>
+	                        <div className="space-y-2">
+	                          <Label>API Key *</Label>
+	                          <Input
+	                            type="password"
+	                            placeholder="ragflow-xxxxxxxxxxxxxxxx"
+	                            value={formData.platformConfig.apiKey || ''}
+	                            onChange={(e) => setFormData(prev => ({
                             ...prev,
                             platformConfig: { ...prev.platformConfig, apiKey: e.target.value }
                           }))}
@@ -1593,16 +1593,16 @@ export default function AgentsPage() {
                               Agent ID（/api/v1/agents）
                             </SelectItem>
                           </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>
-                          {formData.platformConfig.idType === 'AGENT' ? 'Agent ID' : 'Chat Assistant ID'}
-                        </Label>
-                        <Input
-                          placeholder={
-                            formData.platformConfig.idType === 'AGENT'
-                              ? '请输入 RAGFlow 中的 Agent ID（/api/v1/agents 列表里的 id）'
+	                        </Select>
+	                      </div>
+	                      <div className="space-y-2">
+	                        <Label>
+	                          {formData.platformConfig.idType === 'AGENT' ? 'Agent ID' : 'Chat Assistant ID'} *
+	                        </Label>
+	                        <Input
+	                          placeholder={
+	                            formData.platformConfig.idType === 'AGENT'
+	                              ? '请输入 RAGFlow 中的 Agent ID（/api/v1/agents 列表里的 id）'
                               : '请输入 RAGFlow 中的 Chat Assistant ID（/api/v1/chats 列表里的 id）'
                           }
                           value={formData.platformConfig.agentId || ''}
@@ -1633,16 +1633,16 @@ export default function AgentsPage() {
                       />
                     </div>
                   )}
-
-                  {formData.platform === 'OPENAI' && (
-                    <div className="space-y-3">
-                      <div className="space-y-2">
-                        <Label>API Key</Label>
-                        <Input
-                          type="password"
-                          placeholder="sk-xxxxxxxxxxxxxxxx"
-                          value={formData.platformConfig.apiKey || ''}
-                          onChange={(e) => setFormData(prev => ({
+	
+	                    {formData.platform === 'OPENAI' && (
+	                      <div className="space-y-3">
+	                        <div className="space-y-2">
+	                          <Label>API Key *</Label>
+	                          <Input
+	                            type="password"
+	                            placeholder="sk-xxxxxxxxxxxxxxxx"
+	                            value={formData.platformConfig.apiKey || ''}
+	                            onChange={(e) => setFormData(prev => ({
                             ...prev,
                             platformConfig: { ...prev.platformConfig, apiKey: e.target.value }
                           }))}
