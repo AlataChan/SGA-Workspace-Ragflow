@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useMemo, useRef, useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -40,6 +40,7 @@ import {
   GraduationCap,
   ChevronUp,
   Pin,
+  X,
   Mic,
   Video,
   Phone
@@ -96,6 +97,9 @@ interface KnowledgeGraph {
   id: string
   name: string
   description?: string
+  tags?: string[]
+  owner?: string
+  domain?: string
   isActive: boolean
   nodeCount: number
   edgeCount: number
@@ -114,7 +118,6 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
   // 用户反馈暂不需要右侧底部的「语音通话 / 视频会议 / 交互历史」按钮：默认隐藏，后续可随时改回 true
   const SHOW_AGENT_ACTION_BUTTONS = false
 
-  const [searchQuery, setSearchQuery] = useState("")
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [isAutoRotating, setIsAutoRotating] = useState(true)
   const [userInteracting, setUserInteracting] = useState(false)
@@ -134,15 +137,30 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
   const [selectedKnowledgeGraph, setSelectedKnowledgeGraph] = useState<KnowledgeGraph | null>(null)
   const [knowledgeGraphsCollapsed, setKnowledgeGraphsCollapsed] = useState(false)
   const [graphData, setGraphData] = useState<{ nodes: any[], edges: any[] } | null>(null)
-  const [kgSearchQuery, setKgSearchQuery] = useState('') // 知识图谱搜索
+  const [kgSearchQuery, setKgSearchQuery] = useState('') // 知识图谱搜索（记忆）
+  const [kgSearchOpen, setKgSearchOpen] = useState(false)
+  const [kgSearchHighlightedIndex, setKgSearchHighlightedIndex] = useState(-1)
+  const kgSearchInputRef = useRef<HTMLInputElement>(null)
+
+  const [agentSearchQuery, setAgentSearchQuery] = useState('') // 智能体搜索（记忆）
+  const [agentSearchOpen, setAgentSearchOpen] = useState(false)
+  const [agentSearchHighlightedIndex, setAgentSearchHighlightedIndex] = useState(-1)
+  const agentSearchInputRef = useRef<HTMLInputElement>(null)
+
   const [pinnedAgentIds, setPinnedAgentIds] = useState<Set<string>>(new Set())
   const [pinnedKnowledgeGraphIds, setPinnedKnowledgeGraphIds] = useState<Set<string>>(new Set())
+  const [recentAgentIds, setRecentAgentIds] = useState<string[]>([])
+  const [recentKnowledgeGraphIds, setRecentKnowledgeGraphIds] = useState<string[]>([])
 
   const router = useRouter()
   const searchParams = useSearchParams()
 
   const pinnedAgentsStorageKey = `sga:pinnedAgents:${user.id}`
   const pinnedKnowledgeGraphsStorageKey = `sga:pinnedKnowledgeGraphs:${user.id}`
+  const recentAgentsStorageKey = `sga:recentAgents:${user.id}`
+  const recentKnowledgeGraphsStorageKey = `sga:recentKnowledgeGraphs:${user.id}`
+  const agentSearchStorageKey = `sga:sidebarSearch:agents:${user.id}`
+  const kgSearchStorageKey = `sga:sidebarSearch:knowledgeGraphs:${user.id}`
 
   // 使用传入的真实Agent数据
   const realAgents = agents || []
@@ -151,6 +169,30 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
   const pinnedAgents = Array.from(pinnedAgentIds)
     .map((agentId) => realAgents.find((agent) => agent.id === agentId))
     .filter((agent): agent is Agent => Boolean(agent))
+
+  const recordRecentAgent = (agentId: string) => {
+    setRecentAgentIds((prev) => {
+      const next = [agentId, ...prev.filter((id) => id !== agentId)].slice(0, 8)
+      try {
+        localStorage.setItem(recentAgentsStorageKey, JSON.stringify(next))
+      } catch (error) {
+        console.warn('保存最近使用智能体失败:', error)
+      }
+      return next
+    })
+  }
+
+  const recordRecentKnowledgeGraph = (knowledgeGraphId: string) => {
+    setRecentKnowledgeGraphIds((prev) => {
+      const next = [knowledgeGraphId, ...prev.filter((id) => id !== knowledgeGraphId)].slice(0, 8)
+      try {
+        localStorage.setItem(recentKnowledgeGraphsStorageKey, JSON.stringify(next))
+      } catch (error) {
+        console.warn('保存最近使用知识图谱失败:', error)
+      }
+      return next
+    })
+  }
 
   // 从 localStorage 加载置顶状态（按用户隔离）
   useEffect(() => {
@@ -177,7 +219,90 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
     } catch (error) {
       console.warn('加载置顶知识图谱失败:', error)
     }
-  }, [pinnedAgentsStorageKey, pinnedKnowledgeGraphsStorageKey])
+
+    try {
+      const rawRecentAgents = localStorage.getItem(recentAgentsStorageKey)
+      if (rawRecentAgents) {
+        const parsed = JSON.parse(rawRecentAgents)
+        if (Array.isArray(parsed)) {
+          setRecentAgentIds(parsed.filter((id) => typeof id === 'string'))
+        }
+      }
+    } catch (error) {
+      console.warn('加载最近使用智能体失败:', error)
+    }
+
+    try {
+      const rawRecentKgs = localStorage.getItem(recentKnowledgeGraphsStorageKey)
+      if (rawRecentKgs) {
+        const parsed = JSON.parse(rawRecentKgs)
+        if (Array.isArray(parsed)) {
+          setRecentKnowledgeGraphIds(parsed.filter((id) => typeof id === 'string'))
+        }
+      }
+    } catch (error) {
+      console.warn('加载最近使用知识图谱失败:', error)
+    }
+
+    try {
+      const rawAgentSearch = localStorage.getItem(agentSearchStorageKey)
+      if (rawAgentSearch) {
+        const parsed = JSON.parse(rawAgentSearch)
+        if (typeof parsed?.open === 'boolean') setAgentSearchOpen(parsed.open)
+        if (typeof parsed?.query === 'string') setAgentSearchQuery(parsed.query)
+      }
+    } catch (error) {
+      console.warn('加载智能体搜索状态失败:', error)
+    }
+
+    try {
+      const rawKgSearch = localStorage.getItem(kgSearchStorageKey)
+      if (rawKgSearch) {
+        const parsed = JSON.parse(rawKgSearch)
+        if (typeof parsed?.open === 'boolean') {
+          setKgSearchOpen(parsed.open)
+          if (parsed.open) setKnowledgeGraphsCollapsed(false)
+        }
+        if (typeof parsed?.query === 'string') setKgSearchQuery(parsed.query)
+      }
+    } catch (error) {
+      console.warn('加载知识图谱搜索状态失败:', error)
+    }
+  }, [
+    pinnedAgentsStorageKey,
+    pinnedKnowledgeGraphsStorageKey,
+    recentAgentsStorageKey,
+    recentKnowledgeGraphsStorageKey,
+    agentSearchStorageKey,
+    kgSearchStorageKey,
+  ])
+
+  // 记忆：搜索状态持久化（按用户隔离）
+  useEffect(() => {
+    try {
+      localStorage.setItem(agentSearchStorageKey, JSON.stringify({ open: agentSearchOpen, query: agentSearchQuery }))
+    } catch (error) {
+      console.warn('保存智能体搜索状态失败:', error)
+    }
+  }, [agentSearchOpen, agentSearchQuery, agentSearchStorageKey])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(kgSearchStorageKey, JSON.stringify({ open: kgSearchOpen, query: kgSearchQuery }))
+    } catch (error) {
+      console.warn('保存知识图谱搜索状态失败:', error)
+    }
+  }, [kgSearchOpen, kgSearchQuery, kgSearchStorageKey])
+
+  useEffect(() => {
+    if (agentSearchOpen) agentSearchInputRef.current?.focus()
+  }, [agentSearchOpen])
+
+  useEffect(() => {
+    if (!kgSearchOpen) return
+    kgSearchInputRef.current?.focus()
+    setKnowledgeGraphsCollapsed(false)
+  }, [kgSearchOpen])
 
   const togglePinnedAgent = (agentId: string) => {
     setPinnedAgentIds((prev) => {
@@ -341,12 +466,112 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
     }
   })
 
-  const filteredKnowledgeGraphs = knowledgeGraphs.filter(
-    (kg) => !kgSearchQuery || kg.name.toLowerCase().includes(kgSearchQuery.toLowerCase())
-  )
+  const effectiveAgentSearchQuery = agentSearchOpen ? agentSearchQuery : ''
+  const effectiveKgSearchQuery = kgSearchOpen ? kgSearchQuery : ''
+
+  const recentAgents = useMemo(() => {
+    const byId = new Map(realAgents.map((agent) => [agent.id, agent]))
+    const items: Agent[] = []
+    for (const id of recentAgentIds) {
+      if (pinnedAgentIds.has(id)) continue
+      const agent = byId.get(id)
+      if (!agent) continue
+      items.push(agent)
+    }
+    return items
+  }, [pinnedAgentIds, realAgents, recentAgentIds])
+
+  const agentSearchResults = useMemo(() => {
+    const q = effectiveAgentSearchQuery.trim().toLowerCase()
+    if (!q) return []
+    return realAgents.filter((agent) => {
+      const tags = Array.isArray(agent.tags) ? agent.tags.join(' ') : ''
+      const skills = Array.isArray(agent.skills) ? agent.skills.join(' ') : ''
+      const haystack = [
+        agent.chineseName,
+        agent.englishName,
+        agent.position,
+        agent.description,
+        agent.department?.name,
+        agent.experience,
+        tags,
+        skills,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      return haystack.includes(q)
+    })
+  }, [effectiveAgentSearchQuery, realAgents])
+
+  useEffect(() => {
+    const q = effectiveAgentSearchQuery.trim()
+    if (!q) {
+      setAgentSearchHighlightedIndex(-1)
+      return
+    }
+    setAgentSearchHighlightedIndex(agentSearchResults.length > 0 ? 0 : -1)
+  }, [agentSearchResults.length, effectiveAgentSearchQuery])
+
+  useEffect(() => {
+    if (agentSearchHighlightedIndex < 0) return
+    const agent = agentSearchResults[agentSearchHighlightedIndex]
+    if (!agent) return
+    const el = document.querySelector(`[data-agent-search-item="${agent.id}"]`)
+    el?.scrollIntoView?.({ block: 'nearest' })
+  }, [agentSearchHighlightedIndex, agentSearchResults])
+
+  const filteredKnowledgeGraphs = useMemo(() => {
+    const q = effectiveKgSearchQuery.trim().toLowerCase()
+    if (!q) return knowledgeGraphs
+    return knowledgeGraphs.filter((kg) => {
+      const tags = Array.isArray(kg.tags) ? kg.tags.join(' ') : ''
+      const haystack = [
+        kg.name,
+        kg.description,
+        kg.owner,
+        kg.domain,
+        tags,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      return haystack.includes(q)
+    })
+  }, [effectiveKgSearchQuery, knowledgeGraphs])
+
   const pinnedKnowledgeGraphs = filteredKnowledgeGraphs.filter((kg) => pinnedKnowledgeGraphIds.has(kg.id))
   const unpinnedKnowledgeGraphs = filteredKnowledgeGraphs.filter((kg) => !pinnedKnowledgeGraphIds.has(kg.id))
   const sortedKnowledgeGraphs = [...pinnedKnowledgeGraphs, ...unpinnedKnowledgeGraphs]
+
+  const recentKnowledgeGraphs = useMemo(() => {
+    const byId = new Map(knowledgeGraphs.map((kg) => [kg.id, kg]))
+    const items: KnowledgeGraph[] = []
+    for (const id of recentKnowledgeGraphIds) {
+      if (pinnedKnowledgeGraphIds.has(id)) continue
+      const kg = byId.get(id)
+      if (!kg) continue
+      items.push(kg)
+    }
+    return items
+  }, [knowledgeGraphs, pinnedKnowledgeGraphIds, recentKnowledgeGraphIds])
+
+  useEffect(() => {
+    const q = effectiveKgSearchQuery.trim()
+    if (!q) {
+      setKgSearchHighlightedIndex(-1)
+      return
+    }
+    setKgSearchHighlightedIndex(sortedKnowledgeGraphs.length > 0 ? 0 : -1)
+  }, [effectiveKgSearchQuery, sortedKnowledgeGraphs.length])
+
+  useEffect(() => {
+    if (kgSearchHighlightedIndex < 0) return
+    const kg = sortedKnowledgeGraphs[kgSearchHighlightedIndex]
+    if (!kg) return
+    const el = document.querySelector(`[data-kg-search-item="${kg.id}"]`)
+    el?.scrollIntoView?.({ block: 'nearest' })
+  }, [kgSearchHighlightedIndex, sortedKnowledgeGraphs])
 
   // 图标映射函数
   function getIconComponent(iconName: string) {
@@ -405,6 +630,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
   const jumpToAgent = (agentId: string) => {
     const agentIndex = realAgents.findIndex(agent => agent.id === agentId)
     if (agentIndex !== -1) {
+      recordRecentAgent(agentId)
       setSelectedIndex(agentIndex)
       handleUserInteraction()
     }
@@ -437,6 +663,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
 
   // 开始聊天处理函数
   const handleStartChat = (agent: Agent) => {
+    recordRecentAgent(agent.id)
     console.log('开始聊天 - 完整Agent数据:', {
       id: agent.id,
       chineseName: agent.chineseName,
@@ -547,6 +774,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
 
   // 知识图谱选择处理函数
   const handleSelectKnowledgeGraph = async (kg: KnowledgeGraph) => {
+    recordRecentKnowledgeGraph(kg.id)
     setSelectedKnowledgeGraph(kg)
     setSelectedAgent(null)
     setShowChat(false)
@@ -744,27 +972,88 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                       {realAgents.length}
                     </Badge>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setAgentSearchOpen((prev) => !prev)}
+                    className={`p-1.5 rounded-md hover:bg-muted/70 transition-colors ${
+                      agentSearchOpen ? 'text-primary' : 'text-muted-foreground'
+                    }`}
+                    aria-label={agentSearchOpen ? '关闭智能体搜索' : '搜索智能体'}
+                    aria-pressed={agentSearchOpen}
+                  >
+                    <Search className="w-4 h-4" />
+                  </button>
                 </div>
 
-                <div className="flex-1 min-h-0 overflow-y-auto space-y-2 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent p-2">
-                  {pinnedAgents.length > 0 && (
-                    <>
-                      <div className="space-y-1">
-                        <div className="px-3 py-2 rounded-lg bg-muted/30 flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <Pin className="w-3.5 h-3.5 text-primary" />
-                            <span className="text-xs font-medium text-foreground">置顶</span>
-                            <Badge variant="secondary" className="text-[10px]">
-                              {pinnedAgents.length}
-                            </Badge>
-                          </div>
-                        </div>
+                {agentSearchOpen && (
+                  <div className="px-3 py-2 border-b border-border">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input
+                        ref={agentSearchInputRef}
+                        type="text"
+                        placeholder="搜索智能体（名称/描述/标签）..."
+                        value={agentSearchQuery}
+                        onChange={(e) => setAgentSearchQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') {
+                            setAgentSearchOpen(false)
+                            return
+                          }
+                          if (e.key === 'ArrowDown') {
+                            e.preventDefault()
+                            if (agentSearchResults.length === 0) return
+                            setAgentSearchHighlightedIndex((prev) => Math.min(prev + 1, agentSearchResults.length - 1))
+                            return
+                          }
+                          if (e.key === 'ArrowUp') {
+                            e.preventDefault()
+                            if (agentSearchResults.length === 0) return
+                            setAgentSearchHighlightedIndex((prev) => Math.max(prev - 1, 0))
+                            return
+                          }
+                          if (e.key === 'Enter') {
+                            if (agentSearchHighlightedIndex < 0) return
+                            const agent = agentSearchResults[agentSearchHighlightedIndex]
+                            if (!agent) return
+                            e.preventDefault()
+                            jumpToAgent(agent.id)
+                          }
+                        }}
+                        className="pl-7 pr-7 h-8 text-sm bg-card border-border text-foreground placeholder:text-muted-foreground"
+                      />
+                      {agentSearchQuery.trim() && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAgentSearchQuery('')
+                            agentSearchInputRef.current?.focus()
+                          }}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          aria-label="清空智能体搜索"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
-                        <div className="space-y-1 ml-2">
-                          {pinnedAgents.map((agent) => (
+                <div className="flex-1 min-h-0 overflow-y-auto space-y-2 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent p-2">
+                  {effectiveAgentSearchQuery.trim() ? (
+                    agentSearchResults.length > 0 ? (
+                      <div className="space-y-1">
+                        {agentSearchResults.map((agent, index) => {
+                          const isPinned = pinnedAgentIds.has(agent.id)
+                          const isHighlighted = index === agentSearchHighlightedIndex
+                          return (
                             <div
                               key={agent.id}
-                              className="flex items-center rounded-lg hover:bg-muted transition-all duration-200 group"
+                              data-agent-search-item={agent.id}
+                              className={`flex items-center rounded-lg transition-all duration-200 group ${
+                                isHighlighted ? 'bg-muted' : 'hover:bg-muted'
+                              }`}
+                              onMouseEnter={() => setAgentSearchHighlightedIndex(index)}
                             >
                               <button
                                 type="button"
@@ -775,11 +1064,10 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                                   <User className="w-4 h-4" />
                                 </span>
                                 <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-medium text-foreground truncate">
-                                    {agent.chineseName}
-                                  </div>
+                                  <div className="text-sm font-medium text-foreground truncate">{agent.chineseName}</div>
                                   <div className="text-xs text-muted-foreground truncate">
-                                    {agent.department.name} · {agent.position}
+                                    {agent.department?.name ? `${agent.department.name} · ` : ""}
+                                    {agent.position}
                                   </div>
                                 </div>
                               </button>
@@ -787,73 +1075,198 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                               <button
                                 type="button"
                                 onClick={() => togglePinnedAgent(agent.id)}
-                                title="取消置顶"
-                                aria-label="取消置顶智能体"
+                                title={isPinned ? '取消置顶' : '置顶'}
+                                aria-label={isPinned ? '取消置顶智能体' : '置顶智能体'}
                                 className="p-2 rounded-md hover:bg-muted/70 transition-colors"
                               >
-                                <Pin className="w-4 h-4 text-primary" />
+                                <Pin className={`w-4 h-4 ${isPinned ? 'text-primary' : 'text-muted-foreground/60'}`} />
                               </button>
                             </div>
-                          ))}
-                        </div>
+                          )
+                        })}
                       </div>
+                    ) : (
+                      <div className="text-center py-6">
+                        <p className="text-xs text-muted-foreground">未找到匹配的智能体</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAgentSearchQuery('')
+                            agentSearchInputRef.current?.focus()
+                          }}
+                          className="mt-2 text-xs text-primary hover:underline"
+                        >
+                          清空搜索
+                        </button>
+                      </div>
+                    )
+                  ) : (
+                    <>
+                      {pinnedAgents.length > 0 && (
+                        <>
+                          <div className="space-y-1">
+                            <div className="px-3 py-2 rounded-lg bg-muted/30 flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                <Pin className="w-3.5 h-3.5 text-primary" />
+                                <span className="text-xs font-medium text-foreground">置顶</span>
+                                <Badge variant="secondary" className="text-[10px]">
+                                  {pinnedAgents.length}
+                                </Badge>
+                              </div>
+                            </div>
 
-                      <div className="h-px bg-border my-2" />
+                            <div className="space-y-1 ml-2">
+                              {pinnedAgents.map((agent) => (
+                                <div
+                                  key={agent.id}
+                                  className="flex items-center rounded-lg hover:bg-muted transition-all duration-200 group"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => jumpToAgent(agent.id)}
+                                    className="flex flex-1 items-center px-3 py-2 text-left"
+                                  >
+                                    <span className="text-primary mr-3 w-4 h-4 flex items-center justify-center opacity-70 group-hover:opacity-100 transition-opacity">
+                                      <User className="w-4 h-4" />
+                                    </span>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-sm font-medium text-foreground truncate">
+                                        {agent.chineseName}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground truncate">
+                                        {agent.department.name} · {agent.position}
+                                      </div>
+                                    </div>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => togglePinnedAgent(agent.id)}
+                                    title="取消置顶"
+                                    aria-label="取消置顶智能体"
+                                    className="p-2 rounded-md hover:bg-muted/70 transition-colors"
+                                  >
+                                    <Pin className="w-4 h-4 text-primary" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="h-px bg-border my-2" />
+                        </>
+                      )}
+
+                      {recentAgents.length > 0 && (
+                        <>
+                          <div className="space-y-1">
+                            <div className="px-3 py-2 rounded-lg bg-muted/30 flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                <History className="w-3.5 h-3.5 text-primary" />
+                                <span className="text-xs font-medium text-foreground">最近使用</span>
+                                <Badge variant="secondary" className="text-[10px]">
+                                  {recentAgents.length}
+                                </Badge>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1 ml-2">
+                              {recentAgents.map((agent) => (
+                                <div
+                                  key={agent.id}
+                                  className="flex items-center rounded-lg hover:bg-muted transition-all duration-200 group"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => jumpToAgent(agent.id)}
+                                    className="flex flex-1 items-center px-3 py-2 text-left"
+                                  >
+                                    <span className="text-primary mr-3 w-4 h-4 flex items-center justify-center opacity-70 group-hover:opacity-100 transition-opacity">
+                                      <User className="w-4 h-4" />
+                                    </span>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-sm font-medium text-foreground truncate">
+                                        {agent.chineseName}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground truncate">
+                                        {agent.department?.name ? `${agent.department.name} · ` : ""}
+                                        {agent.position}
+                                      </div>
+                                    </div>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => togglePinnedAgent(agent.id)}
+                                    title="置顶"
+                                    aria-label="置顶智能体"
+                                    className="p-2 rounded-md hover:bg-muted/70 transition-colors"
+                                  >
+                                    <Pin className="w-4 h-4 text-muted-foreground/60" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="h-px bg-border my-2" />
+                        </>
+                      )}
+
+                      {orgStructure.map((dept, index) => (
+                        <div key={`${dept.title}-${index}`} className="space-y-1">
+                          <button
+                            onClick={() => toggleDepartment(index)}
+                            className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted transition-colors text-primary text-sm font-medium"
+                          >
+                            <div className="flex items-center space-x-2">
+                              <span className="text-primary">{dept.icon}</span>
+                              <span>{dept.title}</span>
+                            </div>
+                            <ChevronDown
+                              className={`w-4 h-4 transition-transform ${
+                                collapsedDepts.has(index) ? '' : 'rotate-180'
+                              }`}
+                            />
+                          </button>
+                          {!collapsedDepts.has(index) && dept.members.length > 0 && (
+                            <div className="space-y-1 ml-2 animate-in slide-in-from-top-2 duration-200">
+                              {dept.members.map((member) => (
+                                <div
+                                  key={member.id}
+                                  className="flex items-center rounded-lg hover:bg-muted transition-all duration-200 group"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => jumpToAgent(member.id)}
+                                    className="flex flex-1 items-center px-3 py-2 text-left"
+                                  >
+                                    <span className="text-primary mr-3 w-4 h-4 flex items-center justify-center opacity-70 group-hover:opacity-100 transition-opacity">
+                                      {member.icon}
+                                    </span>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-sm font-medium text-foreground truncate">{member.name}</div>
+                                      <div className="text-xs text-muted-foreground truncate">{member.role}</div>
+                                    </div>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => togglePinnedAgent(member.id)}
+                                    title="置顶"
+                                    aria-label="置顶智能体"
+                                    className="p-2 rounded-md hover:bg-muted/70 transition-colors"
+                                  >
+                                    <Pin className="w-4 h-4 text-muted-foreground/60" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </>
                   )}
-
-                  {orgStructure.map((dept, index) => (
-                    <div key={`${dept.title}-${index}`} className="space-y-1">
-                      <button
-                        onClick={() => toggleDepartment(index)}
-                        className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted transition-colors text-primary text-sm font-medium"
-                      >
-                        <div className="flex items-center space-x-2">
-                          <span className="text-primary">{dept.icon}</span>
-                          <span>{dept.title}</span>
-                        </div>
-                        <ChevronDown
-                          className={`w-4 h-4 transition-transform ${
-                            collapsedDepts.has(index) ? '' : 'rotate-180'
-                          }`}
-                        />
-                      </button>
-                      {!collapsedDepts.has(index) && dept.members.length > 0 && (
-                        <div className="space-y-1 ml-2 animate-in slide-in-from-top-2 duration-200">
-                          {dept.members.map((member) => (
-                            <div
-                              key={member.id}
-                              className="flex items-center rounded-lg hover:bg-muted transition-all duration-200 group"
-                            >
-                              <button
-                                type="button"
-                                onClick={() => jumpToAgent(member.id)}
-                                className="flex flex-1 items-center px-3 py-2 text-left"
-                              >
-                                <span className="text-primary mr-3 w-4 h-4 flex items-center justify-center opacity-70 group-hover:opacity-100 transition-opacity">
-                                  {member.icon}
-                                </span>
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-medium text-foreground truncate">{member.name}</div>
-                                  <div className="text-xs text-muted-foreground truncate">{member.role}</div>
-                                </div>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => togglePinnedAgent(member.id)}
-                                title="置顶"
-                                aria-label="置顶智能体"
-                                className="p-2 rounded-md hover:bg-muted/70 transition-colors"
-                              >
-                                <Pin className="w-4 h-4 text-muted-foreground/60" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
                 </div>
               </div>
 
@@ -876,11 +1289,29 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                           {knowledgeGraphs.length}
                         </Badge>
                       </div>
-                      {knowledgeGraphsCollapsed ? (
-                        <ChevronDown className="w-4 h-4" />
-                      ) : (
-                        <ChevronUp className="w-4 h-4" />
-                      )}
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setKgSearchOpen((prev) => !prev)
+                          }}
+                          className={`p-1.5 rounded-md hover:bg-muted/70 transition-colors ${
+                            kgSearchOpen ? 'text-primary' : 'text-muted-foreground'
+                          }`}
+                          aria-label={kgSearchOpen ? '关闭知识图谱搜索' : '搜索知识图谱'}
+                          aria-pressed={kgSearchOpen}
+                          disabled={knowledgeGraphs.length === 0}
+                        >
+                          <Search className="w-4 h-4" />
+                        </button>
+                        {knowledgeGraphsCollapsed ? (
+                          <ChevronDown className="w-4 h-4" />
+                        ) : (
+                          <ChevronUp className="w-4 h-4" />
+                        )}
+                      </div>
                     </Button>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="flex-1 min-h-0 px-3 pb-3 pt-1">
@@ -896,30 +1327,116 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                       </div>
                     ) : (
                       <div className="flex flex-col min-h-0">
-                        {/* 搜索框 - 仅当数量超过5个时显示 */}
-                        {knowledgeGraphs.length > 5 && (
+                        {kgSearchOpen && (
                           <div className="relative mb-2">
-                            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                             <Input
+                              ref={kgSearchInputRef}
                               type="text"
-                              placeholder="搜索图谱..."
+                              placeholder="搜索图谱（名称/描述/标签/负责人/业务域）..."
                               value={kgSearchQuery}
                               onChange={(e) => setKgSearchQuery(e.target.value)}
-                              className="pl-7 h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Escape') {
+                                  setKgSearchOpen(false)
+                                  return
+                                }
+                                if (!effectiveKgSearchQuery.trim()) return
+
+                                if (e.key === 'ArrowDown') {
+                                  e.preventDefault()
+                                  if (sortedKnowledgeGraphs.length === 0) return
+                                  setKgSearchHighlightedIndex((prev) => Math.min(prev + 1, sortedKnowledgeGraphs.length - 1))
+                                  return
+                                }
+                                if (e.key === 'ArrowUp') {
+                                  e.preventDefault()
+                                  if (sortedKnowledgeGraphs.length === 0) return
+                                  setKgSearchHighlightedIndex((prev) => Math.max(prev - 1, 0))
+                                  return
+                                }
+                                if (e.key === 'Enter') {
+                                  if (kgSearchHighlightedIndex < 0) return
+                                  const kg = sortedKnowledgeGraphs[kgSearchHighlightedIndex]
+                                  if (!kg) return
+                                  e.preventDefault()
+                                  handleSelectKnowledgeGraph(kg)
+                                }
+                              }}
+                              className="pl-7 pr-7 h-8 text-sm bg-card border-border text-foreground placeholder:text-muted-foreground"
                             />
+                            {kgSearchQuery.trim() && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setKgSearchQuery('')
+                                  kgSearchInputRef.current?.focus()
+                                }}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                aria-label="清空知识图谱搜索"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         )}
 
                         {/* 列表 - 面板内滚动 */}
                         <div className="flex-1 min-h-0 overflow-y-auto space-y-0.5 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
-                          {sortedKnowledgeGraphs.map((kg) => {
+                          {!effectiveKgSearchQuery.trim() && recentKnowledgeGraphs.length > 0 && (
+                            <>
+                              <div className="px-2 py-1.5 rounded-md bg-muted/30 flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                  <History className="w-3.5 h-3.5 text-primary" />
+                                  <span className="text-xs font-medium text-foreground">最近使用</span>
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    {recentKnowledgeGraphs.length}
+                                  </Badge>
+                                </div>
+                              </div>
+                              <div className="mt-1 space-y-0.5">
+                                {recentKnowledgeGraphs.map((kg) => (
+                                  <div
+                                    key={`recent_${kg.id}`}
+                                    className="group flex items-center px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted transition-colors"
+                                    onClick={() => handleSelectKnowledgeGraph(kg)}
+                                  >
+                                    <div className="w-5 h-5 rounded bg-gradient-to-br from-purple-500/80 to-pink-500/80 flex items-center justify-center flex-shrink-0">
+                                      <Network className="w-3 h-3 text-white" />
+                                    </div>
+                                    <span className="flex-1 ml-2 text-sm text-foreground truncate" title={kg.name}>
+                                      {kg.name}
+                                    </span>
+                                    <div className="flex items-center space-x-1.5 flex-shrink-0">
+                                      <span className="text-xs text-muted-foreground">{kg.nodeCount}</span>
+                                      {kg.isActive && (
+                                        <div className="w-1.5 h-1.5 rounded-full bg-green-500" title="活跃" />
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="h-px bg-border my-2" />
+                            </>
+                          )}
+
+                          {sortedKnowledgeGraphs.map((kg, index) => {
                             const isPinned = pinnedKnowledgeGraphIds.has(kg.id)
+                            const isHighlighted = index === kgSearchHighlightedIndex
 
                             return (
                               <div
                                 key={kg.id}
-                                className="group flex items-center px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted transition-colors"
+                                data-kg-search-item={kg.id}
+                                className={`group flex items-center px-2 py-1.5 rounded-md cursor-pointer transition-colors ${
+                                  isHighlighted ? 'bg-muted' : 'hover:bg-muted'
+                                }`}
                                 onClick={() => handleSelectKnowledgeGraph(kg)}
+                                onMouseEnter={() => {
+                                  if (effectiveKgSearchQuery.trim()) {
+                                    setKgSearchHighlightedIndex(index)
+                                  }
+                                }}
                               >
                                 {/* 左侧小图标 */}
                                 <div className="w-5 h-5 rounded bg-gradient-to-br from-purple-500/80 to-pink-500/80 flex items-center justify-center flex-shrink-0">
@@ -957,9 +1474,19 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                           })}
 
                           {/* 搜索无结果提示 */}
-                          {kgSearchQuery && sortedKnowledgeGraphs.length === 0 && (
-                            <div className="text-center py-3 text-xs text-muted-foreground">
-                              未找到匹配的图谱
+                          {effectiveKgSearchQuery.trim() && sortedKnowledgeGraphs.length === 0 && (
+                            <div className="text-center py-3">
+                              <p className="text-xs text-muted-foreground">未找到匹配的图谱</p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setKgSearchQuery('')
+                                  kgSearchInputRef.current?.focus()
+                                }}
+                                className="mt-2 text-xs text-primary hover:underline"
+                              >
+                                清空搜索
+                              </button>
                             </div>
                           )}
                         </div>

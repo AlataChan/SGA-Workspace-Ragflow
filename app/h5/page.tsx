@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Bot, History, MessageCircle, Search } from "lucide-react"
+import { Search } from "lucide-react"
 
 interface H5Agent {
   id: string
@@ -47,11 +46,11 @@ function storeToken(token: string) {
 function H5HomePageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const activeTab = searchParams.get("tab") === "history" ? "history" : "agents"
 
   const [token, setToken] = useState<string | null>(null)
   const [agents, setAgents] = useState<H5Agent[]>([])
   const [sessions, setSessions] = useState<H5ChatSession[]>([])
-  const [activeTab, setActiveTab] = useState<"chat" | "agent" | "history">("chat")
   const [query, setQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -121,16 +120,14 @@ function H5HomePageContent() {
   const ragflowAgents = useMemo(() => agents.filter((a) => a.platform === "RAGFLOW"), [agents])
   const agentsById = useMemo(() => new Map(ragflowAgents.map((a) => [a.id, a])), [ragflowAgents])
 
-  const filteredChatAgents = useMemo(() => {
+  const filteredAgents = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const list = ragflowAgents.filter((a) => (a.platformConfig?.idType || "CHAT") === "CHAT")
-    if (!q) return list
-    return list.filter((a) => `${a.chineseName} ${a.position || ""} ${a.department?.name || ""}`.toLowerCase().includes(q))
-  }, [ragflowAgents, query])
-
-  const filteredAgentAgents = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    const list = ragflowAgents.filter((a) => (a.platformConfig?.idType || "CHAT") === "AGENT")
+    const list = ragflowAgents.slice().sort((a, b) => {
+      const at = (a.platformConfig?.idType || "CHAT") === "AGENT" ? 1 : 0
+      const bt = (b.platformConfig?.idType || "CHAT") === "AGENT" ? 1 : 0
+      if (at !== bt) return at - bt
+      return a.chineseName.localeCompare(b.chineseName, "zh-CN")
+    })
     if (!q) return list
     return list.filter((a) => `${a.chineseName} ${a.position || ""} ${a.department?.name || ""}`.toLowerCase().includes(q))
   }, [ragflowAgents, query])
@@ -160,11 +157,11 @@ function H5HomePageContent() {
   }
 
   return (
-    <div className="min-h-[100dvh] flex flex-col">
+    <div className="h-full min-h-0 flex flex-col">
       <div className="px-4 pt-4 pb-3 border-b bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/40">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-base font-semibold text-foreground truncate">移动端聊天</div>
+            <div className="text-base font-semibold text-foreground truncate">移动端智能体</div>
             <div className="text-xs text-muted-foreground truncate">RAGFLOW · 智能体与历史对话</div>
           </div>
           <Badge variant="secondary" className="shrink-0">
@@ -184,160 +181,108 @@ function H5HomePageContent() {
       </div>
 
       <div className="flex-1 min-h-0 p-4">
-        <Card className="h-full p-3">
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="h-full flex flex-col">
-            <TabsList className="grid grid-cols-3">
-              <TabsTrigger value="chat" className="gap-2">
-                <MessageCircle className="w-4 h-4" />
-                Chat
-              </TabsTrigger>
-              <TabsTrigger value="agent" className="gap-2">
-                <Bot className="w-4 h-4" />
-                Agent
-              </TabsTrigger>
-              <TabsTrigger value="history" className="gap-2">
-                <History className="w-4 h-4" />
-                历史
-              </TabsTrigger>
-            </TabsList>
-
-            <div className="flex-1 min-h-0 mt-3">
-              {isLoading ? (
-                <div className="h-full flex items-center justify-center text-sm text-muted-foreground">加载中…</div>
-              ) : error ? (
-                <div className="h-full flex flex-col items-center justify-center text-center gap-3">
-                  <div className="text-sm text-muted-foreground max-w-[280px]">{error}</div>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      const t = getStoredToken()
-                      setToken(t)
-                      setError(null)
-                      setIsLoading(true)
-                    }}
-                  >
-                    重试
-                  </Button>
+        <Card className="h-full p-3 flex flex-col">
+          <div className="flex-1 min-h-0">
+            {isLoading ? (
+              <div className="h-full flex items-center justify-center text-sm text-muted-foreground">加载中…</div>
+            ) : error ? (
+              <div className="h-full flex flex-col items-center justify-center text-center gap-3">
+                <div className="text-sm text-muted-foreground max-w-[280px]">{error}</div>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const t = getStoredToken()
+                    setToken(t)
+                    setError(null)
+                    setIsLoading(true)
+                  }}
+                >
+                  重试
+                </Button>
+              </div>
+            ) : activeTab === "history" ? (
+              <ScrollArea className="h-full">
+                <div className="space-y-2">
+                  {filteredHistory.length === 0 ? (
+                    <div className="py-10 text-center text-sm text-muted-foreground">暂无历史对话</div>
+                  ) : (
+                    filteredHistory.map((s) => {
+                      const agent = agentsById.get(s.agentId)
+                      const title = s.sessionName || "未命名对话"
+                      const count = s.messages?.length || 0
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => openAgentChat(s.agentId, s.id)}
+                          className="w-full text-left"
+                        >
+                          <div className="rounded-lg border border-border p-3 hover:bg-muted/40 transition-colors">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium text-foreground truncate">{title}</div>
+                                <div className="text-xs text-muted-foreground truncate">
+                                  {agent?.chineseName || "未知助手"}
+                                </div>
+                              </div>
+                              <Badge variant="secondary" className="shrink-0">
+                                {count}
+                              </Badge>
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })
+                  )}
                 </div>
-              ) : (
-                <>
-                  <TabsContent value="chat" className="h-full mt-0">
-                    <ScrollArea className="h-full">
-                      <div className="space-y-2">
-                        {filteredChatAgents.length === 0 ? (
-                          <div className="py-10 text-center text-sm text-muted-foreground">暂无 Chat Assistant</div>
-                        ) : (
-                          filteredChatAgents.map((agent) => (
-                            <button
-                              key={agent.id}
-                              type="button"
-                              onClick={() => openAgentChat(agent.id)}
-                              className="w-full text-left"
-                            >
-                              <div className="rounded-lg border border-border p-3 hover:bg-muted/40 transition-colors">
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <div className="text-sm font-medium text-foreground truncate">
-                                      {agent.chineseName}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground truncate">
-                                      {agent.department?.name ? `${agent.department.name} · ` : ""}
-                                      {agent.position || "RAGFLOW Chat"}
-                                    </div>
-                                  </div>
-                                  <Badge variant={agent.isOnline ? "default" : "secondary"} className="shrink-0">
-                                    {agent.isOnline ? "在线" : "离线"}
-                                  </Badge>
+              </ScrollArea>
+            ) : (
+              <ScrollArea className="h-full">
+                <div className="space-y-2">
+                  {filteredAgents.length === 0 ? (
+                    <div className="py-10 text-center text-sm text-muted-foreground">暂无智能体</div>
+                  ) : (
+                    filteredAgents.map((agent) => {
+                      const isAgent = (agent.platformConfig?.idType || "CHAT") === "AGENT"
+                      return (
+                        <button
+                          key={agent.id}
+                          type="button"
+                          onClick={() => openAgentChat(agent.id)}
+                          className="w-full text-left"
+                        >
+                          <div className="rounded-lg border border-border p-3 hover:bg-muted/40 transition-colors">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium text-foreground truncate">{agent.chineseName}</div>
+                                <div className="text-xs text-muted-foreground truncate">
+                                  {agent.department?.name ? `${agent.department.name} · ` : ""}
+                                  {agent.position || (isAgent ? "RAGFLOW Agent" : "RAGFLOW Chat")}
                                 </div>
                               </div>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </ScrollArea>
-                  </TabsContent>
-
-                  <TabsContent value="agent" className="h-full mt-0">
-                    <ScrollArea className="h-full">
-                      <div className="space-y-2">
-                        {filteredAgentAgents.length === 0 ? (
-                          <div className="py-10 text-center text-sm text-muted-foreground">暂无 Agent</div>
-                        ) : (
-                          filteredAgentAgents.map((agent) => (
-                            <button
-                              key={agent.id}
-                              type="button"
-                              onClick={() => openAgentChat(agent.id)}
-                              className="w-full text-left"
-                            >
-                              <div className="rounded-lg border border-border p-3 hover:bg-muted/40 transition-colors">
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <div className="text-sm font-medium text-foreground truncate">
-                                      {agent.chineseName}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground truncate">
-                                      {agent.department?.name ? `${agent.department.name} · ` : ""}
-                                      {agent.position || "RAGFLOW Agent"}
-                                    </div>
-                                  </div>
-                                  <Badge variant="outline" className="shrink-0">
-                                    执行
-                                  </Badge>
-                                </div>
-                              </div>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </ScrollArea>
-                  </TabsContent>
-
-                  <TabsContent value="history" className="h-full mt-0">
-                    <ScrollArea className="h-full">
-                      <div className="space-y-2">
-                        {filteredHistory.length === 0 ? (
-                          <div className="py-10 text-center text-sm text-muted-foreground">暂无历史对话</div>
-                        ) : (
-                          filteredHistory.map((s) => {
-                            const agent = agentsById.get(s.agentId)
-                            const title = s.sessionName || "未命名对话"
-                            const count = s.messages?.length || 0
-                            return (
-                              <button
-                                key={s.id}
-                                type="button"
-                                onClick={() => openAgentChat(s.agentId, s.id)}
-                                className="w-full text-left"
-                              >
-                                <div className="rounded-lg border border-border p-3 hover:bg-muted/40 transition-colors">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <div className="min-w-0">
-                                      <div className="text-sm font-medium text-foreground truncate">{title}</div>
-                                      <div className="text-xs text-muted-foreground truncate">
-                                        {agent?.chineseName || "未知助手"}
-                                      </div>
-                                    </div>
-                                    <Badge variant="secondary" className="shrink-0">
-                                      {count}
-                                    </Badge>
-                                  </div>
-                                </div>
-                              </button>
-                            )
-                          })
-                        )}
-                      </div>
-                    </ScrollArea>
-                  </TabsContent>
-                </>
-              )}
-            </div>
-          </Tabs>
+                              {isAgent ? (
+                                <Badge variant="outline" className="shrink-0">
+                                  执行
+                                </Badge>
+                              ) : (
+                                <Badge variant={agent.isOnline ? "default" : "secondary"} className="shrink-0">
+                                  {agent.isOnline ? "在线" : "离线"}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })
+                  )}
+                </div>
+              </ScrollArea>
+            )}
+          </div>
         </Card>
       </div>
 
-      <div className="px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
+      <div className="px-4 pb-4">
         <div className="text-[11px] text-muted-foreground text-center">
           提示：若无法加载，请确认已登录并携带有效 token
         </div>
@@ -350,7 +295,7 @@ export default function H5HomePage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-[100dvh] flex items-center justify-center text-sm text-muted-foreground">
+        <div className="h-full min-h-0 flex items-center justify-center text-sm text-muted-foreground">
           加载中…
         </div>
       }

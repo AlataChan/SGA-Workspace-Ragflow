@@ -657,6 +657,7 @@ export default function EnhancedChatWithSidebar({
 
   const [currentSessionId, setCurrentSessionId] = useState('draft_default')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
@@ -1025,6 +1026,7 @@ export default function EnhancedChatWithSidebar({
 
   // 创建新会话
   const createNewSession = () => {
+    setMobileSidebarOpen(false)
     // Invalidate any in-flight history loads / streaming updates.
     sessionSwitchSeqRef.current += 1
 
@@ -1077,6 +1079,7 @@ export default function EnhancedChatWithSidebar({
     const loadSeq = ++sessionSwitchSeqRef.current
 
     try {
+      setMobileSidebarOpen(false)
       setIsLoadingHistory(true)
       console.log('[EnhancedChat] 加载历史对话:', historyConv.id)
 
@@ -2540,7 +2543,7 @@ export default function EnhancedChatWithSidebar({
 
         /* 图片样式 - 限制大小 */
         .message-content img {
-          max-width: 400px !important;
+          max-width: min(400px, 100%) !important;
           max-height: 300px !important;
           width: auto !important;
           height: auto !important;
@@ -2637,9 +2640,23 @@ export default function EnhancedChatWithSidebar({
         }
       `}</style>
 
+      {mobileSidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
       <div className="h-full flex bg-background">
         {/* 侧边栏 */}
-        <div className={`${sidebarCollapsed ? 'w-16' : 'w-80'} transition-all duration-300 bg-card/60 backdrop-blur-sm border-r border-border flex flex-col`}>
+        <div
+          className={[
+            "flex flex-col border-r border-border backdrop-blur-sm",
+            "fixed inset-y-0 left-0 z-50 w-[85vw] max-w-sm bg-card/95 transition-transform duration-300 md:static md:z-auto md:max-w-none md:bg-card/60 md:transition-all",
+            mobileSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+            sidebarCollapsed ? "md:w-16" : "md:w-80",
+          ].join(" ")}
+        >
           {/* 侧边栏头部 */}
           <div className="p-4 border-b border-border">
             <div className="flex items-center justify-between">
@@ -2655,8 +2672,18 @@ export default function EnhancedChatWithSidebar({
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={() => setMobileSidebarOpen(false)}
+                className="text-muted-foreground hover:text-foreground hover:bg-muted/50 md:hidden"
+                aria-label="关闭会话列表"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted/50 hidden md:inline-flex"
+                aria-label={sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
               >
                 <MessageSquare className="w-4 h-4" />
               </Button>
@@ -2862,25 +2889,38 @@ export default function EnhancedChatWithSidebar({
         </div>
 
         {/* 主聊天区域 */}
-          <div className="flex-1 flex flex-col">
+        <div className="flex-1 min-w-0 flex flex-col">
           <div className="p-4 border-b border-border bg-card/70 backdrop-blur-sm">
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSidebarCollapsed(false)
+                  setMobileSidebarOpen(true)
+                }}
+                className="md:hidden text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                aria-label="打开会话列表"
+              >
+                <MessageSquare className="w-4 h-4" />
+              </Button>
+
               <Avatar className="w-12 h-12 ring-2 ring-primary/30">
                 <AvatarImage src={actualAgentAvatar} />
                 <AvatarFallback className="bg-gradient-to-r from-primary to-accent text-primary-foreground text-lg font-semibold">
                   {agentName?.[0] || 'A'}
                 </AvatarFallback>
               </Avatar>
-              <div>
-                <h3 className="font-semibold text-foreground">{agentName || 'AI助手'}</h3>
-                <p className="text-sm text-muted-foreground">
+              <div className="min-w-0">
+                <h3 className="font-semibold text-foreground truncate">{agentName || 'AI助手'}</h3>
+                <p className="text-sm text-muted-foreground truncate">
                   {currentSession?.title || '新对话'}
                 </p>
               </div>
             </div>
           </div>
 
-          <ScrollArea className="flex-1 p-6">
+          <ScrollArea className="flex-1 p-3 sm:p-4 md:p-6">
             <div key={currentSessionId} className="space-y-6 w-full">
               {currentSession?.messages.map((message) => {
                 const isUser = message.role === 'user'
@@ -2892,9 +2932,9 @@ export default function EnhancedChatWithSidebar({
                 const hasInlineReferenceMarkers = shouldStripRagflowIds && hasRagflowInlineReferenceMarkers(rawContent)
 
                 return (
-                  <div key={message.id} className={`flex w-full ${isUser ? 'justify-end pr-8' : 'justify-start pl-8'} mb-6`}>
-                    <div className={`flex ${isUser ? 'flex-row-reverse' : 'flex-row'} items-start space-x-4 ${isUser ? 'space-x-reverse' : ''} max-w-[75%]`}>
-                      <Avatar className="w-[50px] h-[50px] flex-shrink-0 mt-1">
+                  <div key={message.id} className={`flex w-full ${isUser ? 'justify-end pr-2 sm:pr-8' : 'justify-start pl-2 sm:pl-8'} mb-6`}>
+                    <div className={`flex ${isUser ? 'flex-row-reverse' : 'flex-row'} items-start space-x-3 sm:space-x-4 ${isUser ? 'space-x-reverse' : ''} max-w-[92%] sm:max-w-[85%] lg:max-w-[75%]`}>
+                      <Avatar className="w-9 h-9 sm:w-[50px] sm:h-[50px] flex-shrink-0 mt-1">
                         <AvatarImage src={isUser ? actualUserAvatar : actualAgentAvatar} />
                           <AvatarFallback className={`text-white text-lg ${isUser
                             ? 'bg-gradient-to-r from-green-500 to-emerald-500'
@@ -3053,7 +3093,7 @@ export default function EnhancedChatWithSidebar({
             </div>
           </ScrollArea>
 
-          <div className="p-4 border-t border-border bg-card/70 backdrop-blur-sm">
+          <div className="p-3 sm:p-4 border-t border-border bg-card/70 backdrop-blur-sm">
             {/* 附件预览 */}
             {attachments.length > 0 && (
               <div className="mb-4 space-y-2">
