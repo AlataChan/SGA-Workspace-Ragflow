@@ -42,7 +42,8 @@ import {
   MoreVertical,
   Camera,
   Network,
-  Minus
+  Minus,
+  Ban
 } from "lucide-react"
 import NewAdminLayout from "@/components/admin/new-admin-layout"
 
@@ -107,6 +108,8 @@ export default function UsersPage() {
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isTogglingActive, setIsTogglingActive] = useState<string | null>(null)
+  const [currentAdminId, setCurrentAdminId] = useState<string | null>(null)
 
   // 弹窗状态
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -159,6 +162,7 @@ export default function UsersPage() {
     fetchUsers()
     fetchAgents()
     fetchDepartments()
+    fetchCurrentAdmin()
   }, [])
 
   const fetchUsers = async () => {
@@ -196,6 +200,58 @@ export default function UsersPage() {
       }
     } catch (error) {
       console.error('获取部门列表失败:', error)
+    }
+  }
+
+  const fetchCurrentAdmin = async () => {
+    try {
+      const response = await fetch('/api/auth/login')
+      if (!response.ok) return
+      const data = await response.json().catch(() => ({}))
+      if (data?.authenticated && data?.user?.id) {
+        setCurrentAdminId(String(data.user.id))
+      }
+    } catch (error) {
+      console.error('获取当前管理员信息失败:', error)
+    }
+  }
+
+  const handleToggleUserActive = async (user: UserData) => {
+    const nextActive = !user.isActive
+    const actionText = nextActive ? '启用' : '停用'
+
+    if (!confirm(`确定要${actionText}用户“${user.chineseName}（${user.username}）”吗？`)) {
+      return
+    }
+
+    setIsTogglingActive(user.id)
+    setMessage(null)
+
+    try {
+      const response = await fetch(`/api/admin/users/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: nextActive }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error?.message || `${actionText}失败`)
+      }
+
+      const data = await response.json()
+      setUsers(prev => prev.map(u => (u.id === user.id ? data.data : u)))
+      if (selectedUser?.id === user.id) {
+        setSelectedUser(data.data)
+      }
+      setMessage({ type: 'success', text: `用户已${actionText}` })
+      setTimeout(() => setMessage(null), 3000)
+    } catch (error) {
+      console.error('切换用户状态失败:', error)
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : '操作失败，请稍后重试' })
+      setTimeout(() => setMessage(null), 3000)
+    } finally {
+      setIsTogglingActive(null)
     }
   }
 
@@ -425,13 +481,13 @@ export default function UsersPage() {
   }
 
   // 创建用户
-  const handleCreate = async () => {
-    // 验证必填字段
-    if (!formData.username.trim() || !formData.userId.trim() || !formData.phone.trim() || !formData.chineseName.trim() || !formData.password.trim()) {
-      setMessage({ type: 'error', text: '请填写必填字段' })
-      setTimeout(() => setMessage(null), 3000)
-      return
-    }
+	  const handleCreate = async () => {
+	    // 验证必填字段
+	    if (!formData.username.trim() || !formData.userId.trim() || !formData.phone.trim() || !formData.chineseName.trim() || !formData.position.trim() || !formData.password.trim()) {
+	      setMessage({ type: 'error', text: '请填写必填字段' })
+	      setTimeout(() => setMessage(null), 3000)
+	      return
+	    }
 
     setIsSaving(true)
     setMessage(null)
@@ -442,15 +498,15 @@ export default function UsersPage() {
         username: formData.username.trim(),
         userId: formData.userId.trim(),
         phone: formData.phone.trim(),
-        chineseName: formData.chineseName.trim(),
-        englishName: formData.englishName.trim() || undefined,
-        email: formData.email.trim() || undefined,
-        departmentId: formData.departmentId && formData.departmentId !== "none" ? formData.departmentId : undefined,
-        position: formData.position.trim() || undefined,
-        role: formData.role,
-        password: formData.password.trim(),
-        avatarUrl: formData.avatarUrl.trim() || undefined
-      }
+	        chineseName: formData.chineseName.trim(),
+	        englishName: formData.englishName.trim() || undefined,
+	        email: formData.email.trim() || undefined,
+	        departmentId: formData.departmentId && formData.departmentId !== "none" ? formData.departmentId : undefined,
+	        position: formData.position.trim(),
+	        role: formData.role,
+	        password: formData.password.trim(),
+	        avatarUrl: formData.avatarUrl.trim() || undefined
+	      }
 
       console.log('📤 发送请求数据:', requestData)
 
@@ -522,21 +578,26 @@ export default function UsersPage() {
   }
 
   // 更新用户
-  const handleUpdate = async () => {
-    if (!formData.username.trim() || !formData.userId.trim() || !formData.phone.trim() || !formData.chineseName.trim()) {
-      setMessage({ type: 'error', text: '请填写必填字段' })
-      return
-    }
+	  const handleUpdate = async () => {
+	    if (!formData.username.trim() || !formData.userId.trim() || !formData.phone.trim() || !formData.chineseName.trim() || !formData.position.trim()) {
+	      setMessage({ type: 'error', text: '请填写必填字段' })
+	      return
+	    }
 
     setIsSaving(true)
-    setMessage(null)
-
-    try {
-      const updateData: Record<string, any> = { ...formData }
-      // 如果密码为空，则不更新密码
-      if (!updateData.password) {
-        delete updateData.password
-      }
+	    setMessage(null)
+	
+	    try {
+	      const updateData: Record<string, any> = { ...formData }
+	      updateData.username = formData.username.trim()
+	      updateData.userId = formData.userId.trim()
+	      updateData.phone = formData.phone.trim()
+	      updateData.chineseName = formData.chineseName.trim()
+	      updateData.position = formData.position.trim()
+	      // 如果密码为空，则不更新密码
+	      if (!updateData.password) {
+	        delete updateData.password
+	      }
 
       const response = await fetch(`/api/admin/users/${editingUser.id}`, {
         method: 'PUT',
@@ -782,10 +843,12 @@ export default function UsersPage() {
                           <div className="flex items-center space-x-3">
                             <div className="text-right">
                               <Badge variant={user.isActive ? "default" : "secondary"}>
-                                {user.isActive ? '活跃' : '禁用'}
+                                {user.isActive ? '活跃' : '已停用'}
                               </Badge>
                               <div className="text-xs text-muted-foreground mt-1">
-                                {user.agentPermissions?.length || 0} 个Agent权限
+                                {user.role === 'ADMIN'
+                                  ? '全部Agent权限'
+                                  : `${user.agentPermissions?.length || 0} 个Agent权限`}
                               </div>
                             </div>
                             {/* 操作按钮 */}
@@ -800,6 +863,30 @@ export default function UsersPage() {
                                 className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
                               >
                                 <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleToggleUserActive(user)
+                                }}
+                                disabled={isTogglingActive === user.id || currentAdminId === user.id}
+                                title={currentAdminId === user.id ? '不能停用当前登录管理员' : user.isActive ? '停用' : '启用'}
+                                aria-label={user.isActive ? '停用用户' : '启用用户'}
+                                className={`h-8 w-8 p-0 ${
+                                  user.isActive
+                                    ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 dark:text-amber-400'
+                                    : 'text-green-700 hover:text-green-800 hover:bg-green-500/10 dark:text-green-400'
+                                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                              >
+                                {isTogglingActive === user.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : user.isActive ? (
+                                  <Ban className="w-4 h-4" />
+                                ) : (
+                                  <Check className="w-4 h-4" />
+                                )}
                               </Button>
                               <Button
                                 size="sm"
@@ -859,6 +946,9 @@ export default function UsersPage() {
                               </>
                             )}
                           </Badge>
+                          {!selectedUser.isActive && (
+                            <Badge variant="secondary">已停用</Badge>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -901,7 +991,7 @@ export default function UsersPage() {
                       </h4>
                       <div className="flex items-center space-x-2">
                         <Badge variant="outline">
-                          {userAgents.length} 个
+                          {selectedUser.role === 'ADMIN' ? '全部' : `${userAgents.length} 个`}
                         </Badge>
                         {selectedUser.role !== 'ADMIN' && (
                           <Button
@@ -1039,25 +1129,27 @@ export default function UsersPage() {
                       </h4>
                       <div className="flex items-center space-x-2">
                         <Badge variant="outline">
-                          {userKnowledgeGraphs.length} 个
+                          {selectedUser.role === 'ADMIN' ? '全部' : `${userKnowledgeGraphs.length} 个`}
                         </Badge>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setIsManagingKGPermissions(!isManagingKGPermissions)}
-                        >
-                          {isManagingKGPermissions ? (
-                            <>
-                              <X className="w-3 h-3 mr-1" />
-                              取消
-                            </>
-                          ) : (
-                            <>
-                              <Plus className="w-3 h-3 mr-1" />
-                              管理
-                            </>
-                          )}
-                        </Button>
+                        {selectedUser.role !== 'ADMIN' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setIsManagingKGPermissions(!isManagingKGPermissions)}
+                          >
+                            {isManagingKGPermissions ? (
+                              <>
+                                <X className="w-3 h-3 mr-1" />
+                                取消
+                              </>
+                            ) : (
+                              <>
+                                <Plus className="w-3 h-3 mr-1" />
+                                管理
+                              </>
+                            )}
+                          </Button>
+                        )}
                       </div>
                     </div>
 
@@ -1304,13 +1396,13 @@ export default function UsersPage() {
                       </option>
                     ))}
                   </select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="create-position">职位</Label>
-                  <Input
-                    id="create-position"
-                    placeholder="请输入职位"
-                    value={formData.position}
+	                </div>
+	                <div className="space-y-2">
+	                  <Label htmlFor="create-position">职位 *</Label>
+	                  <Input
+	                    id="create-position"
+	                    placeholder="请输入职位"
+	                    value={formData.position}
                     onChange={(e) => setFormData(prev => ({ ...prev, position: e.target.value }))}
                   />
                 </div>
@@ -1496,13 +1588,13 @@ export default function UsersPage() {
                       </option>
                     ))}
                   </select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-position">职位</Label>
-                  <Input
-                    id="edit-position"
-                    placeholder="请输入职位"
-                    value={formData.position}
+	                </div>
+	                <div className="space-y-2">
+	                  <Label htmlFor="edit-position">职位 *</Label>
+	                  <Input
+	                    id="edit-position"
+	                    placeholder="请输入职位"
+	                    value={formData.position}
                     onChange={(e) => setFormData(prev => ({ ...prev, position: e.target.value }))}
                   />
                 </div>

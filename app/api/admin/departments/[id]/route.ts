@@ -16,6 +16,7 @@ const updateDepartmentSchema = z.object({
   description: z.string().max(200, "部门描述过长").optional(),
   icon: z.string().max(50, "图标名称过长").optional(),
   sortOrder: z.number().int().min(0).optional(),
+  isActive: z.boolean().optional(),
 })
 
 // GET /api/admin/departments/[id] - 获取部门详情

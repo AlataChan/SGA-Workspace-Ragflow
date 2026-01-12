@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken, extractTokenFromHeader, JWTPayload } from './jwt'
 import { UserRole } from '@prisma/client'
+import prisma from '@/lib/prisma'
 
 export interface AuthenticatedRequest extends NextRequest {
   user?: JWTPayload
@@ -50,9 +51,47 @@ export function withAuth(handler: (req: AuthenticatedRequest) => Promise<NextRes
         )
       }
 
+      // 二次校验：用户是否仍处于可用状态（支持停用用户 / 停用部门立即生效）
+      const dbUser = await prisma.user.findUnique({
+        where: { id: payload.userId },
+        select: {
+          id: true,
+          companyId: true,
+          role: true,
+          isActive: true,
+          departmentId: true,
+          department: {
+            select: { isActive: true }
+          }
+        }
+      })
+
+      if (!dbUser || !dbUser.isActive) {
+        return NextResponse.json(
+          { error: { code: 'USER_DISABLED', message: '已停用' } },
+          { status: 403 }
+        )
+      }
+
+      if (
+        dbUser.role !== UserRole.ADMIN
+        && dbUser.departmentId
+        && dbUser.department
+        && !dbUser.department.isActive
+      ) {
+        return NextResponse.json(
+          { error: { code: 'DEPARTMENT_DISABLED', message: '已停用' } },
+          { status: 403 }
+        )
+      }
+
       // 将用户信息添加到请求对象
       const authenticatedReq = req as AuthenticatedRequest
-      authenticatedReq.user = payload
+      authenticatedReq.user = {
+        ...payload,
+        companyId: dbUser.companyId,
+        role: dbUser.role
+      }
 
       return handler(authenticatedReq)
     } catch (error) {
@@ -99,8 +138,39 @@ export function withOptionalAuth(handler: (req: AuthenticatedRequest) => Promise
       if (token) {
         const payload = verifyToken(token)
         if (payload) {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: payload.userId },
+            select: {
+              id: true,
+              companyId: true,
+              role: true,
+              isActive: true,
+              departmentId: true,
+              department: {
+                select: { isActive: true }
+              }
+            }
+          })
+
+          if (!dbUser || !dbUser.isActive) {
+            return handler(req as AuthenticatedRequest)
+          }
+
+          if (
+            dbUser.role !== UserRole.ADMIN
+            && dbUser.departmentId
+            && dbUser.department
+            && !dbUser.department.isActive
+          ) {
+            return handler(req as AuthenticatedRequest)
+          }
+
           const authenticatedReq = req as AuthenticatedRequest
-          authenticatedReq.user = payload
+          authenticatedReq.user = {
+            ...payload,
+            companyId: dbUser.companyId,
+            role: dbUser.role
+          }
         }
       }
 
