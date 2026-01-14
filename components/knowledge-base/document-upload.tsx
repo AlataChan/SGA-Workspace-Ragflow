@@ -1,11 +1,20 @@
 "use client"
 
-import React, { useCallback, useState } from "react"
-import { Upload, X, FileText, Loader2 } from "lucide-react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Upload, X, FileText, Loader2, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { nanoid } from "nanoid"
+import { useTaskStore } from "@/app/store/task"
+import { useTaskQueue } from "@/lib/task-queue"
+import {
+  calculateTaskProgress,
+  getTaskStatusText,
+  isFinalTaskStatus,
+  type Task,
+} from "@/lib/types/task"
 
 /**
  * 文档上传组件
@@ -24,14 +33,6 @@ interface DocumentUploadProps {
   onUploadError?: (error: string) => void
   /** 自定义类名 */
   className?: string
-}
-
-interface UploadingFile {
-  file: File
-  progress: number
-  status: 'uploading' | 'success' | 'error'
-  error?: string
-  docId?: string
 }
 
 // 支持的文件类型
@@ -54,7 +55,21 @@ export function DocumentUpload({
   className,
 }: DocumentUploadProps) {
   const [isDragging, setIsDragging] = useState(false)
-  const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([])
+  const [taskIds, setTaskIds] = useState<string[]>([])
+
+  const tasks = useTaskStore((s) => s.tasks)
+  const removeTask = useTaskStore((s) => s.removeTask)
+  const taskQueue = useMemo(() => useTaskQueue(), [])
+
+  const notifiedSuccessRef = useRef(new Set<string>())
+  const notifiedErrorRef = useRef(new Set<string>())
+
+  const localTasks = useMemo(() => {
+    const byId = new Map(tasks.map((t) => [t.id, t]))
+    return taskIds
+      .map((id) => byId.get(id))
+      .filter((t): t is Task => Boolean(t))
+  }, [taskIds, tasks])
 
   const validateFile = (file: File): string | null => {
     if (!ALLOWED_FILE_TYPES.includes(file.type)) {
@@ -66,64 +81,42 @@ export function DocumentUpload({
     return null
   }
 
-  const uploadFile = async (file: File) => {
-    const uploadingFile: UploadingFile = {
-      file,
-      progress: 0,
-      status: 'uploading',
-    }
+  useEffect(() => {
+    for (const task of localTasks) {
+      if (task.type !== "kb.uploadDocument") continue
 
-    setUploadingFiles((prev) => [...prev, uploadingFile])
+      const fileName = String(task.input?.fileName || task.title || "文件")
+      const docId = task.output?.docId as string | undefined
 
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('run', autoRun ? '1' : '0')
-
-      const response = await fetch(`/api/knowledge-bases/${kbId}/documents`, {
-        method: 'POST',
-        body: formData,
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || '上传失败')
+      // 上传成功：一旦拿到 docId 即回调（不等待解析完成）
+      if (docId && !notifiedSuccessRef.current.has(task.id)) {
+        notifiedSuccessRef.current.add(task.id)
+        toast.success(`${fileName} 上传成功`)
+        onUploadSuccess?.(docId)
       }
 
-      const data = await response.json()
-      const docId = data.data?.id
-
-      setUploadingFiles((prev) =>
-        prev.map((f) =>
-          f.file === file
-            ? { ...f, progress: 100, status: 'success', docId }
-            : f
-        )
-      )
-
-      toast.success(`${file.name} 上传成功`)
-      onUploadSuccess?.(docId)
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '上传失败'
-      
-      setUploadingFiles((prev) =>
-        prev.map((f) =>
-          f.file === file
-            ? { ...f, status: 'error', error: errorMessage }
-            : f
-        )
-      )
-
-      toast.error(`${file.name} 上传失败: ${errorMessage}`)
-      onUploadError?.(errorMessage)
+      // 上传失败：只在没有 docId 时才认为是“上传失败”
+      if (
+        task.status === "failed" &&
+        !docId &&
+        !notifiedErrorRef.current.has(task.id)
+      ) {
+        notifiedErrorRef.current.add(task.id)
+        const msg = task.error?.message || "上传失败"
+        toast.error(`${fileName} 上传失败: ${msg}`)
+        onUploadError?.(msg)
+      }
     }
-  }
+  }, [localTasks, onUploadError, onUploadSuccess])
 
   const handleFiles = useCallback(
     (files: FileList | null) => {
       if (!files || files.length === 0) return
 
-      const fileArray = Array.from(files)
+      const fileArray = Array.from(files).sort((a, b) => a.size - b.size)
+      const groupId = nanoid()
+      const newTasks: Task[] = []
+      const runtimeFiles: Record<string, File> = {}
 
       for (const file of fileArray) {
         const error = validateFile(file)
@@ -132,10 +125,36 @@ export function DocumentUpload({
           continue
         }
 
-        uploadFile(file)
+        const taskId = nanoid()
+        const task: Task = {
+          id: taskId,
+          groupId,
+          type: "kb.uploadDocument",
+          status: "pending",
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          title: `上传 ${file.name}`,
+          input: {
+            kbId,
+            autoRun,
+            fileName: file.name,
+            fileSize: file.size,
+            fileType: file.type,
+          },
+          progress: { uploadProgress: 0, parseProgress: 0, totalProgress: 0 },
+        }
+
+        newTasks.push(task)
+        runtimeFiles[taskId] = file
+      }
+
+      if (newTasks.length > 0) {
+        taskQueue.addTasks(newTasks, runtimeFiles)
+        setTaskIds((prev) => [...prev, ...newTasks.map((t) => t.id)])
+        toast.success(`已添加 ${newTasks.length} 个文件到上传队列`)
       }
     },
-    [kbId, autoRun]
+    [kbId, autoRun, taskQueue]
   )
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -166,8 +185,10 @@ export function DocumentUpload({
     [handleFiles]
   )
 
-  const removeFile = (file: File) => {
-    setUploadingFiles((prev) => prev.filter((f) => f.file !== file))
+  const removeLocalTask = (taskId: string) => {
+    taskQueue.cancelTask(taskId)
+    removeTask(taskId)
+    setTaskIds((prev) => prev.filter((id) => id !== taskId))
   }
 
   return (
@@ -207,43 +228,52 @@ export function DocumentUpload({
       </div>
 
       {/* 上传列表 */}
-      {uploadingFiles.length > 0 && (
+      {localTasks.length > 0 && (
         <div className="space-y-2">
-          <h4 className="text-sm font-medium">上传列表</h4>
-          {uploadingFiles.map((uploadingFile, index) => (
+          <h4 className="text-sm font-medium">上传队列</h4>
+          {localTasks.map((task) => {
+            const fileName = String(task.input?.fileName || task.title || "文件")
+            const fileSize = Number(task.input?.fileSize || 0)
+            const pct = calculateTaskProgress(task)
+            const isFinal = isFinalTaskStatus(task.status)
+
+            return (
             <div
-              key={index}
+              key={task.id}
               className="flex items-center gap-3 p-3 border rounded-lg"
             >
               <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
 
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">
-                  {uploadingFile.file.name}
+                  {fileName}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {(uploadingFile.file.size / 1024 / 1024).toFixed(2)} MB
+                  {(fileSize / 1024 / 1024).toFixed(2)} MB
                 </p>
 
-                {uploadingFile.status === 'uploading' && (
+                {!isFinal && (
                   <div className="mt-2">
-                    <Progress value={uploadingFile.progress} className="h-1" />
+                    <Progress value={pct} className="h-1" />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {getTaskStatusText(task.status)} · {pct}%
+                    </p>
                   </div>
                 )}
 
-                {uploadingFile.status === 'error' && uploadingFile.error && (
+                {task.status === "failed" && task.error?.message && (
                   <p className="text-xs text-destructive mt-1">
-                    {uploadingFile.error}
+                    {task.error.message}
                   </p>
                 )}
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0">
-                {uploadingFile.status === 'uploading' && (
+                {(task.status === "pending" || task.status === "running") && (
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
                 )}
 
-                {uploadingFile.status === 'success' && (
+                {task.status === "succeeded" && (
                   <div className="h-4 w-4 rounded-full bg-green-500 flex items-center justify-center">
                     <svg
                       className="h-3 w-3 text-white"
@@ -259,22 +289,30 @@ export function DocumentUpload({
                   </div>
                 )}
 
-                {uploadingFile.status === 'error' && (
+                {task.status === "failed" && (
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => removeFile(uploadingFile.file)}
+                    onClick={() => taskQueue.retryTask(task.id)}
+                  >
+                    <Play className="h-4 w-4" />
+                  </Button>
+                )}
+
+                {isFinal && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeLocalTask(task.id)}
                   >
                     <X className="h-4 w-4" />
                   </Button>
                 )}
               </div>
             </div>
-          ))}
+          )})}
         </div>
       )}
     </div>
   )
 }
-
-
