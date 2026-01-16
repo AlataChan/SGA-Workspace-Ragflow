@@ -4,7 +4,7 @@ import { mapDifyWorkflowResponse } from "@/lib/types/workflow";
 export const dynamic = "force-dynamic";
 
 function joinUrl(base: string, path: string) {
-  return `${base.replace(/\\/+$/, "")}/${path.replace(/^\\/+/, "")}`;
+  return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 }
 
 function parseOptionalJsonObject(input: unknown): Record<string, any> {
@@ -156,4 +156,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

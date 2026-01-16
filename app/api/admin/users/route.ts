@@ -45,75 +45,99 @@ export const GET = withAdminAuth(async (request) => {
   try {
     const user = request.user!
     const { searchParams } = new URL(request.url)
+    const pageParam = searchParams.get('page')
+    const pageSizeParam = searchParams.get('pageSize') ?? searchParams.get('limit')
+    const qParam = searchParams.get('q') ?? searchParams.get('search')
     const departmentId = searchParams.get('departmentId')
-    const role = searchParams.get('role')
+    const roleParam = searchParams.get('role')
     
+    const page = Math.max(1, Number.parseInt(pageParam || '1', 10) || 1)
+    const pageSize = Math.min(100, Math.max(1, Number.parseInt(pageSizeParam || '50', 10) || 50))
+    const q = (qParam || '').trim()
+
     // 构建查询条件
     const whereClause: any = {
       companyId: user.companyId,
     }
-    
+
     if (departmentId && departmentId !== 'all') {
       whereClause.departmentId = departmentId
     }
-    
-    if (role && role !== 'all') {
-      whereClause.role = role
+
+    if (roleParam && roleParam !== 'all' && Object.values(UserRole).includes(roleParam as UserRole)) {
+      whereClause.role = roleParam as UserRole
     }
 
-    const users = await prisma.user.findMany({
-      where: whereClause,
-      include: {
-        department: {
-          select: {
-            id: true,
-            name: true,
-            icon: true,
-          }
-        },
-        agentPermissions: {
-          include: {
-            agent: {
-              select: {
-                id: true,
-                chineseName: true,
-                englishName: true,
-                position: true,
-                platform: true,
-                isOnline: true,
-                department: {
-                  select: {
-                    id: true,
-                    name: true,
-                    icon: true,
-                  }
-                }
-              }
+    if (q) {
+      whereClause.OR = [
+        { chineseName: { contains: q, mode: 'insensitive' } },
+        { username: { contains: q, mode: 'insensitive' } },
+        { userId: { contains: q, mode: 'insensitive' } },
+        { phone: { contains: q } },
+        { email: { contains: q, mode: 'insensitive' } },
+        { position: { contains: q, mode: 'insensitive' } },
+      ]
+    }
+
+    const [total, users] = await Promise.all([
+      prisma.user.count({ where: whereClause }),
+      prisma.user.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          username: true,
+          userId: true,
+          phone: true,
+          chineseName: true,
+          englishName: true,
+          email: true,
+          avatarUrl: true,
+          departmentId: true,
+          position: true,
+          role: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+          department: {
+            select: {
+              id: true,
+              name: true,
+              icon: true,
+            }
+          },
+          _count: {
+            select: {
+              agentPermissions: true,
+              knowledgeGraphPermissions: true,
             }
           }
-        }
-      },
-      orderBy: [
-        { role: 'desc' }, // 管理员优先
-        { createdAt: 'desc' }
-      ]
-    })
+        },
+        orderBy: [
+          { role: 'desc' }, // 保持现有排序逻辑
+          { createdAt: 'desc' },
+          { id: 'asc' },
+        ],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ])
 
-    // 统计信息
-    const stats = {
-      total: users.length,
-      active: users.filter(user => user.isActive).length,
-      admins: users.filter(user => user.role === 'ADMIN').length,
-      byDepartment: users.reduce((acc, user) => {
-        const deptName = user.department?.name || '未分配'
-        acc[deptName] = (acc[deptName] || 0) + 1
-        return acc
-      }, {} as Record<string, number>),
-    }
+    const normalizedUsers = users.map((u) => ({
+      ...u,
+      department: u.department
+        ? { ...u.department, icon: u.department.icon || 'Building' }
+        : undefined,
+    }))
 
     return NextResponse.json({
-      data: users,
-      stats,
+      data: normalizedUsers,
+      pagination: {
+        page,
+        pageSize,
+        limit: pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
       message: '获取用户列表成功'
     }, { headers: corsHeaders })
 
@@ -139,12 +163,9 @@ export const POST = withAdminAuth(async (request) => {
     const user = request.user!
     const body = await request.json()
 
-    console.log('收到创建用户请求:', body)
-
     // 验证请求参数
     const validationResult = createUserSchema.safeParse(body)
     if (!validationResult.success) {
-      console.log('验证失败:', validationResult.error.flatten().fieldErrors)
       return NextResponse.json(
         {
           error: {
@@ -261,15 +282,35 @@ export const POST = withAdminAuth(async (request) => {
         avatarUrl: userData.avatarUrl,
         displayName: userData.chineseName, // 兼容字段
       },
-      include: {
+      select: {
+        id: true,
+        username: true,
+        userId: true,
+        phone: true,
+        chineseName: true,
+        englishName: true,
+        email: true,
+        avatarUrl: true,
+        departmentId: true,
+        position: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
         department: {
           select: {
             id: true,
             name: true,
             icon: true,
           }
+        },
+        _count: {
+          select: {
+            agentPermissions: true,
+            knowledgeGraphPermissions: true,
+          }
         }
-      }
+      },
     })
 
     // 如果是管理员，自动授予所有Agent权限
@@ -291,7 +332,12 @@ export const POST = withAdminAuth(async (request) => {
     }
 
     return NextResponse.json({
-      data: newUser,
+      data: {
+        ...newUser,
+        department: newUser.department
+          ? { ...newUser.department, icon: newUser.department.icon || 'Building' }
+          : undefined,
+      },
       message: '用户创建成功'
     }, { headers: corsHeaders })
 

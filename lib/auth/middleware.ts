@@ -7,8 +7,12 @@ import { verifyToken, extractTokenFromHeader, JWTPayload } from './jwt'
 import { UserRole } from '@prisma/client'
 import prisma from '@/lib/prisma'
 
+export type CurrentUser = JWTPayload & {
+  departmentId?: string
+}
+
 export interface AuthenticatedRequest extends NextRequest {
-  user?: JWTPayload
+  user?: CurrentUser
 }
 
 /**
@@ -90,7 +94,8 @@ export function withAuth(handler: (req: AuthenticatedRequest) => Promise<NextRes
       authenticatedReq.user = {
         ...payload,
         companyId: dbUser.companyId,
-        role: dbUser.role
+        role: dbUser.role,
+        departmentId: dbUser.departmentId ?? undefined,
       }
 
       return handler(authenticatedReq)
@@ -169,7 +174,8 @@ export function withOptionalAuth(handler: (req: AuthenticatedRequest) => Promise
           authenticatedReq.user = {
             ...payload,
             companyId: dbUser.companyId,
-            role: dbUser.role
+            role: dbUser.role,
+            departmentId: dbUser.departmentId ?? undefined,
           }
         }
       }

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useDebounce } from "use-debounce"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -78,12 +79,19 @@ interface UserData {
   role: 'ADMIN' | 'USER'
   isActive: boolean
   department?: Department
-  agentPermissions: Array<{
-    agentId: string
-    agent: Agent
-  }>
+  _count?: {
+    agentPermissions: number
+    knowledgeGraphPermissions: number
+  }
   createdAt: string
   updatedAt: string
+}
+
+interface PaginationInfo {
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
 }
 
 interface UserFormData {
@@ -140,6 +148,17 @@ export default function UsersPage() {
   const [filterDepartment, setFilterDepartment] = useState<string>("all")
   const [filterRole, setFilterRole] = useState<string>("all")
 
+  // 分页状态
+  const [page, setPage] = useState(1)
+  const [pageSize] = useState(50)
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: 1,
+    pageSize: 50,
+    total: 0,
+    totalPages: 0,
+  })
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 300)
+
   // 消息状态
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
@@ -159,7 +178,6 @@ export default function UsersPage() {
 
   // 获取数据
   useEffect(() => {
-    fetchUsers()
     fetchAgents()
     fetchDepartments()
     fetchCurrentAdmin()
@@ -167,10 +185,30 @@ export default function UsersPage() {
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch('/api/admin/users')
-      if (response.ok) {
-        const data = await response.json()
-        setUsers(data.data || [])
+      setIsLoading(true)
+
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+        ...(debouncedSearchTerm ? { q: debouncedSearchTerm } : {}),
+        ...(filterDepartment !== "all" ? { departmentId: filterDepartment } : {}),
+        ...(filterRole !== "all" ? { role: filterRole } : {}),
+      })
+
+      const response = await fetch(`/api/admin/users?${params}`)
+      if (!response.ok) return
+
+      const data = await response.json().catch(() => ({}))
+      const nextUsers = data.data || []
+      setUsers(nextUsers)
+      if (data.pagination) {
+        setPagination(data.pagination)
+        if (data.pagination.totalPages > 0 && page > data.pagination.totalPages) {
+          setPage(data.pagination.totalPages)
+        }
+      }
+      if (selectedUser && !nextUsers.some((u: UserData) => u.id === selectedUser.id)) {
+        setSelectedUser(null)
       }
     } catch (error) {
       console.error('获取用户列表失败:', error)
@@ -178,6 +216,10 @@ export default function UsersPage() {
       setIsLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetchUsers()
+  }, [page, pageSize, debouncedSearchTerm, filterDepartment, filterRole])
 
   const fetchAgents = async () => {
     try {
@@ -239,11 +281,11 @@ export default function UsersPage() {
         throw new Error(errorData.error?.message || `${actionText}失败`)
       }
 
-      const data = await response.json()
-      setUsers(prev => prev.map(u => (u.id === user.id ? data.data : u)))
-      if (selectedUser?.id === user.id) {
+      const data = await response.json().catch(() => ({}))
+      if (selectedUser?.id === user.id && data?.data) {
         setSelectedUser(data.data)
       }
+      await fetchUsers()
       setMessage({ type: 'success', text: `用户已${actionText}` })
       setTimeout(() => setMessage(null), 3000)
     } catch (error) {
@@ -255,16 +297,7 @@ export default function UsersPage() {
     }
   }
 
-  // 筛选用户
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.chineseName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.phone.includes(searchTerm)
-    const matchesDepartment = filterDepartment === 'all' || user.departmentId === filterDepartment
-    const matchesRole = filterRole === 'all' || user.role === filterRole
-
-    return matchesSearch && matchesDepartment && matchesRole
-  })
+  const displayedUsers = users
 
   // 重置表单
   const resetForm = () => {
@@ -742,7 +775,7 @@ export default function UsersPage() {
                     用户列表
                   </CardTitle>
                   <Badge variant="outline">
-                    {filteredUsers.length} 个用户
+                    {pagination.total} 个用户
                   </Badge>
                 </div>
 
@@ -753,11 +786,17 @@ export default function UsersPage() {
                     <Input
                       placeholder="搜索用户名、姓名或电话..."
                       value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onChange={(e) => {
+                        setSearchTerm(e.target.value)
+                        setPage(1)
+                      }}
                       className="pl-10"
                     />
                   </div>
-                  <Select value={filterDepartment} onValueChange={setFilterDepartment}>
+                  <Select value={filterDepartment} onValueChange={(value) => {
+                    setFilterDepartment(value)
+                    setPage(1)
+                  }}>
                     <SelectTrigger className="w-full sm:w-40">
                       <SelectValue placeholder="部门" />
                     </SelectTrigger>
@@ -770,7 +809,10 @@ export default function UsersPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Select value={filterRole} onValueChange={setFilterRole}>
+                  <Select value={filterRole} onValueChange={(value) => {
+                    setFilterRole(value)
+                    setPage(1)
+                  }}>
                     <SelectTrigger className="w-full sm:w-32">
                       <SelectValue placeholder="角色" />
                     </SelectTrigger>
@@ -788,7 +830,7 @@ export default function UsersPage() {
                     <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
                     <span className="ml-2 text-muted-foreground">加载中...</span>
                   </div>
-                ) : filteredUsers.length === 0 ? (
+                ) : displayedUsers.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
                     <p>暂无用户数据</p>
@@ -796,7 +838,7 @@ export default function UsersPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {filteredUsers.map((user) => (
+                    {displayedUsers.map((user) => (
                       <div
                         key={user.id}
                         className={`p-4 rounded-lg border transition-all duration-200 ${
@@ -848,7 +890,7 @@ export default function UsersPage() {
                               <div className="text-xs text-muted-foreground mt-1">
                                 {user.role === 'ADMIN'
                                   ? '全部Agent权限'
-                                  : `${user.agentPermissions?.length || 0} 个Agent权限`}
+                                  : `${user._count?.agentPermissions || 0} 个Agent权限`}
                               </div>
                             </div>
                             {/* 操作按钮 */}
@@ -904,6 +946,33 @@ export default function UsersPage() {
                         </div>
                       </div>
                     ))}
+	                  </div>
+	                )}
+
+                {/* 分页 */}
+                {!isLoading && pagination.totalPages > 0 && (
+                  <div className="flex items-center justify-between mt-4">
+                    <div className="text-sm text-muted-foreground">
+                      第 {pagination.page} / {pagination.totalPages} 页，共 {pagination.total} 条
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={pagination.page <= 1}
+                      >
+                        上一页
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
+                        disabled={pagination.page >= pagination.totalPages}
+                      >
+                        下一页
+                      </Button>
+                    </div>
                   </div>
                 )}
               </CardContent>

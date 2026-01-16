@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useDebounce } from "use-debounce"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -39,6 +40,7 @@ import {
   Trash2,
   Users,
   Building,
+  Search,
   CheckCircle,
   AlertCircle,
   Crown,
@@ -65,14 +67,16 @@ interface Department {
   isActive: boolean
   agentCount: number
   onlineAgentCount: number
-  agents: Array<{
-    id: string
-    chineseName: string
-    position: string
-    isOnline: boolean
-  }>
+  userCount?: number
   createdAt: string
   updatedAt: string
+}
+
+interface PaginationInfo {
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
 }
 
 interface DepartmentFormData {
@@ -106,6 +110,18 @@ export default function DepartmentsPage() {
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const [isTogglingActive, setIsTogglingActive] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+
+  // 分页 + 搜索
+  const [searchTerm, setSearchTerm] = useState("")
+  const [page, setPage] = useState(1)
+  const [pageSize] = useState(50)
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: 1,
+    pageSize: 50,
+    total: 0,
+    totalPages: 0,
+  })
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 300)
   
   // 弹窗状态
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -123,10 +139,23 @@ export default function DepartmentsPage() {
   // 获取部门列表
   const fetchDepartments = async () => {
     try {
-      const response = await fetch('/api/admin/departments')
+      setIsLoading(true)
+
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+        ...(debouncedSearchTerm ? { q: debouncedSearchTerm } : {}),
+      })
+      const response = await fetch(`/api/admin/departments?${params}`)
       if (response.ok) {
         const data = await response.json()
-        setDepartments(data.data)
+        setDepartments(data.data || [])
+        if (data.pagination) {
+          setPagination(data.pagination)
+          if (data.pagination.totalPages > 0 && page > data.pagination.totalPages) {
+            setPage(data.pagination.totalPages)
+          }
+        }
       } else {
         setMessage({ type: 'error', text: '获取部门列表失败' })
       }
@@ -140,7 +169,7 @@ export default function DepartmentsPage() {
 
   useEffect(() => {
     fetchDepartments()
-  }, [])
+  }, [page, pageSize, debouncedSearchTerm])
 
   // 重置表单
   const resetForm = () => {
@@ -148,7 +177,7 @@ export default function DepartmentsPage() {
       name: "",
       description: "",
       icon: "Building",
-      sortOrder: departments.length + 1
+      sortOrder: 0
     })
   }
 
@@ -190,15 +219,15 @@ export default function DepartmentsPage() {
           name: formData.name.trim(),
           description: formData.description.trim() || undefined,
           icon: formData.icon,
-          sortOrder: formData.sortOrder,
+          sortOrder: formData.sortOrder > 0 ? formData.sortOrder : undefined,
         }),
       })
 
       if (response.ok) {
-        const data = await response.json()
-        setDepartments(prev => [...prev, data.data])
+        await response.json().catch(() => ({}))
         setIsCreateDialogOpen(false)
         resetForm()
+        await fetchDepartments()
         setMessage({ type: 'success', text: '部门创建成功' })
       } else {
         const error = await response.json()
@@ -240,13 +269,11 @@ export default function DepartmentsPage() {
       })
 
       if (response.ok) {
-        const data = await response.json()
-        setDepartments(prev => 
-          prev.map(dept => dept.id === editingDepartment.id ? data.data : dept)
-        )
+        await response.json().catch(() => ({}))
         setIsEditDialogOpen(false)
         setEditingDepartment(null)
         resetForm()
+        await fetchDepartments()
         setMessage({ type: 'success', text: '部门更新成功' })
       } else {
         const error = await response.json()
@@ -273,6 +300,14 @@ export default function DepartmentsPage() {
       return
     }
 
+    if ((department.userCount ?? 0) > 0) {
+      setMessage({
+        type: 'error',
+        text: `部门下还有 ${department.userCount} 个用户，请先转移或移除这些用户`
+      })
+      return
+    }
+
     if (!confirm(`确定要删除部门"${department.name}"吗？此操作不可恢复。`)) {
       return
     }
@@ -286,7 +321,8 @@ export default function DepartmentsPage() {
       })
 
       if (response.ok) {
-        setDepartments(prev => prev.filter(dept => dept.id !== department.id))
+        await response.json().catch(() => ({}))
+        await fetchDepartments()
         setMessage({ type: 'success', text: '部门删除成功' })
       } else {
         const error = await response.json()
@@ -328,6 +364,7 @@ export default function DepartmentsPage() {
 
       const data = await response.json()
       setDepartments(prev => prev.map(d => (d.id === department.id ? data.data : d)))
+      await fetchDepartments()
       setMessage({ type: 'success', text: `部门已${actionText}` })
     } catch (error) {
       console.error('切换部门状态失败:', error)
@@ -346,7 +383,7 @@ export default function DepartmentsPage() {
     return iconOption ? iconOption.icon : Building
   }
 
-  if (isLoading) {
+  if (isLoading && departments.length === 0) {
     return (
       <NewAdminLayout>
         <div className="flex items-center justify-center h-64">
@@ -396,11 +433,31 @@ export default function DepartmentsPage() {
               部门列表
             </CardTitle>
             <CardDescription>
-              当前共有 {departments.length} 个部门
+              当前共有 {pagination.total} 个部门
             </CardDescription>
+
+            <div className="mt-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                <Input
+                  placeholder="搜索部门名称或描述..."
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value)
+                    setPage(1)
+                  }}
+                  className="pl-10"
+                />
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            {departments.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                <span className="ml-2 text-muted-foreground">加载中...</span>
+              </div>
+            ) : departments.length === 0 ? (
               <div className="text-center py-8">
                 <Building className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">暂无部门，点击上方按钮添加第一个部门</p>
@@ -505,6 +562,33 @@ export default function DepartmentsPage() {
                   })}
                 </TableBody>
               </Table>
+            )}
+
+            {/* 分页 */}
+            {!isLoading && pagination.totalPages > 0 && (
+              <div className="flex items-center justify-between mt-4">
+                <div className="text-sm text-muted-foreground">
+                  第 {pagination.page} / {pagination.totalPages} 页，共 {pagination.total} 条
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={pagination.page <= 1}
+                  >
+                    上一页
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
+                    disabled={pagination.page >= pagination.totalPages}
+                  >
+                    下一页
+                  </Button>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

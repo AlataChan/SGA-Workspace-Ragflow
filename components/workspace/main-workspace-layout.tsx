@@ -1271,11 +1271,11 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
               </div>
 
               {/* 知识图谱列表 - 可折叠 */}
-              <div className="min-h-0 rounded-lg border border-border bg-card/50 flex flex-col">
+              <div className="min-h-0 rounded-lg border border-border bg-card/50 flex flex-col overflow-hidden">
                 <Collapsible
                   open={!knowledgeGraphsCollapsed}
                   onOpenChange={(open) => setKnowledgeGraphsCollapsed(!open)}
-                  className="flex flex-col min-h-0"
+                  className="flex flex-1 flex-col min-h-0"
                 >
                   <CollapsibleTrigger asChild>
                     <Button
@@ -1314,7 +1314,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                       </div>
                     </Button>
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="flex-1 min-h-0 px-3 pb-3 pt-1">
+                  <CollapsibleContent className="flex-1 min-h-0 px-3 pb-3 pt-1 flex flex-col overflow-hidden">
                     {knowledgeGraphs.length === 0 ? (
                       <div className="text-center py-6">
                         <Network className="w-10 h-10 mx-auto text-muted-foreground mb-2" />
@@ -1326,7 +1326,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                         )}
                       </div>
                     ) : (
-                      <div className="flex flex-col min-h-0">
+                      <div className="flex flex-col min-h-0 flex-1">
                         {kgSearchOpen && (
                           <div className="relative mb-2">
                             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -1382,7 +1382,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                         )}
 
                         {/* 列表 - 面板内滚动 */}
-                        <div className="flex-1 min-h-0 overflow-y-auto space-y-0.5 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+                        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-0.5 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
                           {!effectiveKgSearchQuery.trim() && recentKnowledgeGraphs.length > 0 && (
                             <>
                               <div className="px-2 py-1.5 rounded-md bg-muted/30 flex items-center justify-between">
@@ -1398,13 +1398,13 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                                 {recentKnowledgeGraphs.map((kg) => (
                                   <div
                                     key={`recent_${kg.id}`}
-                                    className="group flex items-center px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted transition-colors"
+                                    className="group flex items-center px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted transition-colors overflow-hidden"
                                     onClick={() => handleSelectKnowledgeGraph(kg)}
                                   >
                                     <div className="w-5 h-5 rounded bg-gradient-to-br from-purple-500/80 to-pink-500/80 flex items-center justify-center flex-shrink-0">
                                       <Network className="w-3 h-3 text-white" />
                                     </div>
-                                    <span className="flex-1 ml-2 text-sm text-foreground truncate" title={kg.name}>
+                                    <span className="flex-1 min-w-0 ml-2 text-sm text-foreground truncate" title={kg.name}>
                                       {kg.name}
                                     </span>
                                     <div className="flex items-center space-x-1.5 flex-shrink-0">
@@ -1430,7 +1430,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                                 data-kg-search-item={kg.id}
                                 className={`group flex items-center px-2 py-1.5 rounded-md cursor-pointer transition-colors ${
                                   isHighlighted ? 'bg-muted' : 'hover:bg-muted'
-                                }`}
+                                } overflow-hidden`}
                                 onClick={() => handleSelectKnowledgeGraph(kg)}
                                 onMouseEnter={() => {
                                   if (effectiveKgSearchQuery.trim()) {
@@ -1443,7 +1443,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                                   <Network className="w-3 h-3 text-white" />
                                 </div>
                                 {/* 中间名称 */}
-                                <span className="flex-1 ml-2 text-sm text-foreground truncate" title={kg.name}>
+                                <span className="flex-1 min-w-0 ml-2 text-sm text-foreground truncate" title={kg.name}>
                                   {kg.name}
                                 </span>
                                 {/* 右侧：置顶 / 节点数 / 活跃 */}
