@@ -68,12 +68,39 @@ export function TaskCenter() {
 
   const [filter, setFilter] = useState<Filter>("all");
   const [isMinimized, setIsMinimized] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
 
   useEffect(() => {
     cleanupOldTasks();
   }, [cleanupOldTasks]);
 
+  useEffect(() => {
+    if (tasks.length > 0) return;
+    setIsDismissed(false);
+    setIsMinimized(false);
+  }, [tasks.length]);
+
   const visibleTasks = useMemo(() => filterTasks(tasks, filter), [tasks, filter]);
+
+  const summary = useMemo(() => {
+    let active = 0;
+    let failed = 0;
+    let succeeded = 0;
+    let canceled = 0;
+
+    for (const task of tasks) {
+      if (task.status === "failed") failed++;
+      if (task.status === "succeeded") succeeded++;
+      if (task.status === "canceled") canceled++;
+      if (["pending", "running", "paused"].includes(task.status)) active++;
+    }
+
+    const total = tasks.length;
+    const completed = succeeded + failed + canceled;
+    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    return { active, failed, succeeded, canceled, total, completed, percentage };
+  }, [tasks]);
 
   const groups = useMemo(() => {
     const map = new Map<string, Task[]>();
@@ -97,56 +124,122 @@ export function TaskCenter() {
 
   if (tasks.length === 0) return null;
 
+  if (isDismissed) {
+    return (
+      <div className="fixed bottom-4 right-4 z-50">
+        <Button
+          variant="secondary"
+          size="icon"
+          onClick={() => setIsDismissed(false)}
+          aria-label="打开任务中心"
+          className="relative shadow-lg"
+        >
+          <ChevronUp className="h-4 w-4" />
+          <Badge
+            variant="secondary"
+            className="absolute -top-2 -right-2 min-w-6 justify-center px-1"
+          >
+            {tasks.length}
+          </Badge>
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
-        "fixed bottom-4 right-4 w-[380px] bg-background border rounded-lg shadow-lg z-50",
-        isMinimized && "h-12 overflow-hidden",
+        "fixed bottom-4 right-4 z-50 bg-background border shadow-lg overflow-hidden",
+        "w-[calc(100vw-2rem)] sm:w-[380px]",
+        isMinimized ? "rounded-full" : "rounded-lg",
       )}
     >
-      <div className="flex items-center justify-between px-3 py-2 border-b">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="font-medium">任务中心</span>
-          <Badge variant="secondary">{tasks.length}</Badge>
+      {isMinimized ? (
+        <div className="px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-medium whitespace-nowrap flex-shrink-0">任务中心</span>
+              <Badge variant="secondary" className="flex-shrink-0">{tasks.length}</Badge>
+              <div className="text-xs text-muted-foreground truncate">
+                {summary.active > 0 ? `进行中 ${summary.active} · ` : ""}
+                {summary.completed}/{summary.total} 已完成（{summary.percentage}%）
+                {summary.failed > 0 ? ` · 失败 ${summary.failed}` : ""}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsMinimized(false)}
+                aria-label="展开任务中心"
+              >
+                <ChevronUp className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsDismissed(true)}
+                aria-label="关闭任务中心"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-2">
+            <Progress value={summary.percentage} className="h-1" />
+          </div>
         </div>
+      ) : (
+        <div className="flex items-center justify-between px-3 py-2 border-b">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-medium whitespace-nowrap">任务中心</span>
+            <Badge variant="secondary">{tasks.length}</Badge>
+          </div>
 
-        <div className="flex items-center gap-1">
-          <Button
-            variant={filter === "all" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setFilter("all")}
-          >
-            全部
-          </Button>
-          <Button
-            variant={filter === "running" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setFilter("running")}
-          >
-            进行中
-          </Button>
-          <Button
-            variant={filter === "failed" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setFilter("failed")}
-          >
-            失败
-          </Button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Button
+              variant={filter === "all" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setFilter("all")}
+            >
+              全部
+            </Button>
+            <Button
+              variant={filter === "running" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setFilter("running")}
+            >
+              进行中
+            </Button>
+            <Button
+              variant={filter === "failed" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setFilter("failed")}
+            >
+              失败
+            </Button>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsMinimized((v) => !v)}
-            aria-label={isMinimized ? "展开任务中心" : "收起任务中心"}
-          >
-            {isMinimized ? (
-              <ChevronUp className="h-4 w-4" />
-            ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsMinimized(true)}
+              aria-label="收起任务中心"
+            >
               <ChevronDown className="h-4 w-4" />
-            )}
-          </Button>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsDismissed(true)}
+              aria-label="关闭任务中心"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       {!isMinimized && (
         <div className="max-h-[420px] overflow-auto p-2 space-y-3">
