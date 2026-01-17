@@ -134,7 +134,13 @@ const platformOptions = [
 
 // 默认平台配置
 const defaultPlatformConfigs = {
-  DIFY: { baseUrl: 'https://api.dify.ai/v1', apiKey: '', timeout: 30000 },
+  DIFY: {
+    baseUrl: 'https://api.dify.ai/v1',
+    apiKey: '',
+    workflowApiKey: '',
+    workflowBaseUrl: '',
+    timeout: 30000,
+  },
   RAGFLOW: {
     baseUrl: 'https://api.ragflow.io',
     apiKey: '',
@@ -1166,13 +1172,40 @@ export default function AgentsPage() {
                         }))}
                       />
                     </div>
+                    <div className="space-y-2">
+                      <Label>Workflow API Key（可选，用于 Batch Tasks）</Label>
+                      <Input
+                        type="password"
+                        placeholder="app-xxxxxxxxxxxxxxxx（Workflow App）"
+                        value={formData.platformConfig.workflowApiKey || ''}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          platformConfig: { ...prev.platformConfig, workflowApiKey: e.target.value }
+                        }))}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        若当前 API Key 属于 Chat/Agent 应用，调用 <code className="font-mono">/workflows/run</code> 会报 <code className="font-mono">not_workflow_app</code>。
+                        这里可单独配置 Workflow App 的 API Key，不影响聊天。
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Workflow Base URL（可选）</Label>
+                      <Input
+                        placeholder="留空则复用 Dify Base URL"
+                        value={formData.platformConfig.workflowBaseUrl || ''}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          platformConfig: { ...prev.platformConfig, workflowBaseUrl: e.target.value }
+                        }))}
+                      />
+                    </div>
                     <ConnectionTest
                       platform={formData.platform}
                       config={formData.platformConfig}
                       onTestResult={handleConnectionTestResult}
                     />
-                  </div>
-                )}
+	                  </div>
+	                )}
 	
 	                {formData.platform === 'RAGFLOW' && (
 	                  <div className="space-y-3">

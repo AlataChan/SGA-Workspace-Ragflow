@@ -699,6 +699,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
         platform: 'DIFY',
         difyUrl,
         difyKey,
+        localAgentId: agent.id,
         userId: user.user_id || user.id || 'user-123'
       }
     } else if (agent.platform === 'RAGFLOW') {

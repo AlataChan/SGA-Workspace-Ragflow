@@ -41,6 +41,8 @@ import {
 } from '@/lib/ragflow-utils'
 import TempKbDialog from '@/components/temp-kb/temp-kb-dialog'
 import KnowledgeGraphActions from '@/components/chat/knowledge-graph-actions'
+import { useRouter } from "next/navigation"
+import { useBatchDraftStore } from "@/app/store/batch-draft"
 
 // 配置 marked 为同步模式
 marked.setOptions({
@@ -642,6 +644,11 @@ export default function EnhancedChatWithSidebar({
   agentConfig,
   initialConversationId
 }: EnhancedChatWithSidebarProps) {
+  const router = useRouter()
+  const hasBatchDraftHydrated = useBatchDraftStore((s) => s._hasHydrated)
+  const upsertBatchDraft = useBatchDraftStore((s) => s.upsertDraft)
+  const cleanupOldBatchDrafts = useBatchDraftStore((s) => s.cleanupOldDrafts)
+
   // 基础状态
   const [sessions, setSessions] = useState<ChatSession[]>([{
     id: 'draft_default',
@@ -663,6 +670,48 @@ export default function EnhancedChatWithSidebar({
   const [isStreaming, setIsStreaming] = useState(false)
   const [attachments, setAttachments] = useState<FileAttachment[]>([])
   const [isUploading, setIsUploading] = useState(false)
+
+  const openBatchTasks = useCallback(() => {
+    if (!hasBatchDraftHydrated) {
+      toast.error('正在初始化批量任务存储，请稍后重试')
+      return
+    }
+
+    if (agentConfig?.platform !== 'DIFY') {
+      toast.error('仅支持 Dify 平台的批量任务')
+      return
+    }
+
+    const agentId = agentConfig.localAgentId
+    if (!agentId) {
+      toast.error('缺少 agentId，无法创建批量任务')
+      return
+    }
+
+    const uploaded = attachments.filter((a) => Boolean(a.uploadFileId))
+    if (uploaded.length === 0) {
+      toast.error('请先上传附件后再进入批量任务')
+      return
+    }
+
+    const draftId = nanoid()
+    upsertBatchDraft({
+      id: draftId,
+      agentId,
+      userId: agentConfig.userId,
+      items: uploaded.map((a) => ({
+        uploadFileId: String(a.uploadFileId),
+        fileName: a.name,
+        fileType: a.type,
+        fileSize: a.size,
+        url: a.url,
+      })),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    })
+    cleanupOldBatchDrafts()
+    router.push(`/batch-tasks?draft=${draftId}`)
+  }, [agentConfig?.localAgentId, agentConfig?.platform, agentConfig?.userId, attachments, cleanupOldBatchDrafts, hasBatchDraftHydrated, router, upsertBatchDraft])
 
   // 历史对话管理
   const [historyConversations, setHistoryConversations] = useState<DifyHistoryConversation[]>([])
@@ -712,8 +761,8 @@ export default function EnhancedChatWithSidebar({
     const files = event.target.files
     if (!files || files.length === 0) return
 
-    if (!agentConfig?.difyUrl || !agentConfig?.difyKey || !agentConfig?.userId) {
-      toast.error('Agent 配置不完整，无法上传文件')
+    if (agentConfig?.platform !== 'DIFY' || !agentConfig?.localAgentId || !agentConfig?.userId) {
+      toast.error('当前 Agent 不支持文件上传（需要 Dify 平台且具备 agentId/userId）')
       return
     }
 
@@ -745,24 +794,29 @@ export default function EnhancedChatWithSidebar({
           throw new Error(`不支持的文件类型: ${file.type}。支持的类型包括图片、文档、音频和视频文件。`)
         }
 
-        // 验证文件大小 (10MB)
-        const maxSize = 10 * 1024 * 1024
-        if (file.size > maxSize) {
-          throw new Error('文件大小超过限制 (10MB)')
+        // 验证文件大小（与服务端 Dify 上传限制保持一致）
+        const maxSizeBytes = (() => {
+          const raw = process.env.NEXT_PUBLIC_DIFY_UPLOAD_MAX_SIZE
+          const parsed = raw ? Number(raw) : Number.NaN
+          return Number.isFinite(parsed) && parsed > 0 ? parsed : 4 * 1024 * 1024
+        })()
+        if (file.size >= maxSizeBytes) {
+          const maxLabel = `${(maxSizeBytes / 1024 / 1024).toFixed(1)}MB`
+          const currentLabel = `${(file.size / 1024 / 1024).toFixed(1)}MB`
+          throw new Error(`文件大小超过限制（最大 ${maxLabel}，当前 ${currentLabel}）`)
         }
 
         // 统一上传到 Dify（支持图片和文档）
         const formData = new FormData()
         formData.append('file', file)
-        formData.append('user', agentConfig.userId)
-        formData.append('difyUrl', agentConfig.difyUrl)
-        formData.append('difyKey', agentConfig.difyKey)
+        formData.append('agentId', agentConfig.localAgentId)
+        formData.append('userId', agentConfig.userId)
 
         console.log(`[FileUpload] 上传文件到 Dify:`, {
           fileName: file.name,
           fileType: file.type,
           fileSize: file.size,
-          difyUrl: agentConfig.difyUrl
+          agentId: agentConfig.localAgentId
         })
 
         const response = await fetch('/api/dify/files/upload', {
@@ -771,8 +825,26 @@ export default function EnhancedChatWithSidebar({
         })
 
         if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || `上传失败: ${response.status}`)
+          let errorData: any = null
+          try {
+            errorData = await response.json()
+          } catch {
+            errorData = null
+          }
+
+          const message =
+            (typeof errorData?.error === 'string' && errorData.error) ||
+            errorData?.error?.message ||
+            errorData?.details?.message ||
+            errorData?.message ||
+            `上传失败: ${response.status}`
+
+          const hint =
+            errorData?.hint ||
+            errorData?.error?.hint ||
+            errorData?.details?.hint
+
+          throw new Error(hint ? `${message}（${hint}）` : message)
         }
 
         const result = await response.json()
@@ -3125,6 +3197,20 @@ export default function EnhancedChatWithSidebar({
                     </Button>
                   </div>
                 ))}
+
+                {agentConfig?.platform === 'DIFY' && (
+                  <div className="flex justify-end">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={openBatchTasks}
+                      disabled={isUploading || attachments.every((a) => !a.uploadFileId)}
+                      className="h-8"
+                    >
+                      批量运行 Workflow
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
 

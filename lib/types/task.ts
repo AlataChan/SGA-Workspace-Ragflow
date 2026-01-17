@@ -325,7 +325,7 @@ export function getTaskTypeText(type: TaskType): string {
     case 'kb.deleteDocument':
       return '删除文档';
     case 'workflow.run':
-      return '运行工作流';
+      return '运行 Chatflow';
     default:
       return '未知操作';
   }

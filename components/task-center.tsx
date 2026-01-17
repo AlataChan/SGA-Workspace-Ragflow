@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Pause, Play, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, Pause, Play, Trash2, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -24,6 +25,20 @@ function filterTasks(tasks: Task[], filter: Filter) {
   if (filter === "all") return tasks;
   if (filter === "failed") return tasks.filter((t) => t.status === "failed");
   return tasks.filter((t) => ["pending", "running", "paused"].includes(t.status));
+}
+
+function getWorkflowResultText(task: Task) {
+  if (task.type !== "workflow.run") return undefined;
+  const workflow = (task.output as any)?.workflow as any;
+  if (!workflow) return undefined;
+
+  const text = typeof workflow.text === "string" ? workflow.text : undefined;
+  if (text && text.trim()) return text;
+
+  const answer = typeof workflow.outputs?.answer === "string" ? workflow.outputs.answer : undefined;
+  if (answer && answer.trim()) return answer;
+
+  return undefined;
 }
 
 function getStatusBadgeVariant(status: TaskStatus) {
@@ -192,6 +207,11 @@ export function TaskCenter() {
                     const title = task.title || getTaskTypeText(task.type);
                     const statusText = getTaskStatusText(task.status);
                     const isFinal = isFinalTaskStatus(task.status);
+                    const workflowText = getWorkflowResultText(task);
+                    const workflowPreview =
+                      workflowText && workflowText.length > 800
+                        ? `${workflowText.slice(0, 800)}…`
+                        : workflowText;
 
                     return (
                       <div key={task.id} className="p-2 rounded-md border">
@@ -216,9 +236,32 @@ export function TaskCenter() {
                                 {task.error.message}
                               </div>
                             )}
+
+                            {task.status === "succeeded" && task.type === "workflow.run" && workflowPreview && (
+                              <div className="mt-2 text-xs rounded-md border bg-muted/30 p-2 whitespace-pre-wrap break-words">
+                                {workflowPreview}
+                              </div>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-1 flex-shrink-0">
+                            {task.status === "succeeded" && task.type === "workflow.run" && workflowText && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={async () => {
+                                  try {
+                                    await navigator.clipboard.writeText(workflowText);
+                                    toast.success("已复制结果");
+                                  } catch {
+                                    toast.error("复制失败");
+                                  }
+                                }}
+                                aria-label="复制结果"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            )}
                             {!isFinal && (
                               <Button
                                 variant="ghost"
@@ -265,4 +308,3 @@ export function TaskCenter() {
     </div>
   );
 }
-

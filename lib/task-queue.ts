@@ -86,7 +86,7 @@ export class TaskQueue {
   private executors: Partial<Record<TaskType, TaskExecutor>>;
 
   private pendingQueue: string[] = [];
-  private running = new Map<string, AbortController>();
+  private running = new Map<string, { controller: AbortController; type: TaskType }>();
   private pausedGroups = new Set<string>();
   private paused = false;
 
@@ -109,6 +109,14 @@ export class TaskQueue {
 
   getRunningCount() {
     return this.running.size;
+  }
+
+  private getRunningWorkflowCount() {
+    let count = 0;
+    for (const entry of this.running.values()) {
+      if (entry.type === "workflow.run") count++;
+    }
+    return count;
   }
 
   addTask(task: Task, runtime?: { file?: File }) {
@@ -138,7 +146,17 @@ export class TaskQueue {
     const task = store.getTask(taskId);
     if (!task) return;
 
-    if (task.type === "kb.uploadDocument" || task.type === "workflow.run") {
+    if (task.type === "kb.uploadDocument") {
+      store.updateTask(taskId, {
+        error: {
+          message: "该任务需要重新选择文件后才能重试",
+          code: "FILE_REQUIRED",
+        },
+      });
+      return;
+    }
+
+    if (task.type === "workflow.run" && !task.input?.uploadFileId) {
       store.updateTask(taskId, {
         error: {
           message: "该任务需要重新选择文件后才能重试",
@@ -160,8 +178,8 @@ export class TaskQueue {
   }
 
   cancelTask(taskId: string) {
-    const controller = this.running.get(taskId);
-    if (controller) controller.abort();
+    const entry = this.running.get(taskId);
+    if (entry) entry.controller.abort();
 
     this.pendingQueue = this.pendingQueue.filter((id) => id !== taskId);
     this.fileMap.delete(taskId);
@@ -225,6 +243,7 @@ export class TaskQueue {
     const store = useTaskStore.getState();
     const scanned = this.pendingQueue.length;
     let startedAny = false;
+    let runningWorkflowCount = this.getRunningWorkflowCount();
 
     for (
       let i = 0;
@@ -242,7 +261,13 @@ export class TaskQueue {
         continue;
       }
 
+      if (task.type === "workflow.run" && runningWorkflowCount >= 1) {
+        this.pendingQueue.push(taskId);
+        continue;
+      }
+
       startedAny = true;
+      if (task.type === "workflow.run") runningWorkflowCount++;
       void this.runTask(task);
     }
 
@@ -253,7 +278,7 @@ export class TaskQueue {
   private async runTask(task: Task) {
     const store = useTaskStore.getState();
     const controller = new AbortController();
-    this.running.set(task.id, controller);
+    this.running.set(task.id, { controller, type: task.type });
 
     store.updateTask(task.id, normalizeProgress(task, { status: "running", error: undefined }));
 
@@ -366,8 +391,20 @@ export class TaskQueue {
     tasks.forEach((task) => {
       if (task.status !== "pending" && task.status !== "running") return;
 
-      // 上传/工作流任务需要 File 对象，刷新后无法恢复
-      if (task.type === "kb.uploadDocument" || task.type === "workflow.run") {
+      // 上传任务需要 File 对象，刷新后无法恢复
+      if (task.type === "kb.uploadDocument") {
+        store.updateTask(task.id, {
+          status: "failed",
+          error: {
+            message: "任务已中断，需要重新上传文件",
+            code: "INTERRUPTED_BY_REFRESH",
+          },
+        });
+        return;
+      }
+
+      // workflow.run：若缺少 uploadFileId，则仍无法恢复
+      if (task.type === "workflow.run" && !task.input?.uploadFileId) {
         store.updateTask(task.id, {
           status: "failed",
           error: {
@@ -521,16 +558,85 @@ export class TaskQueue {
       },
 
       "workflow.run": async (task, ctx) => {
+        const uploadFileId = task.input?.uploadFileId as string | undefined;
+        const agentId = task.input?.agentId as string | undefined;
+        const userId = task.input?.userId as string | undefined;
+        const inputs = task.input?.inputs as Record<string, any> | undefined;
+        const fileType = task.input?.fileType as string | undefined;
+        const mode = task.input?.mode as string | undefined;
+        const query = task.input?.query as string | undefined;
+        const responseMode = task.input?.responseMode as string | undefined;
+
+        // 优先使用 upload_file_id 执行（避免 upload + run 两段调用）
+        if (uploadFileId) {
+          if (!agentId) throw new Error("缺少 agentId");
+
+          const response = await fetch("/api/dify/workflows/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              agentId,
+              userId,
+              uploadFileId,
+              fileType,
+              mode,
+              query,
+              responseMode,
+              inputs: inputs && typeof inputs === "object" ? inputs : {},
+            }),
+            signal: ctx.signal,
+          });
+
+          const rawText = await response.text().catch(() => "");
+          let json: WorkflowRunResult | null = null;
+          try {
+            const parsed = rawText ? JSON.parse(rawText) : null;
+            if (parsed && typeof parsed === "object") {
+              json = parsed as WorkflowRunResult;
+            }
+          } catch {
+            json = null;
+          }
+          const safeJson: WorkflowRunResult = json ?? {
+            success: false,
+            uploadFileId,
+            error: { message: rawText || `HTTP ${response.status}` },
+            rawResponse: rawText,
+          };
+          if (!response.ok) {
+            const err = new Error(safeJson?.error?.message || `HTTP ${response.status}`);
+            (err as any).status = response.status;
+            throw err;
+          }
+
+          if (!safeJson.success) {
+            return {
+              status: "failed",
+              output: { ...(task.output || {}), workflow: safeJson },
+              error: safeJson.error || { message: "工作流执行失败" },
+            };
+          }
+
+          return {
+            status: "succeeded",
+            output: { ...(task.output || {}), workflow: safeJson },
+            progress: { totalProgress: 100 },
+          };
+        }
+
+        // 兼容旧用法：携带 File 对象上传后执行（需要 agentId）
         const file = ctx.getFile();
         if (!file) throw new Error("File object not found");
-
-        const inputs = task.input?.inputs;
-        const userId = task.input?.userId;
+        if (!agentId) throw new Error("缺少 agentId");
 
         const formData = new FormData();
+        formData.append("agentId", agentId);
         formData.append("file", file);
         if (typeof userId === "string" && userId.trim()) {
           formData.append("userId", userId.trim());
+        }
+        if (fileType) {
+          formData.append("fileType", fileType);
         }
         if (inputs && typeof inputs === "object") {
           formData.append("inputs", JSON.stringify(inputs));
@@ -542,9 +648,23 @@ export class TaskQueue {
           signal: ctx.signal,
         });
 
-        const json = (await response.json()) as WorkflowRunResult;
+        const rawText = await response.text().catch(() => "");
+        let json: WorkflowRunResult | null = null;
+        try {
+          const parsed = rawText ? JSON.parse(rawText) : null;
+          if (parsed && typeof parsed === "object") {
+            json = parsed as WorkflowRunResult;
+          }
+        } catch {
+          json = null;
+        }
+        const safeJson: WorkflowRunResult = json ?? {
+          success: false,
+          error: { message: rawText || `HTTP ${response.status}` },
+          rawResponse: rawText,
+        };
         if (!response.ok) {
-          const err = new Error(json?.error?.message || `HTTP ${response.status}`);
+          const err = new Error(safeJson?.error?.message || `HTTP ${response.status}`);
           (err as any).status = response.status;
           throw err;
         }
@@ -552,17 +672,17 @@ export class TaskQueue {
         // 执行结束后可释放 File 引用
         this.fileMap.delete(task.id);
 
-        if (!json.success) {
+        if (!safeJson.success) {
           return {
             status: "failed",
-            output: { ...(task.output || {}), workflow: json },
-            error: json.error || { message: "工作流执行失败" },
+            output: { ...(task.output || {}), workflow: safeJson },
+            error: safeJson.error || { message: "工作流执行失败" },
           };
         }
 
         return {
           status: "succeeded",
-          output: { ...(task.output || {}), workflow: json },
+          output: { ...(task.output || {}), workflow: safeJson },
           progress: { totalProgress: 100 },
         };
       },

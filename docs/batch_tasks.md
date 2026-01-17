@@ -295,7 +295,7 @@ export async function POST(request: Request) {
   // 约定：DEFAULT_DIFY_BASE_URL 包含 /v1（例如 http://your-dify-server/v1）
   const DIFY_BASE_URL = process.env.DEFAULT_DIFY_BASE_URL;
   const DIFY_API_KEY = process.env.DEFAULT_DIFY_API_KEY;
-  const DIFY_TIMEOUT_MS = Number(process.env.DEFAULT_DIFY_TIMEOUT || 180000);
+  const DIFY_TIMEOUT_MS = Number(process.env.DEFAULT_DIFY_TIMEOUT || 500000);
 
   if (!DIFY_BASE_URL || !DIFY_API_KEY) {
     return Response.json(
@@ -386,7 +386,7 @@ export async function POST(request: Request) {
 # Dify Workflow 配置
 DEFAULT_DIFY_BASE_URL=https://api.dify.ai/v1  # 或自托管地址（包含 /v1）
 DEFAULT_DIFY_API_KEY=app-xxxxxxxxxxxxxxxx     # Workflow App 的 API Key（仅服务端使用）
-DEFAULT_DIFY_TIMEOUT=180000                   # 超时时间（毫秒），建议 ≥180s
+DEFAULT_DIFY_TIMEOUT=500000                   # 超时时间（毫秒），建议 ≥500s
 
 # 批量任务配置
 BATCH_TASK_CONCURRENCY=3                    # 并发数
