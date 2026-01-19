@@ -3,3 +3,5 @@ export * from "./update";
 export * from "./access";
 export * from "./config";
 export * from "./plugin";
+export * from "./task";
+export * from "./batch-draft";

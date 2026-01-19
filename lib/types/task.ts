@@ -21,7 +21,8 @@ export type TaskStatus =
 export type TaskType =
   | "kb.uploadDocument"   // 上传文档
   | "kb.parseDocument"    // 触发解析
-  | "kb.deleteDocument";  // 删除文档
+  | "kb.deleteDocument"   // 删除文档
+  | "workflow.run";       // 运行工作流（Dify）
 
 /**
  * 重试配置
@@ -80,7 +81,7 @@ export type TaskProgress = {
   parseProgress?: number;
 
   /** 总体进度（加权计算）0-100 */
-  totalProgress: number;
+  totalProgress?: number;
 };
 
 /**
@@ -120,8 +121,8 @@ export type Task = {
   /** UI 展示标题 */
   title?: string;
 
-  /** 进度信息（0-100） */
-  progress?: number;
+  /** 进度信息（结构化，便于组合计算） */
+  progress?: TaskProgress;
 
   /** 已重试次数 */
   retryCount?: number;
@@ -179,23 +180,33 @@ export type GroupProgress = {
  * @returns 进度百分比 (0-100)
  */
 export function calculateTaskProgress(task: Task): number {
+  const totalOverride = task.progress?.totalProgress;
+  const clamp = (n: number) => Math.max(0, Math.min(100, n));
+
   switch (task.type) {
     case 'kb.uploadDocument':
       // 上传占 70%，解析占 30%
-      const uploadPct = ((task.progress || 0) * 0.7);
-      const parsePct = ((task.output?.parseProgress || 0) * 0.3);
+      const uploadPct = ((task.progress?.uploadProgress || 0) * 0.7);
+      const parsePct = ((task.progress?.parseProgress || 0) * 0.3);
       return Math.round(uploadPct + parsePct);
 
     case 'kb.parseDocument':
       // 纯解析任务
-      return task.progress || 0;
+      return task.progress?.parseProgress || 0;
 
     case 'kb.deleteDocument':
       // 删除是原子操作，只有 0 或 100
       return task.status === 'succeeded' ? 100 : 0;
 
+    case 'workflow.run':
+      return typeof totalOverride === "number"
+        ? clamp(totalOverride)
+        : task.status === 'succeeded'
+          ? 100
+          : 0;
+
     default:
-      return 0;
+      return typeof totalOverride === "number" ? clamp(totalOverride) : 0;
   }
 }
 
@@ -313,6 +324,8 @@ export function getTaskTypeText(type: TaskType): string {
       return '解析文档';
     case 'kb.deleteDocument':
       return '删除文档';
+    case 'workflow.run':
+      return '运行 Chatflow';
     default:
       return '未知操作';
   }

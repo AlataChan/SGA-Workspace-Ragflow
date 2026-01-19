@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { DocumentUpload } from '@/components/knowledge-base/document-upload'
+import { useTaskStore } from '@/app/store/task'
 
 /**
  * 文档上传组件测试
@@ -17,12 +18,13 @@ describe('DocumentUpload', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    useTaskStore.getState().clearTasks()
   })
 
   it('应该渲染上传区域', () => {
     render(<DocumentUpload {...mockProps} />)
     expect(screen.getByText(/拖拽文件到这里/)).toBeInTheDocument()
-    expect(screen.getByText(/选择文件/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/选择文件/)).toBeInTheDocument()
   })
 
   it('应该显示支持的文件类型', () => {
@@ -195,6 +197,7 @@ describe('DocumentUpload', () => {
 
     ;(global.fetch as any).mockResolvedValueOnce({
       ok: false,
+      status: 400,
       json: async () => ({
         error: 'Upload failed',
       }),
@@ -207,4 +210,3 @@ describe('DocumentUpload', () => {
     })
   })
 })
-

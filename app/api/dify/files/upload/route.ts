@@ -1,4 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { withAuth, type AuthenticatedRequest } from "@/lib/auth/middleware";
+import prisma from "@/lib/prisma";
 
 // CORS headers
 const corsHeaders = {
@@ -7,34 +9,139 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 }
 
+export const dynamic = "force-dynamic";
+
+function joinUrl(base: string, path: string) {
+  return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+}
+
+const DEFAULT_DIFY_UPLOAD_MAX_SIZE_BYTES = 4 * 1024 * 1024; // 4MiB
+
+function getMaxUploadSizeBytes() {
+  const raw =
+    process.env.DIFY_UPLOAD_MAX_SIZE ||
+    process.env.DIFY_FILE_UPLOAD_MAX_SIZE ||
+    process.env.NEXT_PUBLIC_DIFY_UPLOAD_MAX_SIZE ||
+    "";
+  const parsed = Number(raw);
+  if (Number.isFinite(parsed) && parsed > 0) return Math.floor(parsed);
+  return DEFAULT_DIFY_UPLOAD_MAX_SIZE_BYTES;
+}
+
+function formatMiB(bytes: number) {
+  const mib = bytes / (1024 * 1024);
+  if (!Number.isFinite(mib)) return `${bytes}B`;
+  return `${mib.toFixed(mib >= 10 ? 0 : 1)}MB`;
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getErrorDetail(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return { message: String(error) };
+  }
+  const anyErr = error as any;
+  const cause = anyErr.cause as any;
+  return {
+    message: anyErr.message ? String(anyErr.message) : String(error),
+    code: cause?.code ? String(cause.code) : anyErr.code ? String(anyErr.code) : undefined,
+  };
+}
+
+async function resolveDifyConfigByAgentId(agentId: string, request: AuthenticatedRequest) {
+  const user = request.user;
+  if (!user) {
+    return { ok: false as const, status: 401, message: "未登录" };
+  }
+
+  const agent = await prisma.agent.findUnique({
+    where: { id: agentId },
+    select: {
+      id: true,
+      companyId: true,
+      platform: true,
+      platformConfig: true,
+      difyUrl: true,
+      difyKey: true,
+    },
+  });
+
+  if (!agent || agent.companyId !== user.companyId) {
+    return { ok: false as const, status: 404, message: "Agent 不存在" };
+  }
+
+  if (agent.platform !== "DIFY") {
+    return { ok: false as const, status: 400, message: "该 Agent 不是 DIFY 平台" };
+  }
+
+  if (user.role !== "ADMIN") {
+    const permission = await prisma.userAgentPermission.findUnique({
+      where: {
+        unique_user_agent: {
+          userId: user.userId,
+          agentId,
+        },
+      },
+      select: { id: true },
+    });
+    if (!permission) {
+      return { ok: false as const, status: 403, message: "无权访问该 Agent" };
+    }
+  }
+
+  const config = agent.platformConfig as any;
+  const difyBaseUrl = (config?.baseUrl as string | undefined) || agent.difyUrl || "";
+  const difyApiKey = (config?.apiKey as string | undefined) || agent.difyKey || "";
+  const difyTimeoutMs = Number(process.env.DEFAULT_DIFY_TIMEOUT || 500000);
+
+  if (!difyBaseUrl || !difyApiKey) {
+    return { ok: false as const, status: 500, message: "服务端 Dify 配置缺失" };
+  }
+
+  return { ok: true as const, difyBaseUrl, difyApiKey, difyTimeoutMs };
+}
+
 // Handle preflight requests
 export async function OPTIONS() {
   return new NextResponse(null, { status: 200, headers: corsHeaders })
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withAuth(async (req: AuthenticatedRequest) => {
   try {
     console.log("[Dify File Upload] 收到文件上传请求");
 
     // 获取FormData
     const formData = await req.formData();
-    const file = formData.get('file') as File;
-    const user = formData.get('user') as string;
-    const difyUrl = formData.get('difyUrl') as string;
-    const difyKey = formData.get('difyKey') as string;
+    const file = formData.get("file");
+    const agentId = (formData.get("agentId") as string | null) || "";
+    const userId =
+      (formData.get("userId") as string | null) ||
+      (formData.get("user") as string | null) ||
+      req.user?.userId ||
+      "default-user";
 
     // 验证必要参数
-    if (!file) {
+    if (!(file instanceof File)) {
       return NextResponse.json(
         { error: "没有文件" },
         { status: 400, headers: corsHeaders }
       );
     }
 
-    if (!difyUrl || !difyKey) {
+    if (!agentId) {
       return NextResponse.json(
-        { error: "缺少 Dify 配置信息" },
+        { error: "缺少必填参数：agentId" },
         { status: 400, headers: corsHeaders }
+      );
+    }
+
+    const config = await resolveDifyConfigByAgentId(agentId, req);
+    if (!config.ok) {
+      return NextResponse.json(
+        { error: config.message },
+        { status: config.status, headers: corsHeaders },
       );
     }
 
@@ -62,12 +169,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 文件大小限制 (10MB)
-    const maxSize = 10 * 1024 * 1024;
-    if (file.size > maxSize) {
+    // 文件大小限制（与 Dify 网关限制保持一致，避免大文件触发连接被关闭）
+    const maxSizeBytes = getMaxUploadSizeBytes();
+    if (file.size >= maxSizeBytes) {
       return NextResponse.json(
-        { error: "文件大小超过限制 (10MB)" },
-        { status: 400, headers: corsHeaders }
+        {
+          error: `文件大小超过限制（最大 ${formatMiB(maxSizeBytes)}）`,
+          maxSizeBytes,
+          hint:
+            "如需上传更大文件，请调整 Dify/Nginx 的上传大小限制（例如 Nginx 的 client_max_body_size）。",
+        },
+        { status: 413, headers: corsHeaders }
       );
     }
 
@@ -75,27 +187,79 @@ export async function POST(req: NextRequest) {
       name: file.name,
       type: file.type,
       size: file.size,
-      user,
-      difyUrl: difyUrl.substring(0, 30) + '...'
+      userId,
+      difyBaseUrl: config.difyBaseUrl.substring(0, 30) + '...'
     });
-
-    // 创建新的FormData发送给Dify
-    const difyFormData = new FormData();
-    difyFormData.append('file', file);
-    difyFormData.append('user', user || 'default-user');
 
     // 构建 Dify API URL
-    const uploadUrl = `${difyUrl}/files/upload`;
+    const uploadUrl = joinUrl(config.difyBaseUrl, "/files/upload");
     console.log("[Dify File Upload] 上传到:", uploadUrl);
 
-    // 调用Dify文件上传API
-    const difyResponse = await fetch(uploadUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${difyKey}`,
-      },
-      body: difyFormData,
-    });
+    const maxRetries = Number(process.env.DIFY_MAX_RETRIES || 3);
+    const retryDelays = [1000, 2000, 4000];
+    let difyResponse: Response | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), config.difyTimeoutMs);
+
+      try {
+        // 每次重试都重新构建 FormData
+        const difyFormData = new FormData();
+        difyFormData.append("file", file);
+        difyFormData.append("user", userId);
+
+        difyResponse = await fetch(uploadUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${config.difyApiKey}`,
+          },
+          body: difyFormData,
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        break;
+      } catch (error) {
+        clearTimeout(timeoutId);
+
+        const detail = getErrorDetail(error);
+        const shouldRetry =
+          attempt < maxRetries &&
+          (detail.code?.startsWith("UND_") ||
+            detail.code === "ECONNRESET" ||
+            detail.code === "ETIMEDOUT" ||
+            detail.message === "fetch failed" ||
+            detail.message.toLowerCase().includes("aborted"));
+
+        console.error("[Dify File Upload] 请求失败:", {
+          attempt: attempt + 1,
+          maxRetries: maxRetries + 1,
+          ...detail,
+        });
+
+        if (!shouldRetry) {
+          return NextResponse.json(
+            {
+              error: "文件上传失败（连接异常）",
+              details: detail,
+              hint:
+                "Dify 服务器可能关闭了连接（常见原因：文件过大/网关限制/超时）。可尝试更小文件或检查 Dify/Nginx 上传限制。",
+            },
+            { status: 502, headers: corsHeaders },
+          );
+        }
+
+        const backoff = retryDelays[attempt] || retryDelays[retryDelays.length - 1];
+        await delay(backoff);
+      }
+    }
+
+    if (!difyResponse) {
+      return NextResponse.json(
+        { error: "文件上传失败（无响应）" },
+        { status: 502, headers: corsHeaders },
+      );
+    }
 
     if (!difyResponse.ok) {
       const errorText = await difyResponse.text();
@@ -116,18 +280,19 @@ export async function POST(req: NextRequest) {
       size: result.size,
       extension: result.extension,
       mime_type: result.mime_type,
-      url: result.url || `${difyUrl.replace('/v1', '')}/files/${result.id}`,
+      url: result.url || `${config.difyBaseUrl.replace(/\/v1\/?$/, '')}/files/${result.id}`,
       created_at: result.created_at
     }, { headers: corsHeaders });
 
   } catch (error) {
     console.error("[Dify File Upload] 处理失败:", error);
+    const detail = getErrorDetail(error);
     return NextResponse.json(
       {
         error: "文件上传失败",
-        details: error instanceof Error ? error.message : String(error)
+        details: detail
       },
       { status: 500, headers: corsHeaders }
     );
   }
-}
+});

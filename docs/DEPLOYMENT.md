@@ -228,14 +228,14 @@ RAGFLOW_TIMEOUT=60000
 | 变量名 | 描述 | 必需 | 默认值 |
 |--------|------|------|--------|
 | `DEFAULT_DIFY_BASE_URL` | Dify 服务地址 | ❌ | - |
-| `DEFAULT_DIFY_TIMEOUT` | 请求超时时间(ms) | ❌ | 180000 |
+| `DEFAULT_DIFY_TIMEOUT` | 请求超时时间(ms) | ❌ | 500000 |
 | `DIFY_MAX_RETRIES` | 最大重试次数 | ❌ | 3 |
 
 **配置示例**:
 ```env
 # Dify 配置
 DEFAULT_DIFY_BASE_URL=http://your-dify-server/v1
-DEFAULT_DIFY_TIMEOUT=180000
+DEFAULT_DIFY_TIMEOUT=500000
 DIFY_MAX_RETRIES=3
 ```
 

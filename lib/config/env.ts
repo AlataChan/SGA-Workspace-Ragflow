@@ -70,7 +70,7 @@ const envSchema = z.object({
   
   // Dify配置
   DEFAULT_DIFY_BASE_URL: z.string().url().default("http://192.144.232.60/v1"),
-  DEFAULT_DIFY_TIMEOUT: z.coerce.number().min(1000).default(180000), // 180秒，适应工具调用
+  DEFAULT_DIFY_TIMEOUT: z.coerce.number().min(1000).default(500000), // 500秒，适应长任务调用
   DIFY_MAX_RETRIES: z.coerce.number().min(0).max(10).default(3), // 最大重试次数
   
   // 功能开关
@@ -153,7 +153,7 @@ export const env = envResult.success ? envResult.data : {
   ENABLE_METRICS: true,
   DEFAULT_COMPANY_NAME: "示例企业",
   DEFAULT_DIFY_BASE_URL: "http://192.144.232.60/v1",
-  DEFAULT_DIFY_TIMEOUT: 180000,
+  DEFAULT_DIFY_TIMEOUT: 500000,
   DIFY_MAX_RETRIES: 3,
   ENABLE_USER_REGISTRATION: false,
   ENABLE_PASSWORD_RESET: true,

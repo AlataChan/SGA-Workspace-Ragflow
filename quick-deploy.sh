@@ -101,7 +101,9 @@ sleep 20
 
 echo "🔄 同步数据库schema..."
 docker compose exec app npx prisma generate
-docker compose exec app npx prisma db push --force-reset
+# ⚠️ 注意：不要默认重置数据库，否则会清空用户/业务数据
+# 如需全量重置，请手动执行：docker compose exec app npx prisma db push --force-reset --accept-data-loss
+docker compose exec app npx prisma db push
 
 echo "⏳ 等待数据库同步完成..."
 sleep 10

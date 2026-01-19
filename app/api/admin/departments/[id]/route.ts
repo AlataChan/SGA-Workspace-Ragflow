@@ -209,9 +209,16 @@ export const DELETE = withAdminAuth(async (request, context) => {
         id: departmentId,
         companyId: user.companyId,
       },
-      include: {
-        agents: { select: { id: true } }
-      }
+      select: {
+        id: true,
+        name: true,
+        _count: {
+          select: {
+            agents: true,
+            users: true,
+          }
+        }
+      },
     })
 
     if (!existingDepartment) {
@@ -227,12 +234,25 @@ export const DELETE = withAdminAuth(async (request, context) => {
     }
 
     // 检查部门下是否有Agent
-    if (existingDepartment.agents.length > 0) {
+    if (existingDepartment._count.agents > 0) {
       return NextResponse.json(
         {
           error: {
             code: 'DEPARTMENT_HAS_AGENTS',
-            message: `部门下还有 ${existingDepartment.agents.length} 个Agent，请先移除或转移这些Agent`
+            message: `部门下还有 ${existingDepartment._count.agents} 个Agent，请先移除或转移这些Agent`
+          }
+        },
+        { status: 400 }
+      )
+    }
+
+    // 检查部门下是否有用户（避免删除导致用户 departmentId 置空或产生歧义）
+    if (existingDepartment._count.users > 0) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'DEPARTMENT_HAS_USERS',
+            message: `部门下还有 ${existingDepartment._count.users} 个用户，请先转移或移除这些用户`
           }
         },
         { status: 400 }
