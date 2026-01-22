@@ -24,6 +24,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
+import { DepartmentTreeSelect } from "@/components/ui/department-tree-select"
 
 import {
   Select,
@@ -76,6 +79,16 @@ interface Department {
   icon: string
 }
 
+interface UserData {
+  id: string
+  username: string
+  userId: string
+  chineseName: string
+  role: 'ADMIN' | 'USER'
+  isActive: boolean
+  department?: Department
+}
+
 interface Agent {
   id: string
   chineseName: string
@@ -91,13 +104,9 @@ interface Agent {
   lastError?: string
   sortOrder: number
   department: Department
-  userPermissions: Array<{
-    userId: string
-    user: {
-      displayName: string
-      userId: string
-    }
-  }>
+  _count?: {
+    userPermissions: number
+  }
   createdAt: string
   updatedAt: string
 }
@@ -220,6 +229,23 @@ export default function AgentsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null)
+
+  // 批量授权弹窗状态
+  const [isBulkGrantDialogOpen, setIsBulkGrantDialogOpen] = useState(false)
+  const [bulkGrantAgent, setBulkGrantAgent] = useState<Agent | null>(null)
+  const [bulkGrantMode, setBulkGrantMode] = useState<'company' | 'departments' | 'users'>('departments')
+  const [bulkDepartmentIds, setBulkDepartmentIds] = useState<string[]>([])
+  const [bulkIncludeSubDepartments, setBulkIncludeSubDepartments] = useState(true)
+  const [bulkSelectedUserIds, setBulkSelectedUserIds] = useState<string[]>([])
+  const [bulkIncludeAdmins, setBulkIncludeAdmins] = useState(false)
+  const [bulkIncludeInactive, setBulkIncludeInactive] = useState(true)
+  const [bulkUserSearchQuery, setBulkUserSearchQuery] = useState("")
+  const [bulkUserSearchResults, setBulkUserSearchResults] = useState<UserData[]>([])
+  const [isBulkSearchingUsers, setIsBulkSearchingUsers] = useState(false)
+  const [isBulkPreviewing, setIsBulkPreviewing] = useState(false)
+  const [isBulkGranting, setIsBulkGranting] = useState(false)
+  const [bulkPreview, setBulkPreview] = useState<any>(null)
+  const [bulkGrantResult, setBulkGrantResult] = useState<any>(null)
   
   // 表单数据
   const [formData, setFormData] = useState<AgentFormData>({
@@ -340,6 +366,115 @@ export default function AgentsPage() {
     // 重置连接测试状态
     setConnectionTestResult({ success: false, message: '', tested: false })
     setIsEditDialogOpen(true)
+  }
+
+  const openBulkGrantDialog = (agent: Agent) => {
+    setBulkGrantAgent(agent)
+    setBulkGrantMode('departments')
+    setBulkDepartmentIds([])
+    setBulkIncludeSubDepartments(true)
+    setBulkSelectedUserIds([])
+    setBulkIncludeAdmins(false)
+    setBulkIncludeInactive(true)
+    setBulkUserSearchQuery("")
+    setBulkUserSearchResults([])
+    setBulkPreview(null)
+    setBulkGrantResult(null)
+    setIsBulkGrantDialogOpen(true)
+  }
+
+  const closeBulkGrantDialog = () => {
+    setIsBulkGrantDialogOpen(false)
+    setBulkGrantAgent(null)
+    setBulkPreview(null)
+    setBulkGrantResult(null)
+  }
+
+  const handleSearchUsers = async () => {
+    const q = bulkUserSearchQuery.trim()
+    if (!q) {
+      setBulkUserSearchResults([])
+      return
+    }
+
+    setIsBulkSearchingUsers(true)
+    try {
+      const params = new URLSearchParams({
+        q,
+        page: "1",
+        pageSize: "20",
+        role: bulkIncludeAdmins ? "all" : "USER",
+      })
+      const resp = await fetch(`/api/admin/users?${params}`)
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(data.error?.message || "搜索用户失败")
+      const users = Array.isArray(data.data) ? (data.data as UserData[]) : []
+      setBulkUserSearchResults(bulkIncludeInactive ? users : users.filter((u) => u.isActive))
+    } catch (error) {
+      console.error("搜索用户失败:", error)
+      setBulkUserSearchResults([])
+    } finally {
+      setIsBulkSearchingUsers(false)
+    }
+  }
+
+  const toggleSelectedUser = (userId: string) => {
+    setBulkSelectedUserIds((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]))
+  }
+
+  const buildBulkRequestBody = (dryRun: boolean) => {
+    const body: any = {
+      mode: bulkGrantMode,
+      includeSubDepartments: bulkIncludeSubDepartments,
+      includeAdmins: bulkIncludeAdmins,
+      includeInactive: bulkIncludeInactive,
+      dryRun,
+    }
+    if (bulkGrantMode === "departments") body.departmentIds = bulkDepartmentIds
+    if (bulkGrantMode === "users") body.userIds = bulkSelectedUserIds
+    return body
+  }
+
+  const handleBulkPreview = async () => {
+    if (!bulkGrantAgent) return
+    setIsBulkPreviewing(true)
+    setBulkPreview(null)
+    setBulkGrantResult(null)
+    try {
+      const resp = await fetch(`/api/admin/agents/${bulkGrantAgent.id}/bulk/grant-users`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildBulkRequestBody(true)),
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(data.error?.message || "预览失败")
+      setBulkPreview(data.data)
+    } catch (error) {
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "预览失败" })
+    } finally {
+      setIsBulkPreviewing(false)
+    }
+  }
+
+  const handleBulkGrant = async () => {
+    if (!bulkGrantAgent) return
+    setIsBulkGranting(true)
+    try {
+      const resp = await fetch(`/api/admin/agents/${bulkGrantAgent.id}/bulk/grant-users`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildBulkRequestBody(false)),
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(data.error?.message || "批量授权失败")
+      setBulkGrantResult(data.data)
+      await fetchAgents()
+      setMessage({ type: "success", text: "批量授权完成" })
+    } catch (error) {
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "批量授权失败" })
+    } finally {
+      setIsBulkGranting(false)
+    }
   }
 
   // 处理平台变更
@@ -583,10 +718,11 @@ export default function AgentsPage() {
 
   // 删除Agent
   const handleDelete = async (agent: Agent) => {
-    if (agent.userPermissions.length > 0) {
+    const permissionCount = agent._count?.userPermissions ?? 0
+    if (permissionCount > 0) {
       setMessage({
         type: 'error',
-        text: `Agent还有 ${agent.userPermissions.length} 个用户权限，请先移除这些权限`
+        text: `Agent还有 ${permissionCount} 个用户权限，请先移除这些权限`
       })
       return
     }
@@ -906,7 +1042,7 @@ export default function AgentsPage() {
                         <TableCell className="text-center py-6">
                           <div className="flex flex-col items-center space-y-1">
                             <div className="text-base text-foreground font-bold bg-muted/50 px-3 py-1.5 rounded-lg border border-border/50">
-                              {agent.userPermissions.length}
+                              {agent._count?.userPermissions ?? 0}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               <span className="inline-block w-3 h-3 mr-1">👥</span>
@@ -932,6 +1068,25 @@ export default function AgentsPage() {
                                   </TooltipTrigger>
                                   <TooltipContent>
                                     <p>编辑Agent信息</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => openBulkGrantDialog(agent)}
+                                      className="border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-400 transition-all duration-200 shadow-md hover:shadow-emerald-500/20 px-3 py-2"
+                                    >
+                                      <Users className="w-4 h-4 mr-1" />
+                                      批量授权
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>批量授权该 Agent</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
@@ -1747,6 +1902,198 @@ export default function AgentsPage() {
                 ) : (
                   '更新Agent'
                 )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* 批量授权弹窗 */}
+        <Dialog open={isBulkGrantDialogOpen} onOpenChange={(open) => (open ? setIsBulkGrantDialogOpen(true) : closeBulkGrantDialog())}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>批量授权 {bulkGrantAgent ? `- ${bulkGrantAgent.chineseName}` : ''}</DialogTitle>
+              <DialogDescription>为指定范围的用户授予该 Agent 权限（支持预览 dryRun）</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>授权范围</Label>
+                <Select
+                  value={bulkGrantMode}
+                  onValueChange={(v) => {
+                    setBulkGrantMode(v as any)
+                    setBulkPreview(null)
+                    setBulkGrantResult(null)
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="departments">按部门授权</SelectItem>
+                    <SelectItem value="users">按用户授权</SelectItem>
+                    <SelectItem value="company">全公司普通用户</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+                  <div className="text-sm text-muted-foreground">包含管理员</div>
+                  <Switch
+                    checked={bulkIncludeAdmins}
+                    onCheckedChange={(v) => {
+                      setBulkIncludeAdmins(Boolean(v))
+                      setBulkPreview(null)
+                      setBulkGrantResult(null)
+                    }}
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+                  <div className="text-sm text-muted-foreground">包含停用用户</div>
+                  <Switch
+                    checked={bulkIncludeInactive}
+                    onCheckedChange={(v) => {
+                      setBulkIncludeInactive(Boolean(v))
+                      setBulkPreview(null)
+                      setBulkGrantResult(null)
+                    }}
+                  />
+                </div>
+              </div>
+
+              {bulkGrantMode === "departments" ? (
+                <div className="space-y-2">
+                  <Label>选择部门</Label>
+                  <DepartmentTreeSelect
+                    source="MDM"
+                    value={bulkDepartmentIds}
+                    onChange={(next) => {
+                      setBulkDepartmentIds(next)
+                      setBulkPreview(null)
+                      setBulkGrantResult(null)
+                    }}
+                    showIncludeSubDepartments
+                    includeSubDepartments={bulkIncludeSubDepartments}
+                    onIncludeSubDepartmentsChange={(next) => {
+                      setBulkIncludeSubDepartments(next)
+                      setBulkPreview(null)
+                      setBulkGrantResult(null)
+                    }}
+                  />
+                  <div className="text-xs text-muted-foreground">已选择 {bulkDepartmentIds.length} 个部门</div>
+                </div>
+              ) : null}
+
+              {bulkGrantMode === "users" ? (
+                <div className="space-y-2">
+                  <Label>选择用户</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="搜索姓名/用户名/工号..."
+                      value={bulkUserSearchQuery}
+                      onChange={(e) => setBulkUserSearchQuery(e.target.value)}
+                    />
+                    <Button type="button" variant="outline" onClick={handleSearchUsers} disabled={isBulkSearchingUsers}>
+                      {isBulkSearchingUsers ? <Loader2 className="w-4 h-4 animate-spin" /> : "搜索"}
+                    </Button>
+                  </div>
+
+                  <div className="max-h-60 overflow-auto rounded-md border border-border">
+                    {bulkUserSearchResults.length === 0 ? (
+                      <div className="p-3 text-sm text-muted-foreground">暂无结果</div>
+                    ) : (
+                      <div className="p-2 space-y-1">
+                        {bulkUserSearchResults.map((u) => (
+                          <div
+                            key={u.id}
+                            className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/60"
+                          >
+                            <Checkbox checked={bulkSelectedUserIds.includes(u.id)} onCheckedChange={() => toggleSelectedUser(u.id)} />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-sm">
+                                {u.chineseName}（{u.username}）
+                                {!u.isActive ? <span className="ml-2 text-xs text-amber-500">[停用]</span> : null}
+                                {u.role === "ADMIN" ? <span className="ml-2 text-xs text-blue-500">[管理员]</span> : null}
+                              </div>
+                              <div className="truncate text-xs text-muted-foreground">
+                                工号: {u.userId}
+                                {u.department?.name ? ` · 部门: ${u.department.name}` : ""}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">已选择 {bulkSelectedUserIds.length} 个用户</div>
+                </div>
+              ) : null}
+
+              {bulkGrantMode === "company" ? (
+                <Alert className="border-blue-500/20 bg-blue-500/10">
+                  <AlertDescription className="text-blue-700 dark:text-blue-200">
+                    将把该 Agent 授权给当前公司所有符合筛选条件的用户。
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+
+              <div className="rounded-md border border-border p-3 space-y-2 text-sm">
+                <div className="font-medium">预览结果</div>
+                {bulkPreview ? (
+                  <>
+                    <div>匹配用户数：{bulkPreview.usersMatched ?? 0}</div>
+                    <div>已被撤销（将跳过）：{bulkPreview.usersSkippedDueToRevocation ?? 0}</div>
+                    <div>已过滤后用户数：{bulkPreview.usersProcessed ?? 0}</div>
+                    <div>已有权限（将跳过）：{bulkPreview.alreadyHasCount ?? 0}</div>
+                    <div>实际将授权：{bulkPreview.willInsert ?? 0}</div>
+                  </>
+                ) : (
+                  <div className="text-muted-foreground">点击“预览”查看将影响的用户范围</div>
+                )}
+              </div>
+
+              {bulkGrantResult ? (
+                <Alert className="border-green-500/20 bg-green-500/10">
+                  <AlertDescription className="text-green-700 dark:text-green-200">
+                    已处理 {bulkGrantResult.usersProcessed ?? 0} 人，新增 {bulkGrantResult.inserted ?? 0}，跳过 {bulkGrantResult.skipped ?? 0}
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" type="button" onClick={closeBulkGrantDialog}>
+                关闭
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleBulkPreview}
+                disabled={
+                  !bulkGrantAgent ||
+                  isBulkPreviewing ||
+                  (bulkGrantMode === "departments" && bulkDepartmentIds.length === 0) ||
+                  (bulkGrantMode === "users" && bulkSelectedUserIds.length === 0)
+                }
+              >
+                {isBulkPreviewing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                预览
+              </Button>
+              <Button
+                type="button"
+                onClick={handleBulkGrant}
+                disabled={
+                  !bulkGrantAgent ||
+                  isBulkGranting ||
+                  !bulkPreview ||
+                  (bulkGrantMode === "departments" && bulkDepartmentIds.length === 0) ||
+                  (bulkGrantMode === "users" && bulkSelectedUserIds.length === 0)
+                }
+              >
+                {isBulkGranting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                确认授权
               </Button>
             </DialogFooter>
           </DialogContent>

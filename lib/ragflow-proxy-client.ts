@@ -345,7 +345,7 @@ export class RAGFlowProxyClient {
         })
       })
 
-      const data = await response.json()
+      const data = await response.json().catch(() => ({} as any))
       if (!response.ok || !data.success) {
         throw new Error(data.error || '获取会话列表失败')
       }
@@ -353,7 +353,7 @@ export class RAGFlowProxyClient {
       return data.data || []
     } catch (error) {
       console.error('[RAGFlowProxy] 获取会话列表失败:', error)
-      return []
+      throw error
     }
   }
 
@@ -374,7 +374,7 @@ export class RAGFlowProxyClient {
         })
       })
 
-      const data = await response.json()
+      const data = await response.json().catch(() => ({} as any))
       if (!response.ok || !data.success) {
         throw new Error(data.error || '获取会话历史失败')
       }
@@ -382,7 +382,7 @@ export class RAGFlowProxyClient {
       return data.data?.messages || []
     } catch (error) {
       console.error('[RAGFlowProxy] 获取会话历史失败:', error)
-      return []
+      throw error
     }
   }
 

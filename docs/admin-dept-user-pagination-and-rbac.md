@@ -258,6 +258,27 @@ P1（引入 `DEPT_ADMIN` 时）：
 - [ ] `app/api/admin/departments/route.ts` / `app/api/admin/departments/[id]/route.ts`：增加 scope 校验（`DEPT_ADMIN` 只能访问自己部门）
 - [ ] `app/api/admin/users/route.ts` / `app/api/admin/users/[id]/*`：增加 scope 校验（`DEPT_ADMIN` 只能访问自己部门用户，且禁止操作 `ADMIN`）
 
+---
+
+## 10. 批量导入用户后的“全部 Agent 权限”批量授权
+
+当一次性导入上千个普通用户，并希望他们都拥有“全部 Agent 权限”时：
+- 不建议在前端逐个点“添加 Agent 权限”（规模上不可操作）
+- 建议用服务端批量写入 `user_agent_permissions`（列表页的“Agent权限数”即来自该表的计数）
+
+### 10.1 推荐方式：调用批量授权 API（幂等）
+
+`POST /api/admin/users/bulk/grant-all-agents`
+
+- 默认：给当前公司所有 `USER` 授予全部 Agent 权限
+- 支持重复执行（已存在的权限会自动跳过）
+
+### 10.2 数据库导入注意点
+
+若你在数据库层面自行写入 `user_agent_permissions`：
+- `user_agent_permissions.user_id` 必须写入 `users.id`（而不是 `users.user_id` / `users.username`）
+- `agent_id` 写入 `agents.id`
+
 前端改造：
 - [ ] `app/admin/departments/page.tsx`：接入部门分页/搜索；URL query 同步；分页组件
 - [ ] `app/admin/users/page.tsx`：改为服务端分页/搜索/过滤；用 `_count.agentPermissions` 等字段替代列表明细（减少响应体）

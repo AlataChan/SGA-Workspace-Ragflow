@@ -761,6 +761,31 @@ export class TaskQueue {
 
 ---
 
+#### 问题 2.1: Dify 文件上传大小上限过小（默认 4MiB）⚠️ HIGH
+
+**现状分析**:
+- 批量任务（batch tasks）本身使用 `upload_file_id` 执行（`workflow.run`/`chat-messages`），队列存储的是**元数据**，并不会把文件内容塞进队列/IndexedDB；因此“文档体积加总”不会直接限制队列。
+- 当前项目里真正的 4MB 限制来自**上传阶段**的硬校验：
+  - `app/api/dify/files/upload/route.ts`：服务端代理上传时默认限制 `4 * 1024 * 1024`。
+  - `app/api/dify/workflows/run/route.ts`：multipart fallback 也有同样默认限制。
+  - `app/components/enhanced-chat-with-sidebar.tsx`：前端也做了同样的 4MiB 校验，文件会在发请求前就被拒绝。
+
+**✅ 决策**:
+- 将项目内默认上传上限提升到 **50MiB**，并通过环境变量可配置：
+  - `DIFY_UPLOAD_MAX_SIZE`（服务端生效）
+  - `NEXT_PUBLIC_DIFY_UPLOAD_MAX_SIZE`（前端校验用；修改后需重新构建前端产物）
+- 仍需注意：如果 Dify 自身（或其网关 Nginx）`client_max_body_size` 更小，上传会在 Dify 侧被拒绝/断开连接；此时需要同步调整 Dify 部署配置。
+- 排障提示：若你在服务端日志里看到 `fetch failed` + `UND_ERR_SOCKET`，通常意味着**连接被对端直接断开**（常见原因：Dify 是 https 部署但这里配置成 http、网关限制/超时等）。请优先检查 Agent 的 `baseUrl` 是否能从**服务端**访问，并确认协议/端口正确（建议直接配置成 `https://.../v1`）。
+
+**实施步骤**:
+1. 在本项目部署环境设置：
+   - `DIFY_UPLOAD_MAX_SIZE=50MB`
+   - `NEXT_PUBLIC_DIFY_UPLOAD_MAX_SIZE=50MB`
+2. 确认本项目入口网关允许大包体（Docker 版 `docker/nginx/nginx.conf` 默认 `client_max_body_size 100M`）。
+3. 若仍失败，调整 Dify 网关/反向代理（示例：Nginx `client_max_body_size 50m;`），并关注超时设置。
+
+---
+
 #### 问题 3: 轮询策略具体实现 ⚠️ HIGH
 
 **现状分析**:

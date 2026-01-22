@@ -7,6 +7,28 @@ import prisma from '@/lib/prisma'
 import { RAGFlowTempKbClient, GraphData } from '@/lib/ragflow-temp-kb-client'
 import { TempKbStatus } from '@prisma/client'
 
+type RagflowRuntimeConfig = {
+  baseUrl: string
+  apiKey: string
+}
+
+function normalizeRagflowBaseUrl(value: unknown): string {
+  let base = String(value ?? '').trim()
+  base = base.replace(/\/+$/, '')
+  base = base.replace(/\/api\/v1$/i, '')
+  base = base.replace(/\/v1$/i, '')
+  return base.replace(/\/+$/, '')
+}
+
+function getEnvRagflowConfig(): RagflowRuntimeConfig | null {
+  const rawBaseUrl = process.env.RAGFLOW_URL || process.env.RAGFLOW_BASE_URL || ''
+  const baseUrl = normalizeRagflowBaseUrl(rawBaseUrl)
+  const apiKey = String(process.env.RAGFLOW_API_KEY || '').trim()
+
+  if (!baseUrl || !apiKey) return null
+  return { baseUrl, apiKey }
+}
+
 export interface SaveChunkParams {
   userId: string
   content: string
@@ -50,22 +72,48 @@ export interface GetGraphResult {
  * 临时知识库服务类
  */
 export class TempKbService {
-  private client: RAGFlowTempKbClient
-  private ragflowUrl: string
-  private apiKey: string
+  private envConfig: RagflowRuntimeConfig | null
 
   constructor() {
-    this.ragflowUrl = process.env.RAGFLOW_URL || ''
-    this.apiKey = process.env.RAGFLOW_API_KEY || ''
-    
-    if (!this.ragflowUrl || !this.apiKey) {
+    this.envConfig = getEnvRagflowConfig()
+    if (!this.envConfig) {
       console.warn('[TempKbService] RAGFlow配置缺失')
     }
-    
-    this.client = new RAGFlowTempKbClient({
-      baseUrl: this.ragflowUrl,
-      apiKey: this.apiKey
+  }
+
+  private createClient(config: RagflowRuntimeConfig): RAGFlowTempKbClient {
+    return new RAGFlowTempKbClient({
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
     })
+  }
+
+  private async resolveRagflowConfig(userId: string): Promise<RagflowRuntimeConfig | null> {
+    if (this.envConfig) return this.envConfig
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { companyId: true },
+    })
+    if (!user?.companyId) return null
+
+    const knowledgeGraph = await prisma.knowledgeGraph.findFirst({
+      where: {
+        companyId: user.companyId,
+        isActive: true,
+      },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      select: {
+        ragflowUrl: true,
+        apiKey: true,
+      },
+    })
+
+    if (!knowledgeGraph?.ragflowUrl || !knowledgeGraph.apiKey) return null
+    return {
+      baseUrl: normalizeRagflowBaseUrl(knowledgeGraph.ragflowUrl),
+      apiKey: knowledgeGraph.apiKey,
+    }
   }
 
   /**
@@ -121,8 +169,19 @@ export class TempKbService {
       // 格式: 张三_20251225_1430_temp_kb
       const kbName = `${userName}_${dateStr}_${timeStr}_temp_kb`
 
+      const ragflowConfig = await this.resolveRagflowConfig(userId)
+      if (!ragflowConfig) {
+        return {
+          success: false,
+          error:
+            'RAGFlow 配置缺失：请设置环境变量 RAGFLOW_URL/RAGFLOW_BASE_URL 与 RAGFLOW_API_KEY，或在“知识图谱管理”中配置并启用一个知识图谱。',
+        }
+      }
+
+      const client = this.createClient(ragflowConfig)
+
       // 在RAGFlow中创建知识库
-      const createResult = await this.client.createDataset({
+      const createResult = await client.createDataset({
         name: kbName,
         description: `用户 ${user?.chineseName || user?.username || userId} 的临时知识图谱 (创建于 ${now.toLocaleString('zh-CN')})`,
         enableGraphRAG: true,
@@ -138,7 +197,7 @@ export class TempKbService {
       }
 
       // 创建虚拟文档
-      const docResult = await this.client.createVirtualDocument(
+      const docResult = await client.createVirtualDocument(
         createResult.data.id,
         'user_saved_knowledge'
       )
@@ -149,8 +208,8 @@ export class TempKbService {
           userId,
           ragflowKbId: createResult.data.id,
           ragflowDocId: docResult.data?.documentId || null,
-          ragflowUrl: this.ragflowUrl,
-          apiKey: this.apiKey,
+          ragflowUrl: ragflowConfig.baseUrl,
+          apiKey: ragflowConfig.apiKey,
           status: 'ACTIVE',
           chunkCount: 0,
           nodeCount: 0,
@@ -202,10 +261,15 @@ export class TempKbService {
         }
       }
 
+      const client = this.createClient({
+        baseUrl: tempKb.ragflowUrl,
+        apiKey: tempKb.apiKey,
+      })
+
       // 如果虚拟文档未创建，尝试创建
       if (!tempKb.ragflowDocId) {
         console.log('[TempKbService] 虚拟文档未创建，尝试创建...')
-        const docResult = await this.client.createVirtualDocument(
+        const docResult = await client.createVirtualDocument(
           tempKb.ragflowKbId,
           'user_saved_knowledge'
         )
@@ -266,7 +330,7 @@ export class TempKbService {
       }
 
       // 2. 添加到RAGFlow
-      const addResult = await this.client.addChunk({
+      const addResult = await client.addChunk({
         datasetId: tempKb.ragflowKbId,
         documentId: tempKb.ragflowDocId,
         content: params.content,
@@ -344,8 +408,13 @@ export class TempKbService {
         data: { status: 'BUILDING' }
       })
 
+      const client = this.createClient({
+        baseUrl: tempKb.ragflowUrl,
+        apiKey: tempKb.apiKey,
+      })
+
       // 触发RAGFlow图谱构建
-      const result = await this.client.runGraphRAG(tempKb.ragflowKbId)
+      const result = await client.runGraphRAG(tempKb.ragflowKbId)
 
       if (!result.success) {
         // 恢复状态
@@ -386,7 +455,12 @@ export class TempKbService {
         }
       }
 
-      const result = await this.client.getGraphRAGStatus(tempKb.ragflowKbId)
+      const client = this.createClient({
+        baseUrl: tempKb.ragflowUrl,
+        apiKey: tempKb.apiKey,
+      })
+
+      const result = await client.getGraphRAGStatus(tempKb.ragflowKbId)
 
       // 如果构建完成，更新状态
       if (result.success && result.data?.status === 'completed') {
@@ -421,7 +495,12 @@ export class TempKbService {
         }
       }
 
-      const result = await this.client.getKnowledgeGraph(tempKb.ragflowKbId)
+      const client = this.createClient({
+        baseUrl: tempKb.ragflowUrl,
+        apiKey: tempKb.apiKey,
+      })
+
+      const result = await client.getKnowledgeGraph(tempKb.ragflowKbId)
 
       // 更新图谱统计
       if (result.success && result.data) {

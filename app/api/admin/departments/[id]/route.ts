@@ -128,6 +128,24 @@ export const PUT = withAdminAuth(async (request, context) => {
       )
     }
 
+    // MDM 部门只允许修改展示类字段
+    if (existingDepartment.source === 'MDM') {
+      const forbiddenFields = ['name']
+      for (const field of forbiddenFields) {
+        if ((updateData as any)[field] !== undefined) {
+          return NextResponse.json(
+            {
+              error: {
+                code: 'MDM_DEPARTMENT_READONLY',
+                message: 'MDM 部门不允许修改结构字段'
+              }
+            },
+            { status: 400 }
+          )
+        }
+      }
+    }
+
     // 如果更新名称，检查是否与其他部门重名
     if (updateData.name && updateData.name !== existingDepartment.name) {
       const duplicateDepartment = await prisma.department.findFirst({
@@ -212,6 +230,7 @@ export const DELETE = withAdminAuth(async (request, context) => {
       select: {
         id: true,
         name: true,
+        source: true,
         _count: {
           select: {
             agents: true,
@@ -230,6 +249,35 @@ export const DELETE = withAdminAuth(async (request, context) => {
           }
         },
         { status: 404 }
+      )
+    }
+
+    // MDM 部门不允许删除
+    if (existingDepartment.source === 'MDM') {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'MDM_DEPARTMENT_NOT_DELETABLE',
+            message: 'MDM 部门不允许删除'
+          }
+        },
+        { status: 403 }
+      )
+    }
+
+    // 检查是否有子部门（避免误删导致结构断裂）
+    const childCount = await prisma.department.count({
+      where: { companyId: user.companyId, parentId: departmentId }
+    })
+    if (childCount > 0) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'DEPARTMENT_HAS_CHILDREN',
+            message: '该部门存在子部门，无法删除'
+          }
+        },
+        { status: 400 }
       )
     }
 

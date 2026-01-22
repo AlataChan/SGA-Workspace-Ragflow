@@ -11,10 +11,18 @@ model Company {
   id              String           @id @default(cuid())
   name            String           @unique
   logoUrl         String?          @map("logo_url")
+  mdmConfig       Json?            @map("mdm_config")
+  mdmToken        String?          @map("mdm_token")
+  mdmSyncEnabled  Boolean          @default(false) @map("mdm_sync_enabled")
+  mdmSyncIntervalMin Int?          @map("mdm_sync_interval_min")
+  mdmLastSyncAt   DateTime?        @map("mdm_last_sync_at")
+  mdmLastSyncStatus String?        @map("mdm_last_sync_status")
+  mdmLastSyncError String?         @map("mdm_last_sync_error")
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
   agents          Agent[]
   departments     Department[]
+  departmentSyncLogs DepartmentSyncLog[]
   knowledgeGraphs KnowledgeGraph[]
   users           User[]
 
@@ -31,11 +39,28 @@ model Department {
   isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
+  parentId    String?  @map("parent_id")
+  parent      Department?  @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Department[] @relation("DepartmentTree")
+  source      DepartmentSource @default(LOCAL)
+  mdmExternalId       String?   @map("mdm_external_id")
+  mdmParentExternalId String?   @map("mdm_parent_external_id")
+  mdmCode             String?   @map("mdm_code")
+  mdmLcode            String?   @map("mdm_lcode")
+  mdmLname            String?   @map("mdm_lname")
+  mdmIdx              Int?      @map("mdm_idx")
+  mdmIsUsed           Boolean?  @map("mdm_is_used")
+  mdmPayload          Json?     @map("mdm_payload")
+  mdmSyncedAt         DateTime? @map("mdm_synced_at")
+  mdmDeletedAt        DateTime? @map("mdm_deleted_at")
   agents      Agent[]
   company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   users       User[]
 
   @@unique([companyId, name], name: "companyId_name")
+  @@unique([companyId, mdmExternalId], name: "unique_company_mdm_external_id")
+  @@index([companyId, parentId])
+  @@index([companyId, mdmLcode])
   @@map("departments")
 }
 
@@ -52,6 +77,11 @@ model User {
   displayName      String?               @map("display_name")
   avatarUrl        String?               @map("avatar_url")
   departmentId     String?               @map("department_id")
+  mdmDepartmentExternalId String?        @map("mdm_department_external_id")
+  localDepartmentOverride String?        @map("local_department_override")
+  localDeptOverrideReason String?        @map("local_dept_override_reason")
+  localDeptOverrideAt     DateTime?      @map("local_dept_override_at")
+  localDeptOverrideBy     String?        @map("local_dept_override_by")
   position         String?
   role             UserRole              @default(USER)
   isActive         Boolean               @default(true) @map("is_active")
@@ -62,6 +92,7 @@ model User {
   sessions                      ChatSession[]
   uploadedFiles                 UploadedFile[]
   agentPermissions              UserAgentPermission[]
+  agentPermissionRevocations    UserAgentPermissionRevocation[]
   knowledgeGraphPermissions     UserKnowledgeGraphPermission[]
   tempKnowledgeBase             UserTempKnowledgeBase?
   company                       Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -97,6 +128,7 @@ model Agent {
   department         Department            @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   sessions           ChatSession[]
   userPermissions    UserAgentPermission[]
+  userPermissionRevocations UserAgentPermissionRevocation[]
 
   @@map("agents")
 }
@@ -106,12 +138,53 @@ model UserAgentPermission {
   userId    String   @map("user_id")
   agentId   String   @map("agent_id")
   grantedBy String   @map("granted_by")
+  grantedVia String? @map("granted_via")
+  grantBatchId String? @map("grant_batch_id")
   createdAt DateTime @default(now()) @map("created_at")
   agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, agentId], name: "unique_user_agent")
   @@map("user_agent_permissions")
+}
+
+model UserAgentPermissionRevocation {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  agentId   String   @map("agent_id")
+  revokedBy String   @map("revoked_by")
+  revokedAt DateTime @default(now()) @map("revoked_at")
+  reason    String?
+  isActive  Boolean  @default(true) @map("is_active")
+  expiresAt DateTime? @map("expires_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, agentId], name: "unique_user_agent_revocation")
+  @@index([agentId, isActive])
+  @@map("user_agent_permission_revocations")
+}
+
+model DepartmentSyncLog {
+  id            String   @id @default(cuid())
+  companyId     String   @map("company_id")
+  triggeredBy   String   @map("triggered_by")
+  triggerType   String   @map("trigger_type")
+  startedAt     DateTime @map("started_at")
+  finishedAt    DateTime? @map("finished_at")
+  durationMs    Int?     @map("duration_ms")
+  totalExpected Int?     @map("total_expected")
+  totalPulled   Int?     @map("total_pulled")
+  pageCount     Int?     @map("page_count")
+  created       Int      @default(0)
+  updated       Int      @default(0)
+  deactivated   Int      @default(0)
+  status        String   @default("running")
+  errorMessage  String?  @map("error_message")
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, startedAt])
+  @@map("department_sync_logs")
 }
 
 model UserKnowledgeGraphPermission {
@@ -196,6 +269,11 @@ model KnowledgeGraph {
 enum UserRole {
   ADMIN
   USER
+}
+
+enum DepartmentSource {
+  LOCAL
+  MDM
 }
 
 enum AgentPlatform {

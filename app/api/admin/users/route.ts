@@ -10,6 +10,7 @@ import { UserRole } from '@prisma/client'
 import { withAdminAuth } from '@/lib/auth/middleware'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
+import { nanoid } from 'nanoid'
 
 // CORS headers for cross-origin requests
 const corsHeaders = {
@@ -321,11 +322,14 @@ export const POST = withAdminAuth(async (request) => {
       })
 
       if (allAgents.length > 0) {
+        const grantBatchId = nanoid(16)
         await prisma.userAgentPermission.createMany({
           data: allAgents.map(agent => ({
             userId: newUser.id,
             agentId: agent.id,
-            grantedBy: user.userId // 使用 user.userId 而不是 user.id
+            grantedBy: user.userId, // 使用 user.userId 而不是 user.id
+            grantedVia: 'auto_admin',
+            grantBatchId,
           }))
         })
       }

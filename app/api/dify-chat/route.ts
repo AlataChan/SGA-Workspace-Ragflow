@@ -8,21 +8,52 @@ const DEFAULT_DIFY_API_KEY = "app-P0zICVDnPuLSteB4iM7SClQi";
 const DIFY_TIMEOUT_MS = 180000; // 180秒，适应工具调用的长时间需求
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [1000, 2000, 4000]; // 指数退避：1s, 2s, 4s
+const DIFY_CONVERSATION_NAME_TIMEOUT_MS = 2000; // 会话标题拉取超时（避免阻塞流结束太久）
+
+function normalizeDifyBaseUrl(input: unknown) {
+  const raw = String(input || "").trim();
+  if (!raw) return raw;
+  const trimmed = raw.replace(/\/+$/, "");
+  return /\/v1$/.test(trimmed) ? trimmed : `${trimmed}/v1`;
+}
+
+function shouldTryHttpsUpgrade(url: string, error: any) {
+  if (!url.startsWith("http://")) return false;
+  const cause = error?.cause;
+  const code =
+    typeof cause?.code === "string"
+      ? cause.code
+      : typeof error?.code === "string"
+        ? error.code
+        : "";
+  if (code !== "UND_ERR_SOCKET") return false;
+  const message = `${cause?.message || ""} ${error?.message || ""}`.toLowerCase();
+  return message.includes("other side closed") || message.includes("socket hang up");
+}
 
 // 创建带超时的fetch函数
 async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const run = async (targetUrl: string) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(targetUrl, {
+        ...options,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
 
   try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-    return response;
-  } catch (error) {
-    clearTimeout(timeoutId);
+    return await run(url);
+  } catch (error: any) {
+    if (shouldTryHttpsUpgrade(url, error)) {
+      const httpsUrl = url.replace(/^http:\/\//, "https://");
+      console.warn("[Dify Chat] 检测到可能的 http/https 协议不匹配，自动升级为 https 重试:", httpsUrl);
+      return await run(httpsUrl);
+    }
     throw error;
   }
 }
@@ -48,6 +79,53 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function tryFetchConversationName(params: {
+  difyBaseUrl: string;
+  difyApiKey: string;
+  userId: string;
+  conversationId: string;
+}): Promise<string | null> {
+  try {
+    const searchParams = new URLSearchParams({
+      user: params.userId,
+      limit: '100',
+      sort_by: '-updated_at',
+    });
+
+    const url = `${params.difyBaseUrl}/conversations?${searchParams}`;
+    const response = await fetchWithTimeout(
+      url,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${params.difyApiKey}`,
+          'Content-Type': 'application/json',
+        },
+      },
+      DIFY_CONVERSATION_NAME_TIMEOUT_MS,
+    );
+
+    if (!response.ok) {
+      console.warn('[Dify Chat] 获取会话列表失败:', response.status, response.statusText);
+      return null;
+    }
+
+    const data = await response.json().catch(() => null);
+    const list: any[] = Array.isArray(data?.data) ? data.data : [];
+    const hit = list.find(
+      (c: any) => c?.id === params.conversationId || c?.conversation_id === params.conversationId,
+    );
+
+    const name = hit?.name;
+    if (typeof name !== 'string') return null;
+    const trimmed = name.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  } catch (error) {
+    console.warn('[Dify Chat] 获取会话标题异常:', error);
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   console.log("[Dify Chat] 收到请求:", req.method, req.url);
 
@@ -57,7 +135,7 @@ export async function POST(req: NextRequest) {
     console.log("[Dify Chat] 请求体:", JSON.stringify(body, null, 2));
 
     // 获取Agent配置（优先使用传入的配置）
-    const difyBaseUrl = body.agentConfig?.difyUrl || DEFAULT_DIFY_BASE_URL;
+    const difyBaseUrl = normalizeDifyBaseUrl(body.agentConfig?.difyUrl || DEFAULT_DIFY_BASE_URL);
     const difyApiKey = body.agentConfig?.difyKey || DEFAULT_DIFY_API_KEY;
 
     console.log("[Dify Chat] 使用配置:", {
@@ -112,13 +190,13 @@ export async function POST(req: NextRequest) {
             formData.append('user', userId);
 
             // 上传文件到Dify
-            const uploadResponse = await fetch(`${difyBaseUrl}/files/upload`, {
+            const uploadResponse = await fetchWithTimeout(`${difyBaseUrl}/files/upload`, {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${difyApiKey}`,
               },
               body: formData,
-            });
+            }, DIFY_TIMEOUT_MS);
 
             if (uploadResponse.ok) {
               const uploadResult = await uploadResponse.json();
@@ -172,6 +250,8 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    const isNewConversationRequest = !body.conversation_id;
 
     const difyRequestBody = {
       inputs: {},
@@ -247,8 +327,10 @@ export async function POST(req: NextRequest) {
       console.log("[Dify Chat] 处理流式响应");
       
       // 创建转换流，将Dify格式转换为OpenAI格式
+      let cachedConversationName: string | null = null;
+
       const transformStream = new TransformStream({
-        transform(chunk, controller) {
+        async transform(chunk, controller) {
           const text = new TextDecoder().decode(chunk);
           const lines = text.split('\n');
           
@@ -522,12 +604,31 @@ export async function POST(req: NextRequest) {
 
                 if (data.event === 'message_end' || data.event === 'agent_message_end') {
                   console.log('[Dify Chat] 检查文档链接，完整消息内容:', data.answer || '');
+
+                  if (
+                    isNewConversationRequest &&
+                    !cachedConversationName &&
+                    typeof data.conversation_id === 'string' &&
+                    data.conversation_id.length > 0
+                  ) {
+                    cachedConversationName = await tryFetchConversationName({
+                      difyBaseUrl,
+                      difyApiKey,
+                      userId,
+                      conversationId: data.conversation_id,
+                    });
+                    if (cachedConversationName) {
+                      console.log('[Dify Chat] 获取到会话标题:', cachedConversationName);
+                    }
+                  }
+
                   const endFormat = {
                     id: data.message_id || 'dify-msg',
                     object: 'chat.completion.chunk',
                     created: Math.floor(Date.now() / 1000),
                     model: 'dify-agent',
                     conversation_id: data.conversation_id, // 包含conversation_id
+                    ...(cachedConversationName ? { conversation_name: cachedConversationName } : {}),
                     choices: [{
                       index: 0,
                       delta: {},

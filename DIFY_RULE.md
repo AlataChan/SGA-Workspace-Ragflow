@@ -2,7 +2,7 @@
 
 ## 基础信息
 
-- **基础 URL**: `http://192.144.232.60/v1`
+- **基础 URL**: `http(s)://<host>:<port>/v1`（必须与实际部署协议一致；若服务端报 `fetch failed` + `UND_ERR_SOCKET`，优先检查 http/https 是否配置错）
 - **鉴权**: 所有 API 请求需在 HTTP Header 中添加
   ```
   Authorization: Bearer {API_KEY}
@@ -124,7 +124,7 @@ curl -X POST 'http://192.144.232.60/v1/chat-messages' \
 
 ### POST `/files/upload`
 
-**功能**：上传图片文件，供多模态对话使用。支持 png, jpg, jpeg, webp, gif 格式。
+**功能**：上传文件，供对话/工作流引用（`upload_file_id`）。支持的文件类型与大小上限取决于 Dify 版本与部署配置（网关/对象存储等）。
 
 #### 请求参数（multipart/form-data）
 

@@ -43,6 +43,7 @@ import TempKbDialog from '@/components/temp-kb/temp-kb-dialog'
 import KnowledgeGraphActions from '@/components/chat/knowledge-graph-actions'
 import { useRouter } from "next/navigation"
 import { useBatchDraftStore } from "@/app/store/batch-draft"
+import { parseSizeToBytes } from "@/lib/size"
 
 // 配置 marked 为同步模式
 marked.setOptions({
@@ -87,6 +88,30 @@ function safeStringifyContent(content: unknown): string {
     return '';
   }
   return result;
+}
+
+function mergeStreamingText(current: string, incoming: string): string {
+  if (!incoming) return current
+  if (!current) return incoming
+
+  if (incoming.startsWith(current)) return incoming
+  if (current.startsWith(incoming)) return current
+
+  const compact = (text: string) => text.replace(/\s+/g, '')
+  const compactCurrent = compact(current)
+  const compactIncoming = compact(incoming)
+
+  if (compactIncoming.startsWith(compactCurrent)) return incoming
+  if (compactCurrent.startsWith(compactIncoming)) return current
+
+  const maxProbe = Math.min(200, current.length, incoming.length)
+  for (let overlap = maxProbe; overlap >= 8; overlap--) {
+    if (current.endsWith(incoming.slice(0, overlap))) {
+      return current + incoming.slice(overlap)
+    }
+  }
+
+  return current + incoming
 }
 
 // 打字效果组件 - 优化版：批量更新 + 减少渲染频率
@@ -715,9 +740,17 @@ export default function EnhancedChatWithSidebar({
 
   // 历史对话管理
   const [historyConversations, setHistoryConversations] = useState<DifyHistoryConversation[]>([])
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [isLoadingHistoryList, setIsLoadingHistoryList] = useState(false)
+  const [isLoadingHistoryConversation, setIsLoadingHistoryConversation] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [hasMoreHistory, setHasMoreHistory] = useState(true)
+  // Prevent duplicate "force refresh" fetches on mount/config changes (e.g. React StrictMode).
+  const historyForceRefreshGuardRef = useRef<{ key: string; at: number }>({ key: '', at: 0 })
+  const isLoadingHistoryListRef = useRef(false)
+
+  useEffect(() => {
+    isLoadingHistoryListRef.current = isLoadingHistoryList
+  }, [isLoadingHistoryList])
 
   // 重命名功能状态
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
@@ -797,8 +830,8 @@ export default function EnhancedChatWithSidebar({
         // 验证文件大小（与服务端 Dify 上传限制保持一致）
         const maxSizeBytes = (() => {
           const raw = process.env.NEXT_PUBLIC_DIFY_UPLOAD_MAX_SIZE
-          const parsed = raw ? Number(raw) : Number.NaN
-          return Number.isFinite(parsed) && parsed > 0 ? parsed : 4 * 1024 * 1024
+          const parsed = parseSizeToBytes(raw)
+          return parsed ?? 50 * 1024 * 1024
         })()
         if (file.size >= maxSizeBytes) {
           const maxLabel = `${(maxSizeBytes / 1024 / 1024).toFixed(1)}MB`
@@ -901,7 +934,7 @@ export default function EnhancedChatWithSidebar({
   const fetchHistoryConversations = useCallback(async (forceRefresh = false, loadMore = false) => {
     // RAGFlow 处理逻辑
     if (agentConfig?.platform === 'RAGFLOW' && (agentConfig.localAgentId || agentConfig.agentId)) {
-      if (isLoadingHistory) return
+      if (isLoadingHistoryListRef.current) return
 
       // 检查缓存
       const now = Date.now()
@@ -914,7 +947,8 @@ export default function EnhancedChatWithSidebar({
       }
 
       try {
-        setIsLoadingHistory(true)
+        setIsLoadingHistoryList(true)
+        isLoadingHistoryListRef.current = true
         setHistoryError(null)
 
         const pageSize = 20
@@ -966,18 +1000,15 @@ export default function EnhancedChatWithSidebar({
           setHasMoreHistory(hasMore)
       } catch (error) {
         console.error('获取RAGFlow历史失败:', error)
-        if (!loadMore) {
-          setHistoryConversations([])
-          setHasMoreHistory(false)
-        }
         setHistoryError('获取历史记录失败')
       } finally {
-        setIsLoadingHistory(false)
+        setIsLoadingHistoryList(false)
+        isLoadingHistoryListRef.current = false
       }
       return
     }
 
-    if (!agentConfig?.difyUrl || !agentConfig?.difyKey || isLoadingHistory) {
+    if (!agentConfig?.difyUrl || !agentConfig?.difyKey || isLoadingHistoryListRef.current) {
       return
     }
 
@@ -992,7 +1023,8 @@ export default function EnhancedChatWithSidebar({
     }
 
     try {
-      setIsLoadingHistory(true)
+      setIsLoadingHistoryList(true)
+      isLoadingHistoryListRef.current = true
       setHistoryError(null)
 
       // 构建 API URL，支持分页
@@ -1058,12 +1090,6 @@ export default function EnhancedChatWithSidebar({
             statusText: response.statusText,
             errorText
           })
-
-          // API 不可用就设置空数组
-          if (!loadMore) {
-            setHistoryConversations([])
-            setHasMoreHistory(false)
-          }
           throw new Error(`获取历史对话失败: ${response.status} ${response.statusText}`)
         }
       } catch (fetchError) {
@@ -1072,12 +1098,6 @@ export default function EnhancedChatWithSidebar({
       }
     } catch (error) {
       console.error('[EnhancedChat] 获取历史对话异常:', error)
-
-      // 网络错误或超时
-      if (!loadMore) {
-        setHistoryConversations([])
-        setHasMoreHistory(false)
-      }
 
       let errorMessage = '获取历史对话失败'
       if (error instanceof Error) {
@@ -1091,7 +1111,8 @@ export default function EnhancedChatWithSidebar({
       }
       setHistoryError(errorMessage)
     } finally {
-      setIsLoadingHistory(false)
+      setIsLoadingHistoryList(false)
+      isLoadingHistoryListRef.current = false
       console.log('[EnhancedChat] 历史对话获取完成')
     }
   }, [agentConfig?.difyUrl, agentConfig?.difyKey, agentConfig?.userId, agentConfig?.platform, agentConfig?.agentId, agentConfig?.localAgentId])
@@ -1108,7 +1129,8 @@ export default function EnhancedChatWithSidebar({
     ragflowClientRef.current?.cancel?.()
     setIsStreaming(false)
     setIsLoading(false)
-    setIsLoadingHistory(false)
+    setIsLoadingHistoryList(false)
+    setIsLoadingHistoryConversation(false)
 
     const newSessionId = `draft_${nanoid()}`
     const newSession: ChatSession = {
@@ -1140,8 +1162,8 @@ export default function EnhancedChatWithSidebar({
     setAttachments([])
   }
 
-  // 加载历史对话的消息（支持缓存）
-  const loadHistoryConversation = useCallback(async (historyConv: DifyHistoryConversation) => {
+  // 加载历史对话的消息（cache-first + 强刷 revalidate）
+  const loadHistoryConversation = useCallback(async (historyConv: DifyHistoryConversation, forceRefresh = true) => {
     const canLoadHistory =
       (agentConfig?.platform === 'DIFY' && agentConfig?.difyUrl && agentConfig?.difyKey)
       || (agentConfig?.platform === 'RAGFLOW' && (agentConfig?.localAgentId || agentConfig?.agentId))
@@ -1152,7 +1174,7 @@ export default function EnhancedChatWithSidebar({
 
     try {
       setMobileSidebarOpen(false)
-      setIsLoadingHistory(true)
+      setIsLoadingHistoryConversation(true)
       console.log('[EnhancedChat] 加载历史对话:', historyConv.id)
 
       // 设置客户端的会话 ID
@@ -1162,159 +1184,10 @@ export default function EnhancedChatWithSidebar({
         difyClientRef.current.setConversationId(historyConv.id)
       }
 
-      // 检查消息缓存（10分钟有效期）
-      const now = Date.now()
-      const messageCache = messageCacheRef.current[historyConv.id]
-      const cacheValid = messageCache && (now - messageCache.lastFetch) < 10 * 60 * 1000
-
-      let convertedMessages: Message[] = []
-
-      if (cacheValid && messageCache.isComplete) {
-        convertedMessages = messageCache.messages
-      } else {
-        console.log('[EnhancedChat] 从API获取历史消息:', historyConv.id)
-
-        // 创建超时控制
-        const timeoutController = new AbortController()
-        const timeoutId = setTimeout(() => {
-          timeoutController.abort()
-        }, 15000) // 15秒超时（历史消息可能较多）
-
-        try {
-          if (agentConfig?.platform === 'RAGFLOW' && (agentConfig.localAgentId || agentConfig.agentId)) {
-            // RAGFlow 历史消息逻辑
-            if (ragflowProxyClientRef.current) {
-              const messages = await ragflowProxyClientRef.current.getHistory(historyConv.id)
-              clearTimeout(timeoutId)
-
-              convertedMessages = (messages || []).map((msg: any, index: number) => ({
-                id: msg.id || msg.message_id || `${historyConv.id}_${index}` || nanoid(),
-                role: msg.role?.toLowerCase?.() === 'user'
-                  ? 'user'
-                  : msg.role?.toLowerCase?.() === 'assistant'
-                    ? 'assistant'
-                    : (msg.type === 'human' ? 'user' : 'assistant'),
-                content: normalizeRagflowContent(
-                  msg.content ?? msg.data?.content ?? msg.answer ?? msg.outputs?.content ?? msg.output?.content
-                ),
-                timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
-                reference: msg.reference ?? msg.data?.reference
-              }))
-            } else {
-              // 回退：老接口（仅 chat sessions 形态可用）
-              const backendAgentId = agentConfig.localAgentId || agentConfig.agentId
-              const response = await fetch(
-                `/api/ragflow/history?agent_id=${backendAgentId}&conversation_id=${historyConv.id}&user_id=${encodeURIComponent(agentConfig.userId)}`
-              )
-              clearTimeout(timeoutId)
-
-              if (!response.ok) {
-                throw new Error(`获取RAGFlow历史消息失败: ${response.status}`)
-              }
-
-              const data = await response.json()
-              convertedMessages = (data.messages || []).map((msg: any) => ({
-                id: msg.id || msg.message_id || nanoid(),
-                role: msg.role?.toLowerCase?.() === 'user'
-                  ? 'user'
-                  : msg.role?.toLowerCase?.() === 'assistant'
-                    ? 'assistant'
-                    : (msg.type === 'human' ? 'user' : 'assistant'),
-                content: normalizeRagflowContent(
-                  msg.content ?? msg.data?.content ?? msg.answer ?? msg.outputs?.content ?? msg.output?.content
-                ),
-                timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
-                reference: msg.reference ?? msg.data?.reference
-              }))
-            }
-          } else if (agentConfig?.platform === 'DIFY' && agentConfig.difyUrl && agentConfig.difyKey) {
-            // Dify 历史消息逻辑
-            const response = await fetch(`${agentConfig.difyUrl}/messages?conversation_id=${historyConv.id}&user=${agentConfig.userId}&limit=100`, {
-              headers: {
-                'Authorization': `Bearer ${agentConfig.difyKey}`,
-                'Content-Type': 'application/json'
-              },
-              signal: timeoutController.signal
-            })
-
-            clearTimeout(timeoutId)
-
-            if (response.ok) {
-              const data = await response.json()
-              const messages = data.data || []
-
-              // 转换 Dify 消息格式到本地格式
-              convertedMessages = []
-              messages.forEach((msg: any) => {
-                const timestamp = msg.created_at ? (msg.created_at * 1000) : Date.now()
-
-                // 用户消息
-                if (msg.query) {
-                  convertedMessages.push({
-                    id: `${msg.id}_user` || nanoid(),
-                    role: 'user' as const,
-                    content: msg.query,
-                    timestamp: timestamp,
-                    attachments: []
-                  })
-                }
-
-                // 助手消息
-                if (msg.answer) {
-                  convertedMessages.push({
-                    id: `${msg.id}_assistant` || nanoid(),
-                    role: 'assistant' as const,
-                    content: msg.answer,
-                    timestamp: timestamp + 1, // 稍微延后，确保顺序正确
-                    attachments: msg.message_files?.map((file: any) => ({
-                      id: file.id || nanoid(),
-                      name: file.name || 'file',
-                      type: file.type === 'image' ? 'image/png' : (file.type || 'application/octet-stream'),
-                      size: file.size || 0,
-                      url: file.url,
-                      source: 'agent' as const
-                    })) || []
-                  })
-                }
-              })
-
-            } else {
-              throw new Error(`获取Dify历史消息失败: ${response.status}`)
-            }
-          } else {
-            throw new Error('未知的平台类型或配置不完整，无法加载历史消息')
-          }
-
-          // 更新消息缓存
-          messageCacheRef.current[historyConv.id] = {
-            messages: convertedMessages,
-            lastFetch: now,
-            isComplete: convertedMessages.length < 100 // 假设如果返回少于100条就是全部
-          }
-        } catch (fetchError) {
-          clearTimeout(timeoutId)
-          throw fetchError
-        }
-      }
-
-      // RAGFlow：从本地（Prisma）补齐历史引用信息（仅对通过本系统产生的会话有效）
-      if (agentConfig?.platform === 'RAGFLOW') {
-        const refMap = await loadLocalAssistantReferences(historyConv.id)
-        if (refMap.size > 0) {
-          convertedMessages = convertedMessages.map((m) => {
-            if (m.role !== 'assistant') return m
-            if (m.reference) return m
-            const ref = refMap.get(m.content)
-            return ref ? { ...m, reference: ref } : m
-          })
-        }
-      }
-
-      // 创建新的会话
-      const newSession: ChatSession = {
+      const buildHistorySession = (messages: Message[]): ChatSession => ({
         id: historyConv.id, // 使用历史会话的ID作为session ID
         title: historyConv.name || '历史对话',
-        messages: convertedMessages,
+        messages,
         lastUpdate: (() => {
           try {
             if (!historyConv.created_at) return new Date()
@@ -1343,7 +1216,169 @@ export default function EnhancedChatWithSidebar({
         conversationId: historyConv.id, // RAGFlow 会话 ID
         agentName: agentName,
         agentAvatar: actualAgentAvatar
+      })
+
+      // 检查消息缓存（10分钟有效期）
+      const now = Date.now()
+      const messageCache = messageCacheRef.current[historyConv.id]
+      const cacheValid = messageCache && (now - messageCache.lastFetch) < 10 * 60 * 1000
+
+      let convertedMessages: Message[] = []
+
+      // Cache-first：如果有缓存消息，先立即展示（秒开）
+      if (messageCache?.messages?.length) {
+        convertedMessages = messageCache.messages
+        setSessions([buildHistorySession(convertedMessages)])
+        setCurrentSessionId(historyConv.id)
+        if (window.innerWidth < 768) {
+          setSidebarCollapsed(true)
+        }
       }
+
+      // 缓存有效且完整，且不要求强刷时直接返回（不走 API）
+      if (cacheValid && messageCache?.isComplete && !forceRefresh) {
+        return
+      }
+
+      console.log('[EnhancedChat] 从API获取历史消息:', historyConv.id)
+
+      // 创建超时控制
+      const timeoutController = new AbortController()
+      const timeoutId = setTimeout(() => {
+        timeoutController.abort()
+      }, 15000) // 15秒超时（历史消息可能较多）
+
+      try {
+        if (agentConfig?.platform === 'RAGFLOW' && (agentConfig.localAgentId || agentConfig.agentId)) {
+          // RAGFlow 历史消息逻辑
+          if (ragflowProxyClientRef.current) {
+            const messages = await ragflowProxyClientRef.current.getHistory(historyConv.id)
+            clearTimeout(timeoutId)
+
+            convertedMessages = (messages || []).map((msg: any, index: number) => ({
+              id: msg.id || msg.message_id || `${historyConv.id}_${index}` || nanoid(),
+              role: msg.role?.toLowerCase?.() === 'user'
+                ? 'user'
+                : msg.role?.toLowerCase?.() === 'assistant'
+                  ? 'assistant'
+                  : (msg.type === 'human' ? 'user' : 'assistant'),
+              content: normalizeRagflowContent(
+                msg.content ?? msg.data?.content ?? msg.answer ?? msg.outputs?.content ?? msg.output?.content
+              ),
+              timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
+              reference: msg.reference ?? msg.data?.reference
+            }))
+          } else {
+            // 回退：老接口（仅 chat sessions 形态可用）
+            const backendAgentId = agentConfig.localAgentId || agentConfig.agentId
+            const response = await fetch(
+              `/api/ragflow/history?agent_id=${backendAgentId}&conversation_id=${historyConv.id}&user_id=${encodeURIComponent(agentConfig.userId)}`
+            )
+            clearTimeout(timeoutId)
+
+            if (!response.ok) {
+              throw new Error(`获取RAGFlow历史消息失败: ${response.status}`)
+            }
+
+            const data = await response.json()
+            convertedMessages = (data.messages || []).map((msg: any) => ({
+              id: msg.id || msg.message_id || nanoid(),
+              role: msg.role?.toLowerCase?.() === 'user'
+                ? 'user'
+                : msg.role?.toLowerCase?.() === 'assistant'
+                  ? 'assistant'
+                  : (msg.type === 'human' ? 'user' : 'assistant'),
+              content: normalizeRagflowContent(
+                msg.content ?? msg.data?.content ?? msg.answer ?? msg.outputs?.content ?? msg.output?.content
+              ),
+              timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
+              reference: msg.reference ?? msg.data?.reference
+            }))
+          }
+        } else if (agentConfig?.platform === 'DIFY' && agentConfig.difyUrl && agentConfig.difyKey) {
+          // Dify 历史消息逻辑
+          const response = await fetch(`${agentConfig.difyUrl}/messages?conversation_id=${historyConv.id}&user=${agentConfig.userId}&limit=100`, {
+            headers: {
+              'Authorization': `Bearer ${agentConfig.difyKey}`,
+              'Content-Type': 'application/json'
+            },
+            signal: timeoutController.signal
+          })
+
+          clearTimeout(timeoutId)
+
+          if (response.ok) {
+            const data = await response.json()
+            const messages = data.data || []
+
+            // 转换 Dify 消息格式到本地格式
+            convertedMessages = []
+            messages.forEach((msg: any) => {
+              const timestamp = msg.created_at ? (msg.created_at * 1000) : Date.now()
+
+              // 用户消息
+              if (msg.query) {
+                convertedMessages.push({
+                  id: `${msg.id}_user` || nanoid(),
+                  role: 'user' as const,
+                  content: msg.query,
+                  timestamp: timestamp,
+                  attachments: []
+                })
+              }
+
+              // 助手消息
+              if (msg.answer) {
+                convertedMessages.push({
+                  id: `${msg.id}_assistant` || nanoid(),
+                  role: 'assistant' as const,
+                  content: msg.answer,
+                  timestamp: timestamp + 1, // 稍微延后，确保顺序正确
+                  attachments: msg.message_files?.map((file: any) => ({
+                    id: file.id || nanoid(),
+                    name: file.name || 'file',
+                    type: file.type === 'image' ? 'image/png' : (file.type || 'application/octet-stream'),
+                    size: file.size || 0,
+                    url: file.url,
+                    source: 'agent' as const
+                  })) || []
+                })
+              }
+            })
+
+          } else {
+            throw new Error(`获取Dify历史消息失败: ${response.status}`)
+          }
+        } else {
+          throw new Error('未知的平台类型或配置不完整，无法加载历史消息')
+        }
+
+        // 更新消息缓存
+        messageCacheRef.current[historyConv.id] = {
+          messages: convertedMessages,
+          lastFetch: now,
+          isComplete: convertedMessages.length < 100 // 假设如果返回少于100条就是全部
+        }
+      } catch (fetchError) {
+        clearTimeout(timeoutId)
+        throw fetchError
+      }
+
+      // RAGFlow：从本地（Prisma）补齐历史引用信息（仅对通过本系统产生的会话有效）
+      if (agentConfig?.platform === 'RAGFLOW') {
+        const refMap = await loadLocalAssistantReferences(historyConv.id)
+        if (refMap.size > 0) {
+          convertedMessages = convertedMessages.map((m) => {
+            if (m.role !== 'assistant') return m
+            if (m.reference) return m
+            const ref = refMap.get(m.content)
+            return ref ? { ...m, reference: ref } : m
+          })
+        }
+      }
+
+      // 创建新的会话
+      const newSession: ChatSession = buildHistorySession(convertedMessages)
 
       // If the user has switched sessions while this history load was in-flight, ignore stale results.
       if (loadSeq !== sessionSwitchSeqRef.current) {
@@ -1372,20 +1407,47 @@ export default function EnhancedChatWithSidebar({
       toast.error(errorMessage)
     } finally {
       if (loadSeq === sessionSwitchSeqRef.current) {
-        setIsLoadingHistory(false)
+        setIsLoadingHistoryConversation(false)
       }
     }
   }, [agentConfig, agentName, actualAgentAvatar])
 
   // 初始化时获取历史对话
   useEffect(() => {
-    if (agentConfig?.platform === 'DIFY') {
-      if (agentConfig?.difyUrl && agentConfig?.difyKey) fetchHistoryConversations()
+    const platform = agentConfig?.platform
+    if (!platform) return
+
+    const isReady =
+      platform === 'DIFY'
+        ? Boolean(agentConfig?.difyUrl && agentConfig?.difyKey)
+        : platform === 'RAGFLOW'
+          ? Boolean(agentConfig?.localAgentId || agentConfig?.agentId)
+          : false
+
+    if (!isReady) return
+
+    const agentMarker =
+      platform === 'DIFY'
+        ? agentConfig.difyUrl
+        : (agentConfig.localAgentId || agentConfig.agentId)
+
+    const now = Date.now()
+    const key = `${platform}:${agentConfig.userId || ''}:${agentMarker || ''}`
+    if (
+      historyForceRefreshGuardRef.current.key === key
+      && (now - historyForceRefreshGuardRef.current.at) < 3000
+    ) {
+      return
+    }
+    historyForceRefreshGuardRef.current = { key, at: now }
+
+    if (platform === 'DIFY') {
+      fetchHistoryConversations(true)
       return
     }
 
-    if (agentConfig?.platform === 'RAGFLOW') {
-      if (agentConfig?.localAgentId || agentConfig?.agentId) fetchHistoryConversations()
+    if (platform === 'RAGFLOW') {
+      fetchHistoryConversations(true)
     }
   }, [
     agentConfig?.platform,
@@ -1393,6 +1455,7 @@ export default function EnhancedChatWithSidebar({
     agentConfig?.difyKey,
     agentConfig?.agentId,
     agentConfig?.localAgentId,
+    agentConfig?.userId,
     fetchHistoryConversations
   ])
 
@@ -2025,7 +2088,7 @@ export default function EnhancedChatWithSidebar({
             // 累积流式内容 - 确保内容是字符串
             const contentToAdd = message.content
             if (typeof contentToAdd === 'string' && contentToAdd.length > 0) {
-              fullContent += contentToAdd
+              fullContent = mergeStreamingText(fullContent, contentToAdd)
               console.log('[EnhancedChat] 累积内容:', {
                 newContent: contentToAdd,
                 fullContentLength: fullContent.length,
@@ -2142,6 +2205,16 @@ export default function EnhancedChatWithSidebar({
               conversationId = message.conversationId
             }
 
+            const difyConversationName =
+              typeof message.conversationName === 'string' ? message.conversationName.trim() : ''
+            const shouldAdoptDifyName = (() => {
+              if (!difyConversationName) return false
+              const lower = difyConversationName.toLowerCase()
+              if (lower === 'new chat' || lower === 'new conversation') return false
+              if (difyConversationName === '新对话' || difyConversationName === '新的对话') return false
+              return true
+            })()
+
             // 优先使用 complete 消息中的完整内容，如果不存在则使用累积的内容
             let finalContent = fullContent
             if (message.content && typeof message.content === 'string' && message.content.length > fullContent.length) {
@@ -2179,6 +2252,7 @@ export default function EnhancedChatWithSidebar({
               session.id === currentSessionId ?
                 {
                   ...session,
+                  ...(shouldAdoptDifyName ? { title: difyConversationName } : {}),
                   messages: session.messages.map(msg =>
                     msg.id === assistantMessage.id ?
                       {
@@ -2788,10 +2862,10 @@ export default function EnhancedChatWithSidebar({
                       variant="ghost"
                       size="sm"
                       onClick={() => fetchHistoryConversations(true)}
-                      disabled={isLoadingHistory}
+                      disabled={isLoadingHistoryList}
                       className="text-muted-foreground hover:text-foreground hover:bg-muted/50 h-6 px-2"
                     >
-                      {isLoadingHistory ? (
+                      {isLoadingHistoryList ? (
                         <div className="flex items-center space-x-1">
                           <div className="animate-spin w-3 h-3 border border-muted-foreground border-t-transparent rounded-full" />
                           <span>加载中</span>
@@ -2941,7 +3015,7 @@ export default function EnhancedChatWithSidebar({
                     })}
 
                     {/* 加载更多按钮 */}
-                    {hasMoreHistory && !isLoadingHistory && (
+                    {hasMoreHistory && !isLoadingHistoryList && (
                       <div className="p-2">
                         <Button
                           variant="ghost"
@@ -2992,8 +3066,8 @@ export default function EnhancedChatWithSidebar({
             </div>
           </div>
 
-          <ScrollArea className="flex-1 p-3 sm:p-4 md:p-6">
-            <div key={currentSessionId} className="space-y-6 w-full">
+          <ScrollArea className="flex-1 min-w-0 p-3 sm:p-4 md:p-6">
+            <div key={currentSessionId} className="space-y-6 w-full max-w-full overflow-x-auto">
               {currentSession?.messages.map((message) => {
                 const isUser = message.role === 'user'
                 const rawContent = safeStringifyContent(message.content)
@@ -3002,10 +3076,17 @@ export default function EnhancedChatWithSidebar({
                   ? stripRagflowInlineReferenceMarkers(rawContent)
                   : rawContent
                 const hasInlineReferenceMarkers = shouldStripRagflowIds && hasRagflowInlineReferenceMarkers(rawContent)
+                const thinkSplit = !isUser ? splitThinkTags(displayContent) : null
+                const streamingContent = thinkSplit ? thinkSplit.answer : displayContent
+                const shouldShowTypingIndicator = Boolean(
+                  (message as any).isThinking ||
+                    !message.content ||
+                    (thinkSplit?.hasThink && (thinkSplit.isThinkingOpen || !thinkSplit.answer.trim()))
+                )
 
                 return (
                   <div key={message.id} className={`flex w-full ${isUser ? 'justify-end pr-2 sm:pr-8' : 'justify-start pl-2 sm:pl-8'} mb-6`}>
-                    <div className={`flex ${isUser ? 'flex-row-reverse' : 'flex-row'} items-start space-x-3 sm:space-x-4 ${isUser ? 'space-x-reverse' : ''} max-w-[92%] sm:max-w-[85%] lg:max-w-[75%]`}>
+                    <div className={`flex min-w-0 ${isUser ? 'flex-row-reverse' : 'flex-row'} items-start space-x-3 sm:space-x-4 ${isUser ? 'space-x-reverse' : ''} max-w-[92%] sm:max-w-[85%] lg:max-w-[75%]`}>
                       <Avatar className="w-9 h-9 sm:w-[50px] sm:h-[50px] flex-shrink-0 mt-1">
                         <AvatarImage src={isUser ? actualUserAvatar : actualAgentAvatar} />
                           <AvatarFallback className={`text-white text-lg ${isUser
@@ -3017,12 +3098,12 @@ export default function EnhancedChatWithSidebar({
                       </Avatar>
 
                       <div className="flex-1 min-w-0">
-                        <div className={`rounded-xl px-4 py-3 text-base leading-relaxed ${isUser
+                        <div className={`max-w-full overflow-x-auto rounded-xl px-4 py-3 text-base leading-relaxed ${isUser
                           ? 'bg-primary text-primary-foreground shadow-lg user-message'
                           : 'bg-card text-foreground border border-border shadow-sm'
                           }`} style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                           {message.isStreaming ? (
-                            (message as any).isThinking || !message.content ? (
+                            shouldShowTypingIndicator ? (
                               <TypingIndicator />
                             ) : (
                               <>
@@ -3032,7 +3113,7 @@ export default function EnhancedChatWithSidebar({
                                   content: message.content,
                                   safeContent: rawContent
                                 })}
-                                <TypewriterEffect content={displayContent} speed={20} />
+                                <TypewriterEffect content={streamingContent} speed={20} />
                               </>
                             )
                           ) : (

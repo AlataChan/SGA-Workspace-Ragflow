@@ -8,6 +8,14 @@ export interface TempKbConfig {
   apiKey: string
 }
 
+function normalizeRagflowBaseUrl(value: unknown): string {
+  let base = String(value ?? '').trim()
+  base = base.replace(/\/+$/, '')
+  base = base.replace(/\/api\/v1$/i, '')
+  base = base.replace(/\/v1$/i, '')
+  return base.replace(/\/+$/, '')
+}
+
 export interface CreateDatasetParams {
   name: string
   description?: string
@@ -77,7 +85,7 @@ export class RAGFlowTempKbClient {
   constructor(config: TempKbConfig) {
     this.config = {
       ...config,
-      baseUrl: config.baseUrl.replace(/\/$/, '')
+      baseUrl: normalizeRagflowBaseUrl(config.baseUrl)
     }
   }
 

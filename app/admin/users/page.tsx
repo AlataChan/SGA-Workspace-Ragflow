@@ -118,6 +118,7 @@ export default function UsersPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [isTogglingActive, setIsTogglingActive] = useState<string | null>(null)
   const [currentAdminId, setCurrentAdminId] = useState<string | null>(null)
+  const [isBulkGrantingAllAgents, setIsBulkGrantingAllAgents] = useState(false)
 
   // 弹窗状态
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -167,6 +168,8 @@ export default function UsersPage() {
   // Agent权限管理状态
   const [userAgents, setUserAgents] = useState<any[]>([])
   const [availableAgents, setAvailableAgents] = useState<any[]>([])
+  const [revokedAgents, setRevokedAgents] = useState<any[]>([])
+  const [isUnblockingAgent, setIsUnblockingAgent] = useState<string | null>(null)
   const [isManagingPermissions, setIsManagingPermissions] = useState(false)
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(false)
 
@@ -298,6 +301,20 @@ export default function UsersPage() {
   }
 
   const displayedUsers = users
+  const totalAgents = agents.length
+
+  const isAllAgentAccess = (user: UserData) => {
+    if (user.role === 'ADMIN') return true
+    const grantedCount = user._count?.agentPermissions || 0
+    return totalAgents > 0 && grantedCount >= totalAgents
+  }
+
+  const selectedHasAllAgentAccess =
+    !!selectedUser &&
+    (selectedUser.role === 'ADMIN' ||
+      (totalAgents > 0 &&
+        (userAgents.length >= totalAgents ||
+          (selectedUser._count?.agentPermissions || 0) >= totalAgents)))
 
   // 重置表单
   const resetForm = () => {
@@ -376,6 +393,7 @@ export default function UsersPage() {
         const data = await response.json()
         setUserAgents(data.data.userAgents || [])
         setAvailableAgents(data.data.availableAgents || [])
+        setRevokedAgents(data.data.revokedAgents || [])
       } else {
         console.error('获取用户Agent权限失败')
       }
@@ -404,6 +422,7 @@ export default function UsersPage() {
         setTimeout(() => setMessage(null), 3000)
         // 重新获取权限列表
         await fetchUserAgentPermissions(selectedUser.id)
+        await fetchUsers()
       } else {
         const errorData = await response.json()
         throw new Error(errorData.error?.message || '添加权限失败')
@@ -419,6 +438,10 @@ export default function UsersPage() {
   const handleRemoveAgentPermission = async (agentId: string) => {
     if (!selectedUser) return
 
+    if (!confirm('撤销后，批量授权将不会恢复此权限（将加入黑名单）。确定撤销吗？')) {
+      return
+    }
+
     try {
       const response = await fetch(`/api/admin/users/${selectedUser.id}/agents?agentId=${agentId}`, {
         method: 'DELETE',
@@ -429,6 +452,7 @@ export default function UsersPage() {
         setTimeout(() => setMessage(null), 3000)
         // 重新获取权限列表
         await fetchUserAgentPermissions(selectedUser.id)
+        await fetchUsers()
       } else {
         const errorData = await response.json()
         throw new Error(errorData.error?.message || '移除权限失败')
@@ -437,6 +461,32 @@ export default function UsersPage() {
       console.error('移除Agent权限失败:', error)
       setMessage({ type: 'error', text: error instanceof Error ? error.message : '移除Agent权限失败' })
       setTimeout(() => setMessage(null), 3000)
+    }
+  }
+
+  const handleUnblockAgentPermission = async (agentId: string) => {
+    if (!selectedUser) return
+
+    setIsUnblockingAgent(agentId)
+    try {
+      const response = await fetch(`/api/admin/users/${selectedUser.id}/agents/${agentId}/unblock`, {
+        method: 'POST',
+      })
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: '黑名单已解除' })
+        setTimeout(() => setMessage(null), 3000)
+        await fetchUserAgentPermissions(selectedUser.id)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error?.message || '解除失败')
+      }
+    } catch (error) {
+      console.error('解除黑名单失败:', error)
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : '解除黑名单失败' })
+      setTimeout(() => setMessage(null), 3000)
+    } finally {
+      setIsUnblockingAgent(null)
     }
   }
 
@@ -725,6 +775,55 @@ export default function UsersPage() {
     }
   }
 
+  const handleBulkGrantAllAgents = async () => {
+    if (isBulkGrantingAllAgents) return
+
+    const ok = confirm(
+      '确定要为当前公司所有普通用户授予“全部Agent权限”吗？\n\n提示：\n- 该操作会写入用户×Agent 的权限记录\n- 可重复执行（幂等），已存在的权限会跳过\n- 可能需要几十秒，请耐心等待',
+    )
+    if (!ok) return
+
+    setIsBulkGrantingAllAgents(true)
+    setMessage(null)
+
+    try {
+      const response = await fetch('/api/admin/users/bulk/grant-all-agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data?.error?.message || '批量授权失败')
+      }
+
+      const inserted = data?.data?.inserted
+      const usersProcessed = data?.data?.usersProcessed
+      const agentCount = data?.data?.agentCount
+
+      setMessage({
+        type: 'success',
+        text: `批量授权完成：处理用户 ${usersProcessed ?? 0} 个，Agent ${agentCount ?? 0} 个，新增权限 ${inserted ?? 0} 条`,
+      })
+      setTimeout(() => setMessage(null), 5000)
+
+      await fetchUsers()
+      if (selectedUser?.id) {
+        await fetchUserAgentPermissions(selectedUser.id)
+      }
+    } catch (error) {
+      console.error('批量授权失败:', error)
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : '批量授权失败，请稍后重试',
+      })
+      setTimeout(() => setMessage(null), 5000)
+    } finally {
+      setIsBulkGrantingAllAgents(false)
+    }
+  }
+
   return (
     <NewAdminLayout>
       <div className="space-y-6">
@@ -738,6 +837,18 @@ export default function UsersPage() {
             <Button variant="outline">
               <Upload className="w-4 h-4 mr-2" />
               批量导入
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleBulkGrantAllAgents}
+              disabled={isBulkGrantingAllAgents}
+            >
+              {isBulkGrantingAllAgents ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Shield className="w-4 h-4 mr-2" />
+              )}
+              批量授权全部Agent
             </Button>
             <Button
               onClick={() => {
@@ -888,7 +999,7 @@ export default function UsersPage() {
                                 {user.isActive ? '活跃' : '已停用'}
                               </Badge>
                               <div className="text-xs text-muted-foreground mt-1">
-                                {user.role === 'ADMIN'
+                                {isAllAgentAccess(user)
                                   ? '全部Agent权限'
                                   : `${user._count?.agentPermissions || 0} 个Agent权限`}
                               </div>
@@ -1060,7 +1171,7 @@ export default function UsersPage() {
                       </h4>
                       <div className="flex items-center space-x-2">
                         <Badge variant="outline">
-                          {selectedUser.role === 'ADMIN' ? '全部' : `${userAgents.length} 个`}
+                          {selectedHasAllAgentAccess ? `全部（${totalAgents}）` : `${userAgents.length} 个`}
                         </Badge>
                         {selectedUser.role !== 'ADMIN' && (
                           <Button
@@ -1093,6 +1204,14 @@ export default function UsersPage() {
                       </div>
                     ) : (
                       <div className="space-y-3">
+                        {selectedHasAllAgentAccess && (
+                          <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                            <div className="flex items-center space-x-2 text-blue-400">
+                              <Shield className="w-4 h-4" />
+                              <span className="text-sm">该用户已拥有全部Agent权限</span>
+                            </div>
+                          </div>
+                        )}
                         {isLoadingPermissions ? (
                           <div className="flex items-center justify-center py-4">
                             <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
@@ -1121,6 +1240,20 @@ export default function UsersPage() {
                                         </div>
                                         <div className="text-xs text-muted-foreground">
                                           {agent.position} • {agent.department?.name}
+                                          {agent.permission?.grantedVia ? (
+                                            <span className="ml-2">
+                                              • 来源:{' '}
+                                              {agent.permission.grantedVia === 'single'
+                                                ? '单独授权'
+                                                : String(agent.permission.grantedVia)}
+                                            </span>
+                                          ) : null}
+                                          {agent.permission?.createdAt ? (
+                                            <span className="ml-2">
+                                              • 时间:{' '}
+                                              {new Date(agent.permission.createdAt).toLocaleString()}
+                                            </span>
+                                          ) : null}
                                         </div>
                                       </div>
                                     </div>
@@ -1141,6 +1274,58 @@ export default function UsersPage() {
                               <div className="text-center py-4 text-muted-foreground">
                                 <Bot className="w-8 h-8 mx-auto mb-2 opacity-50" />
                                 <p className="text-sm">暂无Agent权限</p>
+                              </div>
+                            )}
+
+                            {/* 已撤销（黑名单） */}
+                            {isManagingPermissions && revokedAgents.length > 0 && (
+                              <div className="space-y-2">
+                                <div className="text-sm font-medium text-foreground border-t border-border pt-3">
+                                  已撤销（黑名单）
+                                </div>
+                                {revokedAgents.map((agent) => (
+                                  <div
+                                    key={agent.id}
+                                    className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border"
+                                  >
+                                    <div className="flex items-center space-x-3">
+                                      <Avatar className="w-8 h-8">
+                                        <AvatarImage src={agent.avatarUrl} />
+                                        <AvatarFallback className="bg-gradient-to-r from-amber-500 to-red-500 text-white text-xs">
+                                          {agent.chineseName[0]}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <div>
+                                        <div className="text-sm font-medium text-foreground">
+                                          {agent.chineseName}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                          {agent.position} • {agent.department?.name}
+                                          {agent.revocation?.revokedAt ? (
+                                            <span className="ml-2">
+                                              • 撤销:{' '}
+                                              {new Date(agent.revocation.revokedAt).toLocaleString()}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleUnblockAgentPermission(agent.id)}
+                                      disabled={isUnblockingAgent === agent.id}
+                                      className="border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
+                                      title="解除黑名单"
+                                    >
+                                      {isUnblockingAgent === agent.id ? (
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                      ) : (
+                                        <Minus className="w-3 h-3" />
+                                      )}
+                                    </Button>
+                                  </div>
+                                ))}
                               </div>
                             )}
 

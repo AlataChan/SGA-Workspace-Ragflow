@@ -27,6 +27,8 @@ const addAgentPermissionSchema = z.object({
   agentId: z.string().min(1, "Agent ID不能为空"),
 })
 
+const SUPER_ADMIN_ID = '00000000-0000-0000-0000-000000000001'
+
 // GET /api/admin/users/[id]/agents - 获取用户的Agent权限
 export const GET = withAdminAuth(async (request, context) => {
   try {
@@ -62,10 +64,53 @@ export const GET = withAdminAuth(async (request, context) => {
       )
     }
 
+    if (targetUser.id === SUPER_ADMIN_ID) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'PROTECTED_USER',
+            message: '系统超级管理员账号不能被操作'
+          }
+        },
+        { status: 403, headers: corsHeaders }
+      )
+    }
+
     // 获取用户的Agent权限
     const userAgentPermissions = await prisma.userAgentPermission.findMany({
       where: {
         userId: targetUserId,
+      },
+      include: {
+        agent: {
+          select: {
+            id: true,
+            chineseName: true,
+            englishName: true,
+            position: true,
+            platform: true,
+            isOnline: true,
+            department: {
+              select: {
+                id: true,
+                name: true,
+                icon: true,
+              }
+            }
+          }
+        }
+      }
+    })
+
+    const now = new Date()
+    const activeRevocations = await prisma.userAgentPermissionRevocation.findMany({
+      where: {
+        userId: targetUserId,
+        isActive: true,
+        OR: [
+          { expiresAt: null },
+          { expiresAt: { gt: now } }
+        ]
       },
       include: {
         agent: {
@@ -115,15 +160,33 @@ export const GET = withAdminAuth(async (request, context) => {
       ]
     })
 
-    // 过滤出用户还没有权限的Agent
-    const userAgentIds = userAgentPermissions.map(p => p.agentId)
-    const availableAgents = allAgents.filter(agent => !userAgentIds.includes(agent.id))
+    // 过滤出用户还没有权限的Agent（Set 避免 O(n^2)）
+    const userAgentIdSet = new Set(userAgentPermissions.map(p => p.agentId))
+    const revokedAgentIdSet = new Set(activeRevocations.map(r => r.agentId))
+    const availableAgents = allAgents.filter(agent => !userAgentIdSet.has(agent.id) && !revokedAgentIdSet.has(agent.id))
 
     return NextResponse.json({
       data: {
         user: targetUser,
-        userAgents: userAgentPermissions.map(p => p.agent),
+        userAgents: userAgentPermissions.map(p => ({
+          ...p.agent,
+          permission: {
+            grantedBy: p.grantedBy,
+            grantedVia: p.grantedVia,
+            grantBatchId: p.grantBatchId,
+            createdAt: p.createdAt,
+          }
+        })),
         availableAgents: availableAgents,
+        revokedAgents: activeRevocations.map(r => ({
+          ...r.agent,
+          revocation: {
+            revokedBy: r.revokedBy,
+            revokedAt: r.revokedAt,
+            reason: r.reason,
+            expiresAt: r.expiresAt,
+          }
+        })),
         permissions: userAgentPermissions
       },
       message: '获取用户Agent权限成功'
@@ -189,6 +252,18 @@ export const POST = withAdminAuth(async (request, context) => {
       )
     }
 
+    if (targetUser.id === SUPER_ADMIN_ID) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'PROTECTED_USER',
+            message: '系统超级管理员账号不能被操作'
+          }
+        },
+        { status: 403, headers: corsHeaders }
+      )
+    }
+
     // 检查Agent是否存在
     const agent = await prisma.agent.findFirst({
       where: {
@@ -229,33 +304,40 @@ export const POST = withAdminAuth(async (request, context) => {
       )
     }
 
-    // 创建权限
-    const newPermission = await prisma.userAgentPermission.create({
-      data: {
-        userId: targetUserId,
-        agentId: agentId,
-        grantedBy: user.userId,
-      },
-      include: {
-        agent: {
-          select: {
-            id: true,
-            chineseName: true,
-            englishName: true,
-            position: true,
-            platform: true,
-            isOnline: true,
-            department: {
-              select: {
-                id: true,
-                name: true,
-                icon: true,
+    // 创建权限（同时解除黑名单）
+    const [, newPermission] = await prisma.$transaction([
+      prisma.userAgentPermissionRevocation.updateMany({
+        where: { userId: targetUserId, agentId, isActive: true },
+        data: { isActive: false },
+      }),
+      prisma.userAgentPermission.create({
+        data: {
+          userId: targetUserId,
+          agentId: agentId,
+          grantedBy: user.userId,
+          grantedVia: 'single',
+        },
+        include: {
+          agent: {
+            select: {
+              id: true,
+              chineseName: true,
+              englishName: true,
+              position: true,
+              platform: true,
+              isOnline: true,
+              department: {
+                select: {
+                  id: true,
+                  name: true,
+                  icon: true,
+                }
               }
             }
           }
         }
-      }
-    })
+      })
+    ])
 
     return NextResponse.json({
       data: newPermission,
@@ -318,6 +400,34 @@ export const DELETE = withAdminAuth(async (request, context) => {
       )
     }
 
+    if (targetUser.id === SUPER_ADMIN_ID) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'PROTECTED_USER',
+            message: '系统超级管理员账号不能被操作'
+          }
+        },
+        { status: 403, headers: corsHeaders }
+      )
+    }
+
+    const agent = await prisma.agent.findFirst({
+      where: { id: agentId, companyId: user.companyId },
+      select: { id: true }
+    })
+    if (!agent) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'AGENT_NOT_FOUND',
+            message: 'Agent不存在'
+          }
+        },
+        { status: 404, headers: corsHeaders }
+      )
+    }
+
     // 检查权限是否存在
     const existingPermission = await prisma.userAgentPermission.findFirst({
       where: {
@@ -338,12 +448,29 @@ export const DELETE = withAdminAuth(async (request, context) => {
       )
     }
 
-    // 删除权限
-    await prisma.userAgentPermission.delete({
-      where: {
-        id: existingPermission.id,
-      }
-    })
+    // 删除权限，并记录黑名单（撤销后批量授权不会恢复）
+    await prisma.$transaction([
+      prisma.userAgentPermission.delete({
+        where: {
+          id: existingPermission.id,
+        }
+      }),
+      prisma.userAgentPermissionRevocation.upsert({
+        where: { unique_user_agent_revocation: { userId: targetUserId, agentId } },
+        create: {
+          userId: targetUserId,
+          agentId,
+          revokedBy: user.userId,
+          isActive: true,
+        },
+        update: {
+          revokedBy: user.userId,
+          revokedAt: new Date(),
+          isActive: true,
+          expiresAt: null,
+        }
+      })
+    ])
 
     return NextResponse.json({
       message: 'Agent权限移除成功'

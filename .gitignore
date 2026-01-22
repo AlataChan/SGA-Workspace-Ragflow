@@ -87,3 +87,6 @@ temp/
 # Cache
 .cache/
 .parcel-cache/
+
+# Tooling
+.serena/

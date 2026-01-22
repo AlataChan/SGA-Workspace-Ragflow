@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Switch } from "@/components/ui/switch"
 import { Loader2, Upload, Building, CheckCircle, AlertCircle } from "lucide-react"
 import NewAdminLayout from "@/components/admin/new-admin-layout"
 
@@ -13,13 +14,32 @@ interface CompanyInfo {
   id: string
   name: string
   logoUrl?: string
+  mdmConfig?: {
+    baseUrl: string
+    systemCode: string
+    tenantId?: string
+    pageSize?: number
+  } | null
+  mdmTokenSet?: boolean
+  mdmSyncEnabled?: boolean
+  mdmSyncIntervalMin?: number | null
+  mdmLastSyncAt?: string | null
+  mdmLastSyncStatus?: string | null
+  mdmLastSyncError?: string | null
 }
 
 export default function CompanySettingsPage() {
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null)
   const [formData, setFormData] = useState({
     name: "",
-    logoFile: null as File | null
+    logoFile: null as File | null,
+    mdmBaseUrl: "",
+    mdmSystemCode: "",
+    mdmTenantId: "",
+    mdmPageSize: 200,
+    mdmToken: "",
+    mdmSyncEnabled: false,
+    mdmSyncIntervalMin: 30,
   })
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -37,7 +57,14 @@ export default function CompanySettingsPage() {
           setCompanyInfo(data.data)
           setFormData(prev => ({
             ...prev,
-            name: data.data.name || ""
+            name: data.data.name || "",
+            mdmBaseUrl: data.data.mdmConfig?.baseUrl || "",
+            mdmSystemCode: data.data.mdmConfig?.systemCode || "",
+            mdmTenantId: data.data.mdmConfig?.tenantId || "",
+            mdmPageSize: data.data.mdmConfig?.pageSize || 200,
+            mdmToken: "",
+            mdmSyncEnabled: Boolean(data.data.mdmSyncEnabled),
+            mdmSyncIntervalMin: data.data.mdmSyncIntervalMin || 30,
           }))
           setLogoPreview(data.data.logoUrl)
         } else {
@@ -130,22 +157,48 @@ export default function CompanySettingsPage() {
         logoUrl = (await uploadLogo()) || undefined
       }
 
+      const mdmBaseUrl = formData.mdmBaseUrl.trim()
+      const mdmSystemCode = formData.mdmSystemCode.trim()
+      const mdmTenantId = formData.mdmTenantId.trim()
+      const mdmToken = formData.mdmToken.trim()
+
+      const updateBody: any = {
+        name: formData.name.trim(),
+        logoUrl,
+        mdmSyncEnabled: Boolean(formData.mdmSyncEnabled),
+        mdmSyncIntervalMin: formData.mdmSyncEnabled ? Number(formData.mdmSyncIntervalMin) || 30 : null,
+      }
+
+      const shouldUpdateMdmConfig = Boolean(mdmBaseUrl || mdmSystemCode || mdmTenantId)
+      if (shouldUpdateMdmConfig) {
+        if (!mdmBaseUrl || !mdmSystemCode) {
+          throw new Error('MDM 配置不完整：Base URL 和 System Code 必填')
+        }
+        updateBody.mdmConfig = {
+          baseUrl: mdmBaseUrl,
+          systemCode: mdmSystemCode,
+          tenantId: mdmTenantId || undefined,
+          pageSize: Number(formData.mdmPageSize) || 200,
+        }
+      }
+
+      if (mdmToken) {
+        updateBody.mdmToken = mdmToken
+      }
+
       // 更新公司信息
       const response = await fetch('/api/admin/company', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: formData.name.trim(),
-          logoUrl,
-        }),
+        body: JSON.stringify(updateBody),
       })
 
       if (response.ok) {
         const data = await response.json()
         setCompanyInfo(data.data)
-        setFormData(prev => ({ ...prev, logoFile: null }))
+        setFormData(prev => ({ ...prev, logoFile: null, mdmToken: "" }))
         setLogoPreview(null) // 清除预览
         setMessage({ type: 'success', text: '公司信息保存成功' })
 
@@ -286,6 +339,101 @@ export default function CompanySettingsPage() {
                 )}
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>MDM 设置</CardTitle>
+            <CardDescription>配置 MDM 连接信息（Token 仅服务端使用，前端不会读取已有 Token）</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="mdmBaseUrl">Base URL</Label>
+                <Input
+                  id="mdmBaseUrl"
+                  placeholder="https://mdm.example.com/"
+                  value={formData.mdmBaseUrl}
+                  onChange={(e) => setFormData(prev => ({ ...prev, mdmBaseUrl: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="mdmSystemCode">System Code</Label>
+                <Input
+                  id="mdmSystemCode"
+                  placeholder="SGA"
+                  value={formData.mdmSystemCode}
+                  onChange={(e) => setFormData(prev => ({ ...prev, mdmSystemCode: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="mdmTenantId">Tenant ID（可选）</Label>
+                <Input
+                  id="mdmTenantId"
+                  placeholder="tenant-id"
+                  value={formData.mdmTenantId}
+                  onChange={(e) => setFormData(prev => ({ ...prev, mdmTenantId: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="mdmPageSize">Page Size</Label>
+                <Input
+                  id="mdmPageSize"
+                  type="number"
+                  min="1"
+                  max="500"
+                  value={formData.mdmPageSize}
+                  onChange={(e) => setFormData(prev => ({ ...prev, mdmPageSize: parseInt(e.target.value) || 200 }))}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="mdmToken">MDM Token（留空表示不修改）</Label>
+              <Input
+                id="mdmToken"
+                type="password"
+                placeholder={companyInfo?.mdmTokenSet ? "已设置（留空不修改）" : "未设置"}
+                value={formData.mdmToken}
+                onChange={(e) => setFormData(prev => ({ ...prev, mdmToken: e.target.value }))}
+              />
+            </div>
+
+            <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+              <div className="text-sm text-muted-foreground">启用自动同步</div>
+              <Switch
+                checked={Boolean(formData.mdmSyncEnabled)}
+                onCheckedChange={(v) => setFormData(prev => ({ ...prev, mdmSyncEnabled: Boolean(v) }))}
+              />
+            </div>
+
+            {formData.mdmSyncEnabled && (
+              <div className="space-y-2">
+                <Label htmlFor="mdmInterval">同步间隔（分钟）</Label>
+                <Input
+                  id="mdmInterval"
+                  type="number"
+                  min="1"
+                  max="1440"
+                  value={formData.mdmSyncIntervalMin}
+                  onChange={(e) => setFormData(prev => ({ ...prev, mdmSyncIntervalMin: parseInt(e.target.value) || 30 }))}
+                />
+              </div>
+            )}
+
+            {companyInfo?.mdmLastSyncStatus && (
+              <div className="rounded-md border border-border p-3 text-sm space-y-1">
+                <div>最近同步状态：{companyInfo.mdmLastSyncStatus}</div>
+                {companyInfo.mdmLastSyncAt ? <div>最近同步时间：{new Date(companyInfo.mdmLastSyncAt).toLocaleString()}</div> : null}
+                {companyInfo.mdmLastSyncError ? (
+                  <div className="text-red-600 dark:text-red-400">错误：{companyInfo.mdmLastSyncError}</div>
+                ) : null}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withAuth, type AuthenticatedRequest } from "@/lib/auth/middleware";
 import prisma from "@/lib/prisma";
+import { formatMiB, parseSizeToBytes } from "@/lib/size";
 
 // CORS headers
 const corsHeaders = {
@@ -15,7 +16,14 @@ function joinUrl(base: string, path: string) {
   return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 }
 
-const DEFAULT_DIFY_UPLOAD_MAX_SIZE_BYTES = 4 * 1024 * 1024; // 4MiB
+function normalizeDifyBaseUrl(input: string) {
+  const raw = String(input || "").trim();
+  if (!raw) return raw;
+  const trimmed = raw.replace(/\/+$/, "");
+  return /\/v1$/.test(trimmed) ? trimmed : `${trimmed}/v1`;
+}
+
+const DEFAULT_DIFY_UPLOAD_MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50MiB
 
 function getMaxUploadSizeBytes() {
   const raw =
@@ -23,19 +31,19 @@ function getMaxUploadSizeBytes() {
     process.env.DIFY_FILE_UPLOAD_MAX_SIZE ||
     process.env.NEXT_PUBLIC_DIFY_UPLOAD_MAX_SIZE ||
     "";
-  const parsed = Number(raw);
-  if (Number.isFinite(parsed) && parsed > 0) return Math.floor(parsed);
+  const parsed = parseSizeToBytes(raw);
+  if (parsed) return parsed;
   return DEFAULT_DIFY_UPLOAD_MAX_SIZE_BYTES;
-}
-
-function formatMiB(bytes: number) {
-  const mib = bytes / (1024 * 1024);
-  if (!Number.isFinite(mib)) return `${bytes}B`;
-  return `${mib.toFixed(mib >= 10 ? 0 : 1)}MB`;
 }
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function shouldTryHttpsUpgrade(detail: ReturnType<typeof getErrorDetail>) {
+  if (detail.code !== "UND_ERR_SOCKET") return false;
+  const msg = `${detail.causeMessage || ""} ${detail.message || ""}`.toLowerCase();
+  return msg.includes("other side closed") || msg.includes("socket hang up");
 }
 
 function getErrorDetail(error: unknown) {
@@ -44,9 +52,37 @@ function getErrorDetail(error: unknown) {
   }
   const anyErr = error as any;
   const cause = anyErr.cause as any;
+  const socket = cause?.socket as any;
+
+  const socketInfo =
+    socket && typeof socket === "object"
+      ? {
+          localAddress: typeof socket.localAddress === "string" ? socket.localAddress : undefined,
+          localPort: typeof socket.localPort === "number" ? socket.localPort : undefined,
+          remoteAddress: typeof socket.remoteAddress === "string" ? socket.remoteAddress : undefined,
+          remotePort: typeof socket.remotePort === "number" ? socket.remotePort : undefined,
+          remoteFamily: typeof socket.remoteFamily === "string" ? socket.remoteFamily : undefined,
+          timeout: typeof socket.timeout === "number" ? socket.timeout : undefined,
+        }
+      : undefined;
+
   return {
-    message: anyErr.message ? String(anyErr.message) : String(error),
-    code: cause?.code ? String(cause.code) : anyErr.code ? String(anyErr.code) : undefined,
+    message: typeof anyErr.message === "string" ? anyErr.message : String(error),
+    name: typeof anyErr.name === "string" ? anyErr.name : undefined,
+    code:
+      typeof cause?.code === "string"
+        ? cause.code
+        : typeof anyErr.code === "string"
+          ? anyErr.code
+          : undefined,
+    causeName: typeof cause?.name === "string" ? cause.name : undefined,
+    causeMessage: typeof cause?.message === "string" ? cause.message : undefined,
+    causeCode: typeof cause?.code === "string" ? cause.code : undefined,
+    errno: typeof cause?.errno === "number" ? cause.errno : undefined,
+    syscall: typeof cause?.syscall === "string" ? cause.syscall : undefined,
+    address: typeof cause?.address === "string" ? cause.address : undefined,
+    port: typeof cause?.port === "number" ? cause.port : undefined,
+    socket: socketInfo,
   };
 }
 
@@ -92,7 +128,9 @@ async function resolveDifyConfigByAgentId(agentId: string, request: Authenticate
   }
 
   const config = agent.platformConfig as any;
-  const difyBaseUrl = (config?.baseUrl as string | undefined) || agent.difyUrl || "";
+  const difyBaseUrl = normalizeDifyBaseUrl(
+    (config?.baseUrl as string | undefined) || agent.difyUrl || "",
+  );
   const difyApiKey = (config?.apiKey as string | undefined) || agent.difyKey || "";
   const difyTimeoutMs = Number(process.env.DEFAULT_DIFY_TIMEOUT || 500000);
 
@@ -188,11 +226,14 @@ export const POST = withAuth(async (req: AuthenticatedRequest) => {
       type: file.type,
       size: file.size,
       userId,
-      difyBaseUrl: config.difyBaseUrl.substring(0, 30) + '...'
+      agentId,
+      difyBaseUrl: config.difyBaseUrl,
     });
 
     // 构建 Dify API URL
-    const uploadUrl = joinUrl(config.difyBaseUrl, "/files/upload");
+    let difyBaseUrl = config.difyBaseUrl;
+    let uploadUrl = joinUrl(difyBaseUrl, "/files/upload");
+    let upgradedToHttps = false;
     console.log("[Dify File Upload] 上传到:", uploadUrl);
 
     const maxRetries = Number(process.env.DIFY_MAX_RETRIES || 3);
@@ -223,6 +264,16 @@ export const POST = withAuth(async (req: AuthenticatedRequest) => {
         clearTimeout(timeoutId);
 
         const detail = getErrorDetail(error);
+        if (!upgradedToHttps && uploadUrl.startsWith("http://") && shouldTryHttpsUpgrade(detail)) {
+          upgradedToHttps = true;
+          difyBaseUrl = difyBaseUrl.replace(/^http:\/\//, "https://");
+          uploadUrl = joinUrl(difyBaseUrl, "/files/upload");
+          console.warn(
+            "[Dify File Upload] 检测到可能的 http/https 协议不匹配，自动升级为 https 重试:",
+            uploadUrl,
+          );
+          continue;
+        }
         const shouldRetry =
           attempt < maxRetries &&
           (detail.code?.startsWith("UND_") ||
@@ -241,9 +292,11 @@ export const POST = withAuth(async (req: AuthenticatedRequest) => {
           return NextResponse.json(
             {
               error: "文件上传失败（连接异常）",
+              target: uploadUrl,
+              agentId,
               details: detail,
               hint:
-                "Dify 服务器可能关闭了连接（常见原因：文件过大/网关限制/超时）。可尝试更小文件或检查 Dify/Nginx 上传限制。",
+                "请确认 Dify baseUrl/端口/协议可从服务端访问；若 Dify 是 https 部署但这里配置成 http，常见现象是 UND_ERR_SOCKET（other side closed）。",
             },
             { status: 502, headers: corsHeaders },
           );
@@ -280,7 +333,7 @@ export const POST = withAuth(async (req: AuthenticatedRequest) => {
       size: result.size,
       extension: result.extension,
       mime_type: result.mime_type,
-      url: result.url || `${config.difyBaseUrl.replace(/\/v1\/?$/, '')}/files/${result.id}`,
+      url: result.url || `${difyBaseUrl.replace(/\/v1\/?$/, "")}/files/${result.id}`,
       created_at: result.created_at
     }, { headers: corsHeaders });
 

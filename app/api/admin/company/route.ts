@@ -8,8 +8,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withAdminAuth } from '@/lib/auth/middleware'
 import { z } from 'zod'
+import { encryptTokenForStorage } from '@/lib/security/encryption'
 
 export const dynamic = 'force-dynamic'
+
+const mdmConfigSchema = z
+  .object({
+    baseUrl: z.string().url(),
+    systemCode: z.string().min(1),
+    tenantId: z.string().min(1).optional(),
+    pageSize: z.number().int().min(1).max(500).optional(),
+  })
+  .optional()
 
 // 更新公司信息的验证模式
 const updateCompanySchema = z.object({
@@ -19,6 +29,10 @@ const updateCompanySchema = z.object({
     z.null(),
     z.undefined()
   ]).optional(),
+  mdmConfig: z.union([mdmConfigSchema, z.null()]).optional(),
+  mdmToken: z.union([z.string().min(1), z.null()]).optional(),
+  mdmSyncEnabled: z.boolean().optional(),
+  mdmSyncIntervalMin: z.union([z.number().int().min(1).max(1440), z.null()]).optional(),
 })
 
 // GET /api/admin/company - 获取公司信息
@@ -32,6 +46,13 @@ export const GET = withAdminAuth(async (request) => {
         id: true,
         name: true,
         logoUrl: true,
+        mdmConfig: true,
+        mdmToken: true,
+        mdmSyncEnabled: true,
+        mdmSyncIntervalMin: true,
+        mdmLastSyncAt: true,
+        mdmLastSyncStatus: true,
+        mdmLastSyncError: true,
         createdAt: true,
         updatedAt: true,
       }
@@ -50,7 +71,11 @@ export const GET = withAdminAuth(async (request) => {
     }
 
     return NextResponse.json({
-      data: company,
+      data: {
+        ...company,
+        mdmTokenSet: Boolean(company.mdmToken),
+        mdmToken: undefined,
+      },
       message: '获取公司信息成功'
     })
 
@@ -93,25 +118,51 @@ export const PUT = withAdminAuth(async (request) => {
 
     const { name, logoUrl } = validationResult.data
 
+    const mdmConfig =
+      validationResult.data.mdmConfig === undefined ? undefined : validationResult.data.mdmConfig
+    const mdmToken = validationResult.data.mdmToken
+    const mdmSyncEnabled = validationResult.data.mdmSyncEnabled
+    const mdmSyncIntervalMin = validationResult.data.mdmSyncIntervalMin
+
+    const nextCompanyData: any = {
+      name,
+      logoUrl,
+      updatedAt: new Date(),
+    }
+
+    if (mdmConfig !== undefined) nextCompanyData.mdmConfig = mdmConfig
+    if (mdmToken !== undefined) {
+      nextCompanyData.mdmToken = mdmToken === null ? null : encryptTokenForStorage(mdmToken)
+    }
+    if (mdmSyncEnabled !== undefined) nextCompanyData.mdmSyncEnabled = mdmSyncEnabled
+    if (mdmSyncIntervalMin !== undefined) nextCompanyData.mdmSyncIntervalMin = mdmSyncIntervalMin
+
     // 更新公司信息
     const updatedCompany = await prisma.company.update({
       where: { id: user.companyId },
-      data: {
-        name,
-        logoUrl,
-        updatedAt: new Date(),
-      },
+      data: nextCompanyData,
       select: {
         id: true,
         name: true,
         logoUrl: true,
+        mdmConfig: true,
+        mdmToken: true,
+        mdmSyncEnabled: true,
+        mdmSyncIntervalMin: true,
+        mdmLastSyncAt: true,
+        mdmLastSyncStatus: true,
+        mdmLastSyncError: true,
         createdAt: true,
         updatedAt: true,
       }
     })
 
     return NextResponse.json({
-      data: updatedCompany,
+      data: {
+        ...updatedCompany,
+        mdmTokenSet: Boolean(updatedCompany.mdmToken),
+        mdmToken: undefined,
+      },
       message: '公司信息更新成功'
     })
 

@@ -7,14 +7,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { RAGFlowHTTPClient } from '@/lib/ragflow-http-client'
 
+function normalizeRagflowBaseUrl(value: unknown): string {
+  let base = String(value ?? '').trim()
+  base = base.replace(/\/+$/, '')
+  base = base.replace(/\/api\/v1$/i, '')
+  base = base.replace(/\/v1$/i, '')
+  return base.replace(/\/+$/, '')
+}
+
 // 从环境变量获取配置
 function getRAGFlowConfig() {
-  const baseUrl = process.env.RAGFLOW_URL
+  const baseUrl = normalizeRagflowBaseUrl(process.env.RAGFLOW_URL || process.env.RAGFLOW_BASE_URL)
   const apiKey = process.env.RAGFLOW_API_KEY
   const chatId = process.env.RAGFLOW_CHAT_ID
 
   if (!baseUrl || !apiKey || !chatId) {
-    throw new Error('RAGFlow配置缺失，请检查环境变量')
+    throw new Error('RAGFlow配置缺失，请检查环境变量 RAGFLOW_URL/RAGFLOW_BASE_URL、RAGFLOW_API_KEY、RAGFLOW_CHAT_ID')
   }
 
   return { baseUrl, apiKey, chatId }
@@ -64,4 +72,3 @@ export async function DELETE(
     )
   }
 }
-

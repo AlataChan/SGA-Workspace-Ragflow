@@ -112,17 +112,11 @@ export const GET = withAdminAuth(async (request) => {
             icon: true,
           }
         },
-        userPermissions: {
+        _count: {
           select: {
-            userId: true,
-            user: {
-              select: {
-                displayName: true,
-                userId: true,
-              }
-            }
+            userPermissions: true,
           }
-        }
+        },
       },
       orderBy: [
         { department: { sortOrder: 'asc' } },

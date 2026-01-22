@@ -2,11 +2,19 @@ import { NextResponse } from "next/server";
 import { mapDifyWorkflowResponse, type WorkflowRunResult } from "@/lib/types/workflow";
 import { withAuth, type AuthenticatedRequest } from "@/lib/auth/middleware";
 import prisma from "@/lib/prisma";
+import { formatMiB, parseSizeToBytes } from "@/lib/size";
 
 export const dynamic = "force-dynamic";
 
 function joinUrl(base: string, path: string) {
   return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+}
+
+function normalizeDifyBaseUrl(input: string) {
+  const raw = String(input || "").trim();
+  if (!raw) return raw;
+  const trimmed = raw.replace(/\/+$/, "");
+  return /\/v1$/.test(trimmed) ? trimmed : `${trimmed}/v1`;
 }
 
 function parseJsonSafely(text: string) {
@@ -17,16 +25,60 @@ function parseJsonSafely(text: string) {
   }
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 function getErrorDetail(error: unknown) {
   if (!error || typeof error !== "object") {
     return { message: String(error) };
   }
   const anyErr = error as any;
   const cause = anyErr.cause as any;
+  const socket = cause?.socket as any;
+
+  const socketInfo =
+    socket && typeof socket === "object"
+      ? {
+          localAddress: typeof socket.localAddress === "string" ? socket.localAddress : undefined,
+          localPort: typeof socket.localPort === "number" ? socket.localPort : undefined,
+          remoteAddress: typeof socket.remoteAddress === "string" ? socket.remoteAddress : undefined,
+          remotePort: typeof socket.remotePort === "number" ? socket.remotePort : undefined,
+          remoteFamily: typeof socket.remoteFamily === "string" ? socket.remoteFamily : undefined,
+          timeout: typeof socket.timeout === "number" ? socket.timeout : undefined,
+        }
+      : undefined;
+
   return {
-    message: anyErr.message ? String(anyErr.message) : String(error),
-    code: cause?.code ? String(cause.code) : anyErr.code ? String(anyErr.code) : undefined,
+    message: typeof anyErr.message === "string" ? anyErr.message : String(error),
+    name: typeof anyErr.name === "string" ? anyErr.name : undefined,
+    code:
+      typeof cause?.code === "string"
+        ? cause.code
+        : typeof anyErr.code === "string"
+          ? anyErr.code
+          : undefined,
+    causeName: typeof cause?.name === "string" ? cause.name : undefined,
+    causeMessage: typeof cause?.message === "string" ? cause.message : undefined,
+    causeCode: typeof cause?.code === "string" ? cause.code : undefined,
+    errno: typeof cause?.errno === "number" ? cause.errno : undefined,
+    syscall: typeof cause?.syscall === "string" ? cause.syscall : undefined,
+    address: typeof cause?.address === "string" ? cause.address : undefined,
+    port: typeof cause?.port === "number" ? cause.port : undefined,
+    socket: socketInfo,
   };
+}
+
+function shouldTryHttpsUpgrade(detail: ReturnType<typeof getErrorDetail>) {
+  if (detail.code !== "UND_ERR_SOCKET") return false;
+  const msg = `${detail.causeMessage || ""} ${detail.message || ""}`.toLowerCase();
+  return msg.includes("other side closed") || msg.includes("socket hang up");
 }
 
 async function consumeDifyChatflowEventStream(
@@ -145,7 +197,7 @@ async function mapDifyChatflowResponse(
   };
 }
 
-const DEFAULT_DIFY_UPLOAD_MAX_SIZE_BYTES = 4 * 1024 * 1024; // 4MiB
+const DEFAULT_DIFY_UPLOAD_MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50MiB
 
 function getMaxUploadSizeBytes() {
   const raw =
@@ -153,15 +205,9 @@ function getMaxUploadSizeBytes() {
     process.env.DIFY_FILE_UPLOAD_MAX_SIZE ||
     process.env.NEXT_PUBLIC_DIFY_UPLOAD_MAX_SIZE ||
     "";
-  const parsed = Number(raw);
-  if (Number.isFinite(parsed) && parsed > 0) return Math.floor(parsed);
+  const parsed = parseSizeToBytes(raw);
+  if (parsed) return parsed;
   return DEFAULT_DIFY_UPLOAD_MAX_SIZE_BYTES;
-}
-
-function formatMiB(bytes: number) {
-  const mib = bytes / (1024 * 1024);
-  if (!Number.isFinite(mib)) return `${bytes}B`;
-  return `${mib.toFixed(mib >= 10 ? 0 : 1)}MB`;
 }
 
 function parseOptionalJsonObject(input: unknown): Record<string, any> {
@@ -258,10 +304,13 @@ async function resolveDifyConfigByAgentId(agentId: string, request: Authenticate
   }
 
   const config = agent.platformConfig as any;
-  const difyBaseUrl = (config?.baseUrl as string | undefined) || agent.difyUrl || "";
+  const difyBaseUrl = normalizeDifyBaseUrl(
+    (config?.baseUrl as string | undefined) || agent.difyUrl || "",
+  );
   const difyApiKey = (config?.apiKey as string | undefined) || agent.difyKey || "";
-  const workflowBaseUrl =
-    (config?.workflowBaseUrl as string | undefined) || difyBaseUrl;
+  const workflowBaseUrl = normalizeDifyBaseUrl(
+    (config?.workflowBaseUrl as string | undefined) || difyBaseUrl,
+  );
   const workflowApiKey =
     (config?.workflowApiKey as string | undefined) || difyApiKey;
   const difyTimeoutMs = Number(process.env.DEFAULT_DIFY_TIMEOUT || 500000);
@@ -292,6 +341,7 @@ async function resolveDifyConfigByAgentId(agentId: string, request: Authenticate
  * - 仅接受 agentId，由服务端查库获取 difyUrl/difyKey
  */
 export const POST = withAuth(async (request: AuthenticatedRequest) => {
+  let lastDifyRequest: { kind: string; url: string } | null = null;
   try {
     const contentType = request.headers.get("content-type") || "";
 
@@ -329,14 +379,15 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
         );
       }
 
+      let difyBaseUrl = config.difyBaseUrl;
+      let workflowBaseUrl = config.workflowBaseUrl;
+      let upgradedDifyToHttps = false;
+      let upgradedWorkflowToHttps = false;
+
       const wantChatflow = mode === "chatflow" || typeof query === "string";
       if (wantChatflow) {
         const normalizedQuery = (query ?? "").trim() || "批量执行";
-
-        const runAbort = new AbortController();
-        const runTimeout = setTimeout(() => runAbort.abort(), config.difyTimeoutMs);
-
-        const chatflowResponse = await fetch(joinUrl(config.difyBaseUrl, "/chat-messages"), {
+        const chatflowInit: RequestInit = {
           method: "POST",
           headers: {
             Authorization: `Bearer ${config.difyApiKey}`,
@@ -356,9 +407,44 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
               },
             ],
           }),
-          signal: runAbort.signal,
-        });
-        clearTimeout(runTimeout);
+        };
+
+        let finalChatMessagesUrl = joinUrl(difyBaseUrl, "/chat-messages");
+        lastDifyRequest = { kind: "chat-messages", url: finalChatMessagesUrl };
+
+        let chatflowResponse: Response;
+        try {
+          chatflowResponse = await fetchWithTimeout(
+            finalChatMessagesUrl,
+            chatflowInit,
+            config.difyTimeoutMs,
+          );
+        } catch (error) {
+          const detail = getErrorDetail(error);
+          if (
+            !upgradedDifyToHttps &&
+            finalChatMessagesUrl.startsWith("http://") &&
+            shouldTryHttpsUpgrade(detail)
+          ) {
+            upgradedDifyToHttps = true;
+            const previous = difyBaseUrl;
+            difyBaseUrl = difyBaseUrl.replace(/^http:\/\//, "https://");
+            if (workflowBaseUrl === previous) workflowBaseUrl = difyBaseUrl;
+            finalChatMessagesUrl = joinUrl(difyBaseUrl, "/chat-messages");
+            lastDifyRequest = { kind: "chat-messages", url: finalChatMessagesUrl };
+            console.warn(
+              "[Dify Run] 检测到可能的 http/https 协议不匹配，自动升级为 https 重试:",
+              finalChatMessagesUrl,
+            );
+            chatflowResponse = await fetchWithTimeout(
+              finalChatMessagesUrl,
+              chatflowInit,
+              config.difyTimeoutMs,
+            );
+          } else {
+            throw error;
+          }
+        }
 
         if (!chatflowResponse.ok) {
           const errorText = await chatflowResponse.text();
@@ -385,10 +471,7 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
         return NextResponse.json(result);
       }
 
-      const runAbort = new AbortController();
-      const runTimeout = setTimeout(() => runAbort.abort(), config.difyTimeoutMs);
-
-      const workflowResponse = await fetch(joinUrl(config.workflowBaseUrl, "/workflows/run"), {
+      const workflowInit: RequestInit = {
         method: "POST",
         headers: {
           Authorization: `Bearer ${config.workflowApiKey}`,
@@ -408,9 +491,42 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
           response_mode: "blocking",
           user: userId,
         }),
-        signal: runAbort.signal,
-      });
-      clearTimeout(runTimeout);
+      };
+
+      let finalWorkflowRunUrl = joinUrl(workflowBaseUrl, "/workflows/run");
+      lastDifyRequest = { kind: "workflows/run", url: finalWorkflowRunUrl };
+
+      let workflowResponse: Response;
+      try {
+        workflowResponse = await fetchWithTimeout(
+          finalWorkflowRunUrl,
+          workflowInit,
+          config.difyTimeoutMs,
+        );
+      } catch (error) {
+        const detail = getErrorDetail(error);
+        if (
+          !upgradedWorkflowToHttps &&
+          finalWorkflowRunUrl.startsWith("http://") &&
+          shouldTryHttpsUpgrade(detail)
+        ) {
+          upgradedWorkflowToHttps = true;
+          workflowBaseUrl = workflowBaseUrl.replace(/^http:\/\//, "https://");
+          finalWorkflowRunUrl = joinUrl(workflowBaseUrl, "/workflows/run");
+          lastDifyRequest = { kind: "workflows/run", url: finalWorkflowRunUrl };
+          console.warn(
+            "[Dify Run] 检测到可能的 http/https 协议不匹配，自动升级为 https 重试:",
+            finalWorkflowRunUrl,
+          );
+          workflowResponse = await fetchWithTimeout(
+            finalWorkflowRunUrl,
+            workflowInit,
+            config.difyTimeoutMs,
+          );
+        } else {
+          throw error;
+        }
+      }
 
       if (!workflowResponse.ok) {
         const errorText = await workflowResponse.text();
@@ -483,21 +599,46 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
       );
     }
 
+    let difyBaseUrl = config.difyBaseUrl;
+    let workflowBaseUrl = config.workflowBaseUrl;
+    let upgradedDifyToHttps = false;
+    let upgradedWorkflowToHttps = false;
+
     // 1) 上传文件到 Dify
     const uploadFormData = new FormData();
     uploadFormData.append("file", file);
     uploadFormData.append("user", userId);
 
-    const uploadAbort = new AbortController();
-    const uploadTimeout = setTimeout(() => uploadAbort.abort(), config.difyTimeoutMs);
-
-    const uploadResponse = await fetch(joinUrl(config.difyBaseUrl, "/files/upload"), {
+    const uploadInit: RequestInit = {
       method: "POST",
       headers: { Authorization: `Bearer ${config.difyApiKey}` },
       body: uploadFormData,
-      signal: uploadAbort.signal,
-    });
-    clearTimeout(uploadTimeout);
+    };
+
+    let finalUploadUrl = joinUrl(difyBaseUrl, "/files/upload");
+    lastDifyRequest = { kind: "files/upload", url: finalUploadUrl };
+
+    let uploadResponse: Response;
+    try {
+      uploadResponse = await fetchWithTimeout(finalUploadUrl, uploadInit, config.difyTimeoutMs);
+    } catch (error) {
+      const detail = getErrorDetail(error);
+      if (!upgradedDifyToHttps && finalUploadUrl.startsWith("http://") && shouldTryHttpsUpgrade(detail)) {
+        upgradedDifyToHttps = true;
+        const previous = difyBaseUrl;
+        difyBaseUrl = difyBaseUrl.replace(/^http:\/\//, "https://");
+        if (workflowBaseUrl === previous) workflowBaseUrl = difyBaseUrl;
+        finalUploadUrl = joinUrl(difyBaseUrl, "/files/upload");
+        lastDifyRequest = { kind: "files/upload", url: finalUploadUrl };
+        console.warn(
+          "[Dify Run] 检测到可能的 http/https 协议不匹配，自动升级为 https 重试:",
+          finalUploadUrl,
+        );
+        uploadResponse = await fetchWithTimeout(finalUploadUrl, uploadInit, config.difyTimeoutMs);
+      } else {
+        throw error;
+      }
+    }
 
     if (!uploadResponse.ok) {
       const errorText = await uploadResponse.text();
@@ -525,10 +666,7 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
     }
 
     // 2) 执行 Workflow（blocking）
-    const runAbort = new AbortController();
-    const runTimeout = setTimeout(() => runAbort.abort(), config.difyTimeoutMs);
-
-    const workflowResponse = await fetch(joinUrl(config.workflowBaseUrl, "/workflows/run"), {
+    const workflowInit: RequestInit = {
       method: "POST",
       headers: {
         Authorization: `Bearer ${config.workflowApiKey}`,
@@ -548,9 +686,42 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
         response_mode: "blocking",
         user: userId,
       }),
-      signal: runAbort.signal,
-    });
-    clearTimeout(runTimeout);
+    };
+
+    let finalWorkflowRunUrl = joinUrl(workflowBaseUrl, "/workflows/run");
+    lastDifyRequest = { kind: "workflows/run", url: finalWorkflowRunUrl };
+
+    let workflowResponse: Response;
+    try {
+      workflowResponse = await fetchWithTimeout(
+        finalWorkflowRunUrl,
+        workflowInit,
+        config.difyTimeoutMs,
+      );
+    } catch (error) {
+      const detail = getErrorDetail(error);
+      if (
+        !upgradedWorkflowToHttps &&
+        finalWorkflowRunUrl.startsWith("http://") &&
+        shouldTryHttpsUpgrade(detail)
+      ) {
+        upgradedWorkflowToHttps = true;
+        workflowBaseUrl = workflowBaseUrl.replace(/^http:\/\//, "https://");
+        finalWorkflowRunUrl = joinUrl(workflowBaseUrl, "/workflows/run");
+        lastDifyRequest = { kind: "workflows/run", url: finalWorkflowRunUrl };
+        console.warn(
+          "[Dify Run] 检测到可能的 http/https 协议不匹配，自动升级为 https 重试:",
+          finalWorkflowRunUrl,
+        );
+        workflowResponse = await fetchWithTimeout(
+          finalWorkflowRunUrl,
+          workflowInit,
+          config.difyTimeoutMs,
+        );
+      } else {
+        throw error;
+      }
+    }
 
     if (!workflowResponse.ok) {
       const errorText = await workflowResponse.text();
@@ -577,7 +748,7 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
   } catch (error) {
     const detail = getErrorDetail(error);
     const message = detail.message;
-    console.error("[Dify Run] 处理失败:", detail);
+    console.error("[Dify Run] 处理失败:", { ...detail, lastDifyRequest });
     const status =
       detail.code?.startsWith("UND_") || message === "fetch failed"
         ? 502
@@ -586,6 +757,9 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
       {
         success: false,
         error: { message, code: detail.code },
+        lastDifyRequest,
+        hint:
+          "请确认 Dify baseUrl/端口/协议可从服务端访问；若 Dify 是 https 部署但这里配置成 http，常见现象是 UND_ERR_SOCKET（other side closed）。",
         rawResponse: detail,
       },
       { status },

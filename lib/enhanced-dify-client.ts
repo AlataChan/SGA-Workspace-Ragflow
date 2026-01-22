@@ -7,6 +7,7 @@ export interface DifyStreamMessage {
   content: string
   messageId?: string
   conversationId?: string
+  conversationName?: string
   metadata?: {
     attachments?: Array<{
       id: string
@@ -180,6 +181,7 @@ export class EnhancedDifyClient {
     let fullResponse = ''
     let messageId: string | null = null
     let conversationIdFromResponse = this.conversationId
+    let conversationNameFromResponse: string | undefined
     let attachments: any[] = []
 
     try {
@@ -215,6 +217,13 @@ export class EnhancedDifyClient {
             if (data.choices && data.choices[0]) {
               const choice = data.choices[0]
               const delta = choice.delta
+
+              // 保存会话标题（后端可能在结束块附带 conversation_name）
+              if (typeof data.conversation_name === 'string' && data.conversation_name.trim()) {
+                conversationNameFromResponse = data.conversation_name.trim()
+              } else if (typeof delta?.conversation_name === 'string' && delta.conversation_name.trim()) {
+                conversationNameFromResponse = delta.conversation_name.trim()
+              }
 
               // 保存消息ID
               if (data.id) messageId = data.id
@@ -264,6 +273,7 @@ export class EnhancedDifyClient {
         content: fullResponse,
         messageId: messageId || undefined,
         conversationId: conversationIdFromResponse || undefined,
+        conversationName: conversationNameFromResponse,
         metadata: { attachments },
         isComplete: true
       })

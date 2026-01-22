@@ -65,6 +65,9 @@ interface Department {
   icon: string
   sortOrder: number
   isActive: boolean
+  source?: 'LOCAL' | 'MDM'
+  mdmIsUsed?: boolean | null
+  mdmDeletedAt?: string | null
   agentCount: number
   onlineAgentCount: number
   userCount?: number
@@ -110,6 +113,11 @@ export default function DepartmentsPage() {
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const [isTogglingActive, setIsTogglingActive] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const [syncStatus, setSyncStatus] = useState<any>(null)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [isSyncPreviewing, setIsSyncPreviewing] = useState(false)
+  const [syncPreview, setSyncPreview] = useState<any>(null)
+  const [isSyncDialogOpen, setIsSyncDialogOpen] = useState(false)
 
   // 分页 + 搜索
   const [searchTerm, setSearchTerm] = useState("")
@@ -170,6 +178,58 @@ export default function DepartmentsPage() {
   useEffect(() => {
     fetchDepartments()
   }, [page, pageSize, debouncedSearchTerm])
+
+  const fetchSyncStatus = async () => {
+    try {
+      const resp = await fetch('/api/admin/departments/sync/status')
+      const data = await resp.json().catch(() => ({}))
+      if (resp.ok) setSyncStatus(data.data)
+    } catch (error) {
+      console.error('获取同步状态失败:', error)
+    }
+  }
+
+  useEffect(() => {
+    fetchSyncStatus()
+  }, [])
+
+  const mdmReady = Boolean(syncStatus?.company?.mdmConfig) && Boolean(syncStatus?.company?.mdmTokenSet)
+
+  const handlePreviewSync = async () => {
+    setIsSyncPreviewing(true)
+    setSyncPreview(null)
+    setMessage(null)
+    try {
+      const resp = await fetch('/api/admin/departments/sync/preview', { method: 'POST' })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(data.error?.message || '同步预览失败')
+      setSyncPreview(data.data)
+      setIsSyncDialogOpen(true)
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : '同步预览失败' })
+    } finally {
+      setIsSyncPreviewing(false)
+    }
+  }
+
+  const handleRunSync = async () => {
+    setIsSyncing(true)
+    setMessage(null)
+    try {
+      const resp = await fetch('/api/admin/departments/sync', { method: 'POST' })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(data.error?.message || '同步失败')
+      setMessage({ type: 'success', text: '部门同步完成' })
+      setIsSyncDialogOpen(false)
+      setSyncPreview(null)
+      await fetchDepartments()
+      await fetchSyncStatus()
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : '同步失败' })
+    } finally {
+      setIsSyncing(false)
+    }
+  }
 
   // 重置表单
   const resetForm = () => {
@@ -255,17 +315,21 @@ export default function DepartmentsPage() {
     setMessage(null)
 
     try {
+      const updateBody: any = {
+        description: formData.description.trim() || undefined,
+        icon: formData.icon,
+        sortOrder: formData.sortOrder,
+      }
+      if (editingDepartment.source !== 'MDM') {
+        updateBody.name = formData.name.trim()
+      }
+
       const response = await fetch(`/api/admin/departments/${editingDepartment.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: formData.name.trim(),
-          description: formData.description.trim() || undefined,
-          icon: formData.icon,
-          sortOrder: formData.sortOrder,
-        }),
+        body: JSON.stringify(updateBody),
       })
 
       if (response.ok) {
@@ -292,6 +356,14 @@ export default function DepartmentsPage() {
 
   // 删除部门
   const handleDelete = async (department: Department) => {
+    if (department.source === 'MDM') {
+      setMessage({
+        type: 'error',
+        text: 'MDM 部门不允许删除'
+      })
+      return
+    }
+
     if (department.agentCount > 0) {
       setMessage({ 
         type: 'error', 
@@ -401,10 +473,20 @@ export default function DepartmentsPage() {
             <h1 className="text-2xl font-bold text-foreground mb-2">部门管理</h1>
             <p className="text-muted-foreground">管理公司部门结构和组织架构</p>
           </div>
-          <Button onClick={openCreateDialog}>
-            <Plus className="w-4 h-4 mr-2" />
-            添加部门
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handlePreviewSync} disabled={!mdmReady || isSyncPreviewing}>
+              {isSyncPreviewing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              同步预览
+            </Button>
+            <Button variant="outline" onClick={handleRunSync} disabled={!mdmReady || isSyncing}>
+              {isSyncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              立即同步
+            </Button>
+            <Button onClick={openCreateDialog}>
+              <Plus className="w-4 h-4 mr-2" />
+              添加部门
+            </Button>
+          </div>
         </div>
 
         {/* 消息提示 */}
@@ -421,6 +503,45 @@ export default function DepartmentsPage() {
             )}
             <AlertDescription className={message.type === 'success' ? 'text-green-700 dark:text-green-200' : 'text-red-700 dark:text-red-200'}>
               {message.text}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {syncStatus && !mdmReady && (
+          <Alert className="border-amber-500/20 bg-amber-500/10">
+            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <AlertDescription className="text-amber-700 dark:text-amber-200">
+              未配置 MDM（请在“公司设置”里填写 MDM 配置与 Token），同步功能暂不可用。
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {syncStatus?.latestLog && (
+          <Alert
+            className={`${
+              syncStatus.latestLog.status === 'success'
+                ? 'border-green-500/20 bg-green-500/10'
+                : syncStatus.latestLog.status === 'failed'
+                  ? 'border-red-500/20 bg-red-500/10'
+                  : 'border-blue-500/20 bg-blue-500/10'
+            }`}
+          >
+            <AlertDescription
+              className={
+                syncStatus.latestLog.status === 'success'
+                  ? 'text-green-700 dark:text-green-200'
+                  : syncStatus.latestLog.status === 'failed'
+                    ? 'text-red-700 dark:text-red-200'
+                    : 'text-blue-700 dark:text-blue-200'
+              }
+            >
+              最近一次同步：{new Date(syncStatus.latestLog.startedAt).toLocaleString()}（{syncStatus.latestLog.status}）
+              {syncStatus.latestLog.status === 'success'
+                ? `，新增 ${syncStatus.latestLog.created} / 更新 ${syncStatus.latestLog.updated} / 停用 ${syncStatus.latestLog.deactivated}`
+                : null}
+              {syncStatus.latestLog.status === 'failed' && syncStatus.latestLog.errorMessage
+                ? `，错误：${syncStatus.latestLog.errorMessage}`
+                : null}
             </AlertDescription>
           </Alert>
         )}
@@ -486,6 +607,25 @@ export default function DepartmentsPage() {
                             <div>
                               <div className="flex items-center space-x-2">
                                 <div className="font-medium text-foreground">{department.name}</div>
+                                {department.source === 'MDM' ? (
+                                  <Badge variant="outline" className="text-xs">
+                                    MDM
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="secondary" className="text-xs">
+                                    本地
+                                  </Badge>
+                                )}
+                                {department.source === 'MDM' && department.mdmDeletedAt && (
+                                  <Badge className="bg-red-500/20 text-red-700 border-red-500/30 text-xs dark:text-red-400">
+                                    MDM已删除
+                                  </Badge>
+                                )}
+                                {department.source === 'MDM' && department.mdmIsUsed === false && !department.mdmDeletedAt && (
+                                  <Badge className="bg-amber-500/20 text-amber-700 border-amber-500/30 text-xs dark:text-amber-400">
+                                    MDM停用
+                                  </Badge>
+                                )}
                                 {!department.isActive && (
                                   <Badge variant="secondary" className="text-xs">
                                     已停用
@@ -546,8 +686,9 @@ export default function DepartmentsPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleDelete(department)}
-                              disabled={isDeleting === department.id}
+                              disabled={isDeleting === department.id || department.source === 'MDM'}
                               className="border-red-500/30 text-red-600 hover:bg-red-500/10 dark:text-red-400"
+                              title={department.source === 'MDM' ? 'MDM 部门不可删除' : '删除'}
                             >
                               {isDeleting === department.id ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -696,7 +837,11 @@ export default function DepartmentsPage() {
 	                  placeholder="请输入部门名称"
 	                  value={formData.name}
 	                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+	                  disabled={editingDepartment?.source === 'MDM'}
                 />
+                {editingDepartment?.source === 'MDM' && (
+                  <div className="text-xs text-muted-foreground">MDM 部门不允许修改名称</div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-description">部门描述</Label>
@@ -760,6 +905,43 @@ export default function DepartmentsPage() {
                 ) : (
                   '更新部门'
                 )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* 同步预览弹窗 */}
+        <Dialog open={isSyncDialogOpen} onOpenChange={setIsSyncDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>同步预览</DialogTitle>
+              <DialogDescription>确认无误后再执行同步（同步为只读，不回传 MDM）</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 text-sm">
+              {syncPreview ? (
+                <>
+                  <div>预期条数：{syncPreview.totalExpected ?? 0}</div>
+                  <div>实际拉取：{syncPreview.totalPulled ?? 0}</div>
+                  <div>分页次数：{syncPreview.pageCount ?? 0}</div>
+                  <div>完整性校验：{syncPreview.isComplete ? '通过' : '未通过（将跳过删除检测）'}</div>
+                  <div>预计新增：{syncPreview.created ?? 0}</div>
+                  <div>预计更新：{syncPreview.updated ?? 0}</div>
+                  <div>预计停用/删除：{syncPreview.deactivated ?? 0}</div>
+                </>
+              ) : (
+                <div className="flex items-center text-muted-foreground">
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  加载中...
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsSyncDialogOpen(false)}>
+                关闭
+              </Button>
+              <Button onClick={handleRunSync} disabled={isSyncing}>
+                {isSyncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                执行同步
               </Button>
             </DialogFooter>
           </DialogContent>
