@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useDebounce } from "use-debounce"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -53,6 +53,7 @@ interface Department {
   id: string
   name: string
   icon: string
+  parentId?: string | null
 }
 
 interface Agent {
@@ -147,6 +148,7 @@ export default function UsersPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filterDepartment, setFilterDepartment] = useState<string>("all")
   const [filterRole, setFilterRole] = useState<string>("all")
+  const [includeChildren, setIncludeChildren] = useState(true)
 
   // 分页状态
   const [page, setPage] = useState(1)
@@ -192,6 +194,9 @@ export default function UsersPage() {
         pageSize: String(pageSize),
         ...(debouncedSearchTerm ? { q: debouncedSearchTerm } : {}),
         ...(filterDepartment !== "all" ? { departmentId: filterDepartment } : {}),
+        ...(filterDepartment !== "all" && filterDepartment !== "none"
+          ? { includeChildren: includeChildren ? "true" : "false" }
+          : {}),
         ...(filterRole !== "all" ? { role: filterRole } : {}),
       })
 
@@ -219,7 +224,7 @@ export default function UsersPage() {
 
   useEffect(() => {
     fetchUsers()
-  }, [page, pageSize, debouncedSearchTerm, filterDepartment, filterRole])
+  }, [page, pageSize, debouncedSearchTerm, filterDepartment, filterRole, includeChildren])
 
   const fetchAgents = async () => {
     try {
@@ -244,6 +249,40 @@ export default function UsersPage() {
       console.error('获取部门列表失败:', error)
     }
   }
+
+  // 部门下拉按层级缩进（扁平化显示）
+  const departmentOptions = useMemo(() => {
+    const nodes = new Map<string, Department & { children: string[] }>()
+    for (const d of departments) nodes.set(d.id, { ...d, children: [] })
+    const roots: (Department & { children: string[] })[] = []
+
+    for (const n of nodes.values()) {
+      const pid = n.parentId ?? null
+      if (pid && nodes.has(pid)) nodes.get(pid)!.children.push(n.id)
+      else roots.push(n)
+    }
+
+    const options: Array<{ id: string; label: string }> = []
+    const walk = (id: string, depth: number) => {
+      const n = nodes.get(id)
+      if (!n) return
+      const indent = '\u00A0'.repeat(depth * 4)
+      options.push({ id: n.id, label: `${indent}${depth > 0 ? '└ ' : ''}${n.name}` })
+
+      const children = [...n.children].sort((a, b) => {
+        const aa = nodes.get(a)!
+        const bb = nodes.get(b)!
+        return aa.name.localeCompare(bb.name)
+      })
+      for (const cid of children) walk(cid, depth + 1)
+    }
+
+    roots
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .forEach(r => walk(r.id, 0))
+
+    return options
+  }, [departments])
 
   const fetchCurrentAdmin = async () => {
     try {
@@ -802,13 +841,29 @@ export default function UsersPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">全部部门</SelectItem>
-                      {departments.map((dept) => (
-                        <SelectItem key={dept.id} value={dept.id}>
-                          {dept.name}
+                      <SelectItem value="none">未分配部门</SelectItem>
+                      {departmentOptions.map((opt) => (
+                        <SelectItem key={opt.id} value={opt.id}>
+                          {opt.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={includeChildren}
+                      onChange={(e) => {
+                        setIncludeChildren(e.target.checked)
+                        setPage(1)
+                      }}
+                      disabled={filterDepartment === "all" || filterDepartment === "none"}
+                      className="h-4 w-4 accent-primary disabled:opacity-50"
+                    />
+                    <span className={`text-sm ${filterDepartment === 'all' || filterDepartment === 'none' ? 'opacity-50' : ''}`}>
+                      包含子部门
+                    </span>
+                  </div>
                   <Select value={filterRole} onValueChange={(value) => {
                     setFilterRole(value)
                     setPage(1)
@@ -1459,9 +1514,9 @@ export default function UsersPage() {
                     className="w-full px-3 py-2 rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   >
                     <option value="">不选择部门</option>
-                    {departments.map((dept) => (
-                      <option key={dept.id} value={dept.id}>
-                        {dept.name}
+                    {departmentOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.label}
                       </option>
                     ))}
                   </select>
@@ -1651,9 +1706,9 @@ export default function UsersPage() {
                     className="w-full px-3 py-2 rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   >
                     <option value="">不选择部门</option>
-                    {departments.map((dept) => (
-                      <option key={dept.id} value={dept.id}>
-                        {dept.name}
+                    {departmentOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.label}
                       </option>
                     ))}
                   </select>

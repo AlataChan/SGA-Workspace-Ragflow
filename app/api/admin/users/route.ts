@@ -49,19 +49,65 @@ export const GET = withAdminAuth(async (request) => {
     const pageSizeParam = searchParams.get('pageSize') ?? searchParams.get('limit')
     const qParam = searchParams.get('q') ?? searchParams.get('search')
     const departmentId = searchParams.get('departmentId')
+    const includeChildrenParam = searchParams.get('includeChildren')
     const roleParam = searchParams.get('role')
     
     const page = Math.max(1, Number.parseInt(pageParam || '1', 10) || 1)
     const pageSize = Math.min(100, Math.max(1, Number.parseInt(pageSizeParam || '50', 10) || 50))
     const q = (qParam || '').trim()
+    const includeChildren = includeChildrenParam !== 'false'
 
     // 构建查询条件
     const whereClause: any = {
       companyId: user.companyId,
     }
 
+    // 部门过滤：all / none / 指定部门；指定部门默认包含子部门（includeChildren=true）
     if (departmentId && departmentId !== 'all') {
-      whereClause.departmentId = departmentId
+      if (departmentId === 'none') {
+        whereClause.departmentId = null
+      } else if (includeChildren) {
+        const depts = await prisma.department.findMany({
+          where: { companyId: user.companyId },
+          select: { id: true, parentId: true }
+        })
+
+        const exists = depts.some((d: any) => d.id === departmentId)
+        if (!exists) {
+          return NextResponse.json(
+            {
+              error: {
+                code: 'DEPARTMENT_NOT_FOUND',
+                message: '部门不存在'
+              }
+            },
+            { status: 400, headers: corsHeaders }
+          )
+        }
+
+        const childrenByParent = new Map<string, string[]>()
+        for (const d of depts as any[]) {
+          if (!d.parentId) continue
+          const arr = childrenByParent.get(d.parentId) ?? []
+          arr.push(d.id)
+          childrenByParent.set(d.parentId, arr)
+        }
+
+        const ids = new Set<string>()
+        ids.add(departmentId)
+        const stack = [...(childrenByParent.get(departmentId) ?? [])]
+        while (stack.length > 0) {
+          const cur = stack.pop()!
+          if (ids.has(cur)) continue
+          ids.add(cur)
+          const kids = childrenByParent.get(cur)
+          if (kids?.length) stack.push(...kids)
+        }
+
+        whereClause.departmentId = { in: Array.from(ids) }
+      } else {
+        whereClause.departmentId = departmentId
+      }
     }
 
     if (roleParam && roleParam !== 'all' && Object.values(UserRole).includes(roleParam as UserRole)) {
