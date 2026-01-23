@@ -409,14 +409,14 @@ export default function DepartmentsPage() {
             setSelectedDepartmentId(node.id)
             setIsRightPanelEditing(false)
           }}
-          className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg transition-colors text-left ${
-            isSelected ? "bg-[#6a5acd]/15 border border-[#6a5acd]/30" : "hover:bg-[#2d2d2d]"
+          className={`group w-full flex items-center gap-2 px-2 py-2 rounded-lg transition-colors text-left border ${
+            isSelected ? "bg-accent text-accent-foreground border-border" : "hover:bg-accent border-transparent"
           }`}
           style={{ paddingLeft: 8 + depth * 14 }}
         >
           <div
             className={`w-5 h-5 flex items-center justify-center rounded ${
-              hasChildren ? "text-gray-300" : "text-gray-600"
+              hasChildren ? "text-muted-foreground" : "text-muted-foreground/60"
             }`}
             onClick={(e) => {
               e.stopPropagation()
@@ -430,18 +430,22 @@ export default function DepartmentsPage() {
             )}
           </div>
 
-          <div className="w-7 h-7 bg-[#6a5acd]/20 rounded-lg flex items-center justify-center shrink-0">
-            <IconComponent className="w-4 h-4 text-[#8ab4f8]" />
+          <div className="w-7 h-7 bg-accent rounded-lg flex items-center justify-center shrink-0">
+            <IconComponent className="w-4 h-4 text-foreground" />
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-white truncate">{node.name}</div>
-            <div className="text-xs text-gray-500 truncate">
+            <div className="text-sm font-medium truncate">{node.name}</div>
+            <div className="text-xs text-muted-foreground truncate">
               {node.agentCount} 个Agent / 在线 {node.onlineAgentCount}
             </div>
           </div>
 
-          <Badge variant="outline" className="border-[#3c4043] text-gray-300 shrink-0">
+          <Badge
+            variant="outline"
+            className="shrink-0 tabular-nums min-w-8 justify-center opacity-70 group-hover:opacity-100"
+            title={`排序：${node.sortOrder}`}
+          >
             {node.sortOrder}
           </Badge>
         </button>
@@ -463,7 +467,7 @@ export default function DepartmentsPage() {
     return (
       <NewAdminLayout>
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-[#6a5acd]" />
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
         </div>
       </NewAdminLayout>
     )
@@ -474,13 +478,13 @@ export default function DepartmentsPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white mb-2">部门管理</h1>
-            <p className="text-gray-400">管理公司部门结构和组织架构</p>
+            <h1 className="text-2xl font-bold mb-2">部门管理</h1>
+            <p className="text-muted-foreground">管理公司部门结构和组织架构</p>
           </div>
           <div className="flex items-center gap-2">
             <Button
               onClick={() => openCreateDialog(null)}
-              className="bg-[#6a5acd] hover:bg-[#5a4abd] text-white"
+              className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500"
             >
               <Plus className="w-4 h-4 mr-2" />
               添加部门
@@ -489,7 +493,7 @@ export default function DepartmentsPage() {
               <Button
                 variant="outline"
                 onClick={() => openCreateDialog(selectedDepartment.id)}
-                className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
+                className="hover:bg-accent"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 添加子部门
@@ -518,21 +522,21 @@ export default function DepartmentsPage() {
 
         {/* 左侧树 + 右侧详情 */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <Card className="bg-[#1f1f1f] border-[#2d2d2d] lg:col-span-4">
+          <Card className="lg:col-span-5">
             <CardHeader>
-              <CardTitle className="text-white flex items-center">
+              <CardTitle className="flex items-center">
                 <Building className="w-5 h-5 mr-2" />
-                部门树
+                部门
               </CardTitle>
-              <CardDescription className="text-gray-400">
+              <CardDescription>
                 当前共有 {departments.length} 个部门
               </CardDescription>
             </CardHeader>
             <CardContent>
               {departments.length === 0 ? (
                 <div className="text-center py-8">
-                  <Building className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-                  <p className="text-gray-400">暂无部门，点击上方按钮添加第一个部门</p>
+                  <Building className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-60" />
+                  <p className="text-muted-foreground">暂无部门，点击上方按钮添加第一个部门</p>
                 </div>
               ) : (
                 <ScrollArea className="h-[520px] pr-2">
@@ -546,9 +550,9 @@ export default function DepartmentsPage() {
             </CardContent>
           </Card>
 
-          <Card className="bg-[#1f1f1f] border-[#2d2d2d] lg:col-span-8">
+          <Card className="lg:col-span-7">
             <CardHeader>
-              <CardTitle className="text-white flex items-center justify-between">
+              <CardTitle className="flex items-center justify-between">
                 <span className="flex items-center">
                   <Users className="w-5 h-5 mr-2" />
                   部门详情
@@ -558,47 +562,47 @@ export default function DepartmentsPage() {
                     variant="outline"
                     size="sm"
                     onClick={startEditRightPanel}
-                    className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
+                    className="hover:bg-accent"
                   >
                     <Edit className="w-4 h-4 mr-2" />
                     编辑
                   </Button>
                 )}
               </CardTitle>
-              <CardDescription className="text-gray-400">
+              <CardDescription>
                 {selectedDepartment ? "查看并编辑选中的部门" : "从左侧选择一个部门查看详情"}
               </CardDescription>
             </CardHeader>
             <CardContent>
               {!selectedDepartment ? (
                 <div className="text-center py-12">
-                  <Building className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-                  <p className="text-gray-400">请选择一个部门</p>
+                  <Building className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-60" />
+                  <p className="text-muted-foreground">请选择一个部门</p>
                 </div>
               ) : (
                 <div className="space-y-6">
                   {/* 概览 */}
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 bg-[#6a5acd]/20 rounded-lg flex items-center justify-center shrink-0">
+                      <div className="w-10 h-10 bg-accent rounded-lg flex items-center justify-center shrink-0">
                         {(() => {
                           const IconComponent = getIconComponent(selectedDepartment.icon)
-                          return <IconComponent className="w-5 h-5 text-[#8ab4f8]" />
+                          return <IconComponent className="w-5 h-5 text-foreground" />
                         })()}
                       </div>
                       <div className="min-w-0">
-                        <div className="text-lg font-semibold text-white truncate">{selectedDepartment.name}</div>
-                        <div className="text-sm text-gray-400 truncate">
+                        <div className="text-lg font-semibold truncate">{selectedDepartment.name}</div>
+                        <div className="text-sm text-muted-foreground truncate">
                           {selectedDepartment.description || "暂无描述"}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <Badge variant="outline" className="border-[#3c4043] text-gray-300">
+                      <Badge variant="outline">
                         总计 {selectedDepartment.agentCount}
                       </Badge>
                       {selectedDepartment.onlineAgentCount > 0 && (
-                        <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                        <Badge className="bg-green-500/20 text-green-400 border border-green-500/30">
                           在线 {selectedDepartment.onlineAgentCount}
                         </Badge>
                       )}
@@ -608,21 +612,21 @@ export default function DepartmentsPage() {
                   {/* 编辑表单 / 只读信息 */}
                   {!isRightPanelEditing ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-[#151515] border border-[#2d2d2d] rounded-lg p-4">
-                        <div className="text-xs text-gray-500 mb-1">排序</div>
-                        <div className="text-white">{selectedDepartment.sortOrder}</div>
+                      <div className="bg-accent/30 border border-border rounded-lg p-4">
+                        <div className="text-xs text-muted-foreground mb-1">排序</div>
+                        <div>{selectedDepartment.sortOrder}</div>
                       </div>
-                      <div className="bg-[#151515] border border-[#2d2d2d] rounded-lg p-4">
-                        <div className="text-xs text-gray-500 mb-1">创建时间</div>
-                        <div className="text-white">{new Date(selectedDepartment.createdAt).toLocaleString()}</div>
+                      <div className="bg-accent/30 border border-border rounded-lg p-4">
+                        <div className="text-xs text-muted-foreground mb-1">创建时间</div>
+                        <div>{new Date(selectedDepartment.createdAt).toLocaleString()}</div>
                       </div>
-                      <div className="bg-[#151515] border border-[#2d2d2d] rounded-lg p-4">
-                        <div className="text-xs text-gray-500 mb-1">更新时间</div>
-                        <div className="text-white">{new Date(selectedDepartment.updatedAt).toLocaleString()}</div>
+                      <div className="bg-accent/30 border border-border rounded-lg p-4">
+                        <div className="text-xs text-muted-foreground mb-1">更新时间</div>
+                        <div>{new Date(selectedDepartment.updatedAt).toLocaleString()}</div>
                       </div>
-                      <div className="bg-[#151515] border border-[#2d2d2d] rounded-lg p-4">
-                        <div className="text-xs text-gray-500 mb-1">父部门</div>
-                        <div className="text-white">
+                      <div className="bg-accent/30 border border-border rounded-lg p-4">
+                        <div className="text-xs text-muted-foreground mb-1">父部门</div>
+                        <div>
                           {selectedDepartment.parentId
                             ? (departments.find(d => d.id === selectedDepartment.parentId)?.name ?? "（未知）")
                             : "顶级部门"}
@@ -649,30 +653,30 @@ export default function DepartmentsPage() {
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label className="text-white">部门名称</Label>
+                          <Label>部门名称</Label>
                           <Input
                             value={formData.name}
                             onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                            className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+                            className=""
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-white">父部门</Label>
+                          <Label>父部门</Label>
                           <Select
                             value={formData.parentId ?? "__ROOT__"}
                             onValueChange={(value) => setFormData(prev => ({ ...prev, parentId: value === "__ROOT__" ? null : value }))}
                           >
-                            <SelectTrigger className="bg-[#2a2a2a] border-[#3c4043] text-white">
+                            <SelectTrigger className="">
                               <SelectValue placeholder="选择父部门（可选）" />
                             </SelectTrigger>
-                            <SelectContent className="bg-[#2a2a2a] border-[#3c4043]">
-                              <SelectItem value="__ROOT__" className="text-white hover:bg-[#3c4043]">
+                            <SelectContent className="">
+                              <SelectItem value="__ROOT__" className="">
                                 顶级部门（无）
                               </SelectItem>
                               {departments
                                 .filter(d => !invalidParentIds.has(d.id))
                                 .map((d) => (
-                                  <SelectItem key={d.id} value={d.id} className="text-white hover:bg-[#3c4043]">
+                                  <SelectItem key={d.id} value={d.id} className="">
                                     {d.name}
                                   </SelectItem>
                                 ))}
@@ -682,30 +686,30 @@ export default function DepartmentsPage() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label className="text-white">部门描述</Label>
+                        <Label>部门描述</Label>
                         <Textarea
                           value={formData.description}
                           onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                          className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+                          className=""
                           rows={3}
                         />
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label className="text-white">部门图标</Label>
+                          <Label>部门图标</Label>
                           <Select
                             value={formData.icon}
                             onValueChange={(value) => setFormData(prev => ({ ...prev, icon: value }))}
                           >
-                            <SelectTrigger className="bg-[#2a2a2a] border-[#3c4043] text-white">
+                            <SelectTrigger className="">
                               <SelectValue />
                             </SelectTrigger>
-                            <SelectContent className="bg-[#2a2a2a] border-[#3c4043]">
+                            <SelectContent className="">
                               {iconOptions.map((option) => {
                                 const IconComponent = option.icon
                                 return (
-                                  <SelectItem key={option.value} value={option.value} className="text-white hover:bg-[#3c4043]">
+                                  <SelectItem key={option.value} value={option.value} className="">
                                     <div className="flex items-center space-x-2">
                                       <IconComponent className="w-4 h-4" />
                                       <span>{option.label}</span>
@@ -717,13 +721,13 @@ export default function DepartmentsPage() {
                           </Select>
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-white">排序顺序</Label>
+                          <Label>排序顺序</Label>
                           <Input
                             type="number"
                             min="0"
                             value={formData.sortOrder}
                             onChange={(e) => setFormData(prev => ({ ...prev, sortOrder: parseInt(e.target.value) || 0 }))}
-                            className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
+                            className=""
                           />
                         </div>
                       </div>
@@ -732,14 +736,14 @@ export default function DepartmentsPage() {
                         <Button
                           variant="outline"
                           onClick={cancelEditRightPanel}
-                          className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
+                          className="hover:bg-accent"
                         >
                           取消
                         </Button>
                         <Button
                           onClick={handleUpdate}
                           disabled={isSaving}
-                          className="bg-[#6a5acd] hover:bg-[#5a4abd] text-white"
+                          className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500"
                         >
                           {isSaving ? (
                             <>
@@ -761,39 +765,38 @@ export default function DepartmentsPage() {
 
         {/* 创建部门弹窗 */}
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogContent className="bg-[#1f1f1f] border-[#2d2d2d] text-white">
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>添加部门</DialogTitle>
-              <DialogDescription className="text-gray-400">
+              <DialogDescription>
                 创建新的部门，完善组织架构
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="create-name" className="text-white">部门名称</Label>
+                <Label htmlFor="create-name">部门名称</Label>
                 <Input
                   id="create-name"
                   placeholder="请输入部门名称"
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-white">父部门</Label>
+                <Label>父部门</Label>
                 <Select
                   value={formData.parentId ?? "__ROOT__"}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, parentId: value === "__ROOT__" ? null : value }))}
                 >
-                  <SelectTrigger className="bg-[#2a2a2a] border-[#3c4043] text-white">
+                  <SelectTrigger>
                     <SelectValue placeholder="选择父部门（可选）" />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#2a2a2a] border-[#3c4043]">
-                    <SelectItem value="__ROOT__" className="text-white hover:bg-[#3c4043]">
+                  <SelectContent>
+                    <SelectItem value="__ROOT__">
                       顶级部门（无）
                     </SelectItem>
                     {departments.map((d) => (
-                      <SelectItem key={d.id} value={d.id} className="text-white hover:bg-[#3c4043]">
+                      <SelectItem key={d.id} value={d.id}>
                         {d.name}
                       </SelectItem>
                     ))}
@@ -801,30 +804,29 @@ export default function DepartmentsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="create-description" className="text-white">部门描述</Label>
+                <Label htmlFor="create-description">部门描述</Label>
                 <Textarea
                   id="create-description"
                   placeholder="请输入部门描述（可选）"
                   value={formData.description}
                   onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                   rows={3}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="create-icon" className="text-white">部门图标</Label>
+                <Label htmlFor="create-icon">部门图标</Label>
                 <Select
                   value={formData.icon}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, icon: value }))}
                 >
-                  <SelectTrigger className="bg-[#2a2a2a] border-[#3c4043] text-white">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#2a2a2a] border-[#3c4043]">
+                  <SelectContent>
                     {iconOptions.map((option) => {
                       const IconComponent = option.icon
                       return (
-                        <SelectItem key={option.value} value={option.value} className="text-white hover:bg-[#3c4043]">
+                        <SelectItem key={option.value} value={option.value}>
                           <div className="flex items-center space-x-2">
                             <IconComponent className="w-4 h-4" />
                             <span>{option.label}</span>
@@ -836,7 +838,7 @@ export default function DepartmentsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="create-sort" className="text-white">排序顺序</Label>
+                <Label htmlFor="create-sort">排序顺序</Label>
                 <Input
                   id="create-sort"
                   type="number"
@@ -844,7 +846,6 @@ export default function DepartmentsPage() {
                   placeholder="排序顺序"
                   value={formData.sortOrder}
                   onChange={(e) => setFormData(prev => ({ ...prev, sortOrder: parseInt(e.target.value) || 0 }))}
-                  className="bg-[#2a2a2a] border-[#3c4043] text-white placeholder:text-gray-500"
                 />
               </div>
             </div>
@@ -852,14 +853,13 @@ export default function DepartmentsPage() {
               <Button
                 variant="outline"
                 onClick={() => setIsCreateDialogOpen(false)}
-                className="border-[#3c4043] text-gray-300 hover:bg-[#2d2d2d]"
               >
                 取消
               </Button>
               <Button
                 onClick={handleCreate}
                 disabled={isSaving}
-                className="bg-[#6a5acd] hover:bg-[#5a4abd] text-white"
+                className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500"
               >
                 {isSaving ? (
                   <>

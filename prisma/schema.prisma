@@ -25,17 +25,21 @@ model Department {
   id          String   @id @default(cuid())
   companyId   String   @map("company_id")
   name        String
+  parentId    String?  @map("parent_id")
   description String?
   icon        String?
   sortOrder   Int      @default(0) @map("sort_order")
-  isActive    Boolean  @default(true) @map("is_active")
+  isActive    Boolean?  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
   agents      Agent[]
   company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   users       User[]
+  parent      Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Department[] @relation("DepartmentHierarchy")
 
-  @@unique([companyId, name], name: "companyId_name")
+  @@unique([companyId, parentId, name], name: "companyId_parentId_name")
+  @@index([companyId, parentId], name: "idx_departments_company_parent")
   @@map("departments")
 }
 

@@ -47,6 +47,7 @@ import {
   Ban
 } from "lucide-react"
 import NewAdminLayout from "@/components/admin/new-admin-layout"
+import { DepartmentCombobox } from "@/components/admin/department-combobox"
 
 // 类型定义
 interface Department {
@@ -113,7 +114,6 @@ export default function UsersPage() {
   // 状态管理
   const [users, setUsers] = useState<UserData[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
-  const [departments, setDepartments] = useState<Department[]>([])
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -181,7 +181,6 @@ export default function UsersPage() {
   // 获取数据
   useEffect(() => {
     fetchAgents()
-    fetchDepartments()
     fetchCurrentAdmin()
   }, [])
 
@@ -237,52 +236,6 @@ export default function UsersPage() {
       console.error('获取Agent列表失败:', error)
     }
   }
-
-  const fetchDepartments = async () => {
-    try {
-      const response = await fetch('/api/admin/departments')
-      if (response.ok) {
-        const data = await response.json()
-        setDepartments(data.data || [])
-      }
-    } catch (error) {
-      console.error('获取部门列表失败:', error)
-    }
-  }
-
-  // 部门下拉按层级缩进（扁平化显示）
-  const departmentOptions = useMemo(() => {
-    const nodes = new Map<string, Department & { children: string[] }>()
-    for (const d of departments) nodes.set(d.id, { ...d, children: [] })
-    const roots: (Department & { children: string[] })[] = []
-
-    for (const n of nodes.values()) {
-      const pid = n.parentId ?? null
-      if (pid && nodes.has(pid)) nodes.get(pid)!.children.push(n.id)
-      else roots.push(n)
-    }
-
-    const options: Array<{ id: string; label: string }> = []
-    const walk = (id: string, depth: number) => {
-      const n = nodes.get(id)
-      if (!n) return
-      const indent = '\u00A0'.repeat(depth * 4)
-      options.push({ id: n.id, label: `${indent}${depth > 0 ? '└ ' : ''}${n.name}` })
-
-      const children = [...n.children].sort((a, b) => {
-        const aa = nodes.get(a)!
-        const bb = nodes.get(b)!
-        return aa.name.localeCompare(bb.name)
-      })
-      for (const cid of children) walk(cid, depth + 1)
-    }
-
-    roots
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .forEach(r => walk(r.id, 0))
-
-    return options
-  }, [departments])
 
   const fetchCurrentAdmin = async () => {
     try {
@@ -832,23 +785,20 @@ export default function UsersPage() {
                       className="pl-10"
                     />
                   </div>
-                  <Select value={filterDepartment} onValueChange={(value) => {
-                    setFilterDepartment(value)
-                    setPage(1)
-                  }}>
-                    <SelectTrigger className="w-full sm:w-40">
-                      <SelectValue placeholder="部门" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">全部部门</SelectItem>
-                      <SelectItem value="none">未分配部门</SelectItem>
-                      {departmentOptions.map((opt) => (
-                        <SelectItem key={opt.id} value={opt.id}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <DepartmentCombobox
+                    value={filterDepartment}
+                    onValueChange={(value) => {
+                      setFilterDepartment(value)
+                      setPage(1)
+                    }}
+                    placeholder="部门"
+                    title="筛选部门"
+                    fixedOptions={[
+                      { value: "all", label: "全部部门" },
+                      { value: "none", label: "未分配部门" },
+                    ]}
+                    className="w-full sm:w-40 justify-start"
+                  />
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <input
                       type="checkbox"
@@ -1507,19 +1457,14 @@ export default function UsersPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="create-department">部门</Label>
-                  <select
-                    id="create-department"
+                  <DepartmentCombobox
                     value={formData.departmentId || ""}
-                    onChange={(e) => setFormData(prev => ({ ...prev, departmentId: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                  >
-                    <option value="">不选择部门</option>
-                    {departmentOptions.map((opt) => (
-                      <option key={opt.id} value={opt.id}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, departmentId: value }))}
+                    placeholder="不选择部门"
+                    title="选择部门"
+                    fixedOptions={[{ value: "", label: "不选择部门" }]}
+                    className="w-full justify-start"
+                  />
 	                </div>
 	                <div className="space-y-2">
 	                  <Label htmlFor="create-position">职位 *</Label>
@@ -1699,19 +1644,14 @@ export default function UsersPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="edit-department">部门</Label>
-                  <select
-                    id="edit-department"
+                  <DepartmentCombobox
                     value={formData.departmentId || ""}
-                    onChange={(e) => setFormData(prev => ({ ...prev, departmentId: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                  >
-                    <option value="">不选择部门</option>
-                    {departmentOptions.map((opt) => (
-                      <option key={opt.id} value={opt.id}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, departmentId: value }))}
+                    placeholder="不选择部门"
+                    title="选择部门"
+                    fixedOptions={[{ value: "", label: "不选择部门" }]}
+                    className="w-full justify-start"
+                  />
 	                </div>
 	                <div className="space-y-2">
 	                  <Label htmlFor="edit-position">职位 *</Label>
