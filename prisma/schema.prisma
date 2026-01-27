@@ -38,7 +38,6 @@ model Department {
   parent      Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children    Department[] @relation("DepartmentHierarchy")
 
-  @@unique([companyId, parentId, name], name: "companyId_parentId_name")
   @@index([companyId, parentId], name: "idx_departments_company_parent")
   @@map("departments")
 }

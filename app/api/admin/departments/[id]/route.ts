@@ -128,14 +128,14 @@ export const PUT = withAdminAuth(async (request, context) => {
       )
     }
 
-    // parentId 基础校验（避免自指；父部门必须同公司）
+    // parentId 基础校验（避免自指；上级部门必须同公司）
     if (updateData.parentId !== undefined) {
       if (updateData.parentId === departmentId) {
         return NextResponse.json(
           {
             error: {
               code: 'INVALID_PARENT_DEPARTMENT',
-              message: '父部门不能是自己'
+              message: '上级部门不能是自己'
             }
           },
           { status: 400 }
@@ -152,7 +152,7 @@ export const PUT = withAdminAuth(async (request, context) => {
             {
               error: {
                 code: 'PARENT_DEPARTMENT_NOT_FOUND',
-                message: '父部门不存在'
+                message: '上级部门不存在'
               }
             },
             { status: 400 }
@@ -161,7 +161,7 @@ export const PUT = withAdminAuth(async (request, context) => {
       }
     }
 
-    // 如果更新名称或 parentId，检查是否与其他部门重名（同一父部门下不允许重名）
+    // 如果更新名称或 parentId，检查是否与其他部门重名（同一上级部门下不允许重名）
     if (
       (updateData.name && updateData.name !== existingDepartment.name) ||
       updateData.parentId !== undefined

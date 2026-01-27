@@ -9,6 +9,14 @@ import prisma from '@/lib/prisma'
 import { withAdminAuth } from '@/lib/auth/middleware'
 import { z } from 'zod'
 
+const listQuerySchema = z.object({
+  lite: z
+    .string()
+    .optional()
+    .transform((v) => (v ?? '').toLowerCase())
+    .transform((v) => v === '1' || v === 'true' || v === 'yes'),
+})
+
 // 创建部门的验证模式
 const createDepartmentSchema = z.object({
   name: z.string().min(1, "部门名称不能为空").max(50, "部门名称过长"),
@@ -22,7 +30,37 @@ const createDepartmentSchema = z.object({
 export const GET = withAdminAuth(async (request) => {
   try {
     const user = request.user!
+    const url = new URL(request.url)
+    const parsedQuery = listQuerySchema.safeParse({
+      lite: url.searchParams.get('lite') ?? undefined,
+    })
+    const lite = parsedQuery.success ? parsedQuery.data.lite : false
     
+    // lite=true：用于部门树/下拉等场景，避免 include agents/统计导致 payload 过大
+    if (lite) {
+      const departments = await prisma.department.findMany({
+        where: { companyId: user.companyId },
+        select: {
+          id: true,
+          companyId: true,
+          name: true,
+          parentId: true,
+          description: true,
+          icon: true,
+          sortOrder: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      })
+
+      return NextResponse.json({
+        data: departments,
+        message: '获取部门列表成功'
+      })
+    }
+
     const departments = await prisma.department.findMany({
       where: { companyId: user.companyId },
       include: {
@@ -38,7 +76,7 @@ export const GET = withAdminAuth(async (request) => {
       orderBy: { sortOrder: 'asc' }
     })
 
-    // 统计每个部门的Agent数量
+    // 统计每个部门的Agent数量（仅非 lite 模式）
     const departmentsWithStats = departments.map(dept => ({
       ...dept,
       agentCount: dept.agents.length,
@@ -89,7 +127,7 @@ export const POST = withAdminAuth(async (request) => {
 
     const { name, parentId, description, icon, sortOrder } = validationResult.data
 
-    // 校验父部门（若提供）
+    // 校验上级部门（若提供）
     if (parentId) {
       const parentDepartment = await prisma.department.findFirst({
         where: { id: parentId, companyId: user.companyId },
@@ -100,7 +138,7 @@ export const POST = withAdminAuth(async (request) => {
           {
             error: {
               code: 'PARENT_DEPARTMENT_NOT_FOUND',
-              message: '父部门不存在'
+              message: '上级部门不存在'
             }
           },
           { status: 400 }

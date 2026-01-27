@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -51,13 +51,19 @@ import {
 } from "lucide-react"
 import NewAdminLayout from "@/components/admin/new-admin-layout"
 
-interface Department {
+interface DepartmentLite {
   id: string
   name: string
   parentId?: string | null
   description?: string
   icon: string
   sortOrder: number
+  createdAt: string
+  updatedAt: string
+  hasChildren?: boolean
+}
+
+interface DepartmentDetail extends DepartmentLite {
   agentCount: number
   onlineAgentCount: number
   agents: Array<{
@@ -66,8 +72,6 @@ interface Department {
     position: string
     isOnline: boolean
   }>
-  createdAt: string
-  updatedAt: string
 }
 
 interface DepartmentFormData {
@@ -78,7 +82,7 @@ interface DepartmentFormData {
   sortOrder: number
 }
 
-interface DepartmentTreeNode extends Department {
+interface DepartmentTreeNode extends DepartmentLite {
   children: DepartmentTreeNode[]
 }
 
@@ -100,14 +104,22 @@ const iconOptions = [
 ]
 
 export default function DepartmentsPage() {
-  const [departments, setDepartments] = useState<Department[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const ROOT_KEY = "__ROOT__"
+  const [treeNodes, setTreeNodes] = useState<Record<string, DepartmentLite>>({})
+  const [childrenByParent, setChildrenByParent] = useState<Record<string, string[]>>({})
+  const [loadingChildren, setLoadingChildren] = useState<Record<string, boolean>>({})
+  const [isTreeLoading, setIsTreeLoading] = useState(true)
+
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null)
+  const [selectedDepartment, setSelectedDepartment] = useState<DepartmentDetail | null>(null)
+  const [isLoadingSelected, setIsLoadingSelected] = useState(false)
   const [expandedDepartmentIds, setExpandedDepartmentIds] = useState<Set<string>>(new Set())
   const [isRightPanelEditing, setIsRightPanelEditing] = useState(false)
+  const [allDepartments, setAllDepartments] = useState<DepartmentLite[]>([])
+  const [isLoadingAllDepartments, setIsLoadingAllDepartments] = useState(false)
   
   // 弹窗状态
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -121,13 +133,21 @@ export default function DepartmentsPage() {
     sortOrder: 0
   })
 
-  // 获取部门列表
-  const fetchDepartments = async () => {
+  const fetchChildren = async (parentId: string | null) => {
+    const key = parentId ?? ROOT_KEY
+    setLoadingChildren(prev => ({ ...prev, [key]: true }))
     try {
-      const response = await fetch('/api/admin/departments')
+      const url = parentId ? `/api/admin/departments/tree?parentId=${encodeURIComponent(parentId)}` : `/api/admin/departments/tree`
+      const response = await fetch(url)
       if (response.ok) {
-        const data = await response.json()
-        setDepartments(data.data)
+        const payload = await response.json().catch(() => ({}))
+        const list: DepartmentLite[] = Array.isArray(payload?.data) ? payload.data : []
+        setTreeNodes(prev => {
+          const next = { ...prev }
+          for (const d of list) next[d.id] = d
+          return next
+        })
+        setChildrenByParent(prev => ({ ...prev, [key]: list.map(d => d.id) }))
       } else {
         setMessage({ type: 'error', text: '获取部门列表失败' })
       }
@@ -135,12 +155,57 @@ export default function DepartmentsPage() {
       console.error('获取部门列表失败:', error)
       setMessage({ type: 'error', text: '获取部门列表失败' })
     } finally {
-      setIsLoading(false)
+      setLoadingChildren(prev => ({ ...prev, [key]: false }))
+      if (key === ROOT_KEY) setIsTreeLoading(false)
+    }
+  }
+
+  const resetTree = () => {
+    setTreeNodes({})
+    setChildrenByParent({})
+    setLoadingChildren({})
+    setExpandedDepartmentIds(new Set())
+    setIsTreeLoading(true)
+    fetchChildren(null)
+  }
+
+  const ensureAllDepartmentsLoaded = async () => {
+    if (isLoadingAllDepartments) return
+    if (allDepartments.length > 0) return
+    setIsLoadingAllDepartments(true)
+    try {
+      const response = await fetch('/api/admin/departments?lite=true')
+      if (!response.ok) return
+      const payload = await response.json().catch(() => ({}))
+      const list: DepartmentLite[] = Array.isArray(payload?.data) ? payload.data : []
+      setAllDepartments(list)
+    } catch (error) {
+      console.error('获取上级部门列表失败:', error)
+    } finally {
+      setIsLoadingAllDepartments(false)
+    }
+  }
+
+  const fetchSelectedDepartment = async (departmentId: string) => {
+    setIsLoadingSelected(true)
+    try {
+      const response = await fetch(`/api/admin/departments/${departmentId}`)
+      if (!response.ok) {
+        setSelectedDepartment(null)
+        return
+      }
+      const data = await response.json().catch(() => ({}))
+      setSelectedDepartment(data.data ?? null)
+    } catch (error) {
+      console.error('获取部门详情失败:', error)
+      setSelectedDepartment(null)
+    } finally {
+      setIsLoadingSelected(false)
     }
   }
 
   useEffect(() => {
-    fetchDepartments()
+    fetchChildren(null)
   }, [])
 
   // 重置表单
@@ -150,12 +215,13 @@ export default function DepartmentsPage() {
       parentId: defaultParentId,
       description: "",
       icon: "Building",
-      sortOrder: departments.length + 1
+      sortOrder: (allDepartments.length || 0) + 1
     })
   }
 
   // 打开创建弹窗
   const openCreateDialog = (defaultParentId: string | null = null) => {
+    ensureAllDepartmentsLoaded()
     resetForm(defaultParentId)
     setIsCreateDialogOpen(true)
   }
@@ -187,8 +253,10 @@ export default function DepartmentsPage() {
 
       if (response.ok) {
         const data = await response.json()
-        await fetchDepartments()
+        resetTree()
+        setAllDepartments([])
         setSelectedDepartmentId(data.data.id)
+        await fetchSelectedDepartment(data.data.id)
         setIsRightPanelEditing(false)
         setIsCreateDialogOpen(false)
         resetForm(null)
@@ -234,7 +302,11 @@ export default function DepartmentsPage() {
       })
 
       if (response.ok) {
-        await fetchDepartments()
+        resetTree()
+        setAllDepartments([])
+        if (selectedDepartmentId) {
+          await fetchSelectedDepartment(selectedDepartmentId)
+        }
         setIsRightPanelEditing(false)
         setMessage({ type: 'success', text: '部门更新成功' })
       } else {
@@ -253,15 +325,7 @@ export default function DepartmentsPage() {
   }
 
   // 删除部门
-  const handleDelete = async (department: Department) => {
-    if (department.agentCount > 0) {
-      setMessage({ 
-        type: 'error', 
-        text: `部门下还有 ${department.agentCount} 个Agent，请先移除或转移这些Agent` 
-      })
-      return
-    }
-
+  const handleDelete = async (department: DepartmentLite) => {
     if (!confirm(`确定要删除部门"${department.name}"吗？此操作不可恢复。`)) {
       return
     }
@@ -275,9 +339,11 @@ export default function DepartmentsPage() {
       })
 
       if (response.ok) {
-        await fetchDepartments()
+        resetTree()
+        setAllDepartments([])
         if (selectedDepartmentId === department.id) {
           setSelectedDepartmentId(null)
+          setSelectedDepartment(null)
           setIsRightPanelEditing(false)
           resetForm(null)
         }
@@ -303,49 +369,30 @@ export default function DepartmentsPage() {
     return iconOption ? iconOption.icon : Building
   }
 
-  const toggleExpand = (deptId: string) => {
-    setExpandedDepartmentIds(prev => {
-      const next = new Set(prev)
-      if (next.has(deptId)) next.delete(deptId)
-      else next.add(deptId)
-      return next
-    })
+  const toggleExpand = async (deptId: string) => {
+    const node = treeNodes[deptId]
+    if (!node?.hasChildren) return
+
+    const isExpanded = expandedDepartmentIds.has(deptId)
+    if (isExpanded) {
+      setExpandedDepartmentIds(prev => {
+        const next = new Set(prev)
+        next.delete(deptId)
+        return next
+      })
+      return
+    }
+
+    // 展开：若还未加载过子节点，则先拉一层
+    if (!childrenByParent[deptId]) {
+      await fetchChildren(deptId)
+    }
+    setExpandedDepartmentIds(prev => new Set(prev).add(deptId))
   }
 
-  const buildTree = (list: Department[]): DepartmentTreeNode[] => {
-    const nodes = new Map<string, DepartmentTreeNode>()
-    const roots: DepartmentTreeNode[] = []
-
-    for (const dept of list) {
-      nodes.set(dept.id, { ...dept, children: [] })
-    }
-
-    for (const node of nodes.values()) {
-      const pid = node.parentId ?? null
-      if (pid && nodes.has(pid)) {
-        nodes.get(pid)!.children.push(node)
-      } else {
-        roots.push(node)
-      }
-    }
-
-    const sortRecursively = (arr: DepartmentTreeNode[]) => {
-      arr.sort((a, b) => (a.sortOrder - b.sortOrder) || a.name.localeCompare(b.name))
-      for (const n of arr) sortRecursively(n.children)
-    }
-    sortRecursively(roots)
-
-    return roots
-  }
-
-  const treeRoots = buildTree(departments)
-  const selectedDepartment = selectedDepartmentId
-    ? departments.find(d => d.id === selectedDepartmentId) ?? null
-    : null
-
-  const collectDescendantIds = (rootId: string): Set<string> => {
+  const collectDescendantIdsFromAll = (rootId: string): Set<string> => {
     const childrenByParent = new Map<string, string[]>()
-    for (const d of departments) {
+    for (const d of allDepartments) {
       const pid = d.parentId ?? null
       if (!pid) continue
       const arr = childrenByParent.get(pid) ?? []
@@ -367,6 +414,7 @@ export default function DepartmentsPage() {
 
   const startEditRightPanel = () => {
     if (!selectedDepartment) return
+    ensureAllDepartmentsLoaded()
     setFormData({
       name: selectedDepartment.name,
       parentId: selectedDepartment.parentId ?? null,
@@ -393,14 +441,25 @@ export default function DepartmentsPage() {
   }
 
   const invalidParentIds = selectedDepartmentId
-    ? new Set<string>([selectedDepartmentId, ...Array.from(collectDescendantIds(selectedDepartmentId))])
+    ? new Set<string>([selectedDepartmentId, ...Array.from(collectDescendantIdsFromAll(selectedDepartmentId))])
     : new Set<string>()
 
-  const DepartmentTreeItem = ({ node, depth }: { node: DepartmentTreeNode, depth: number }) => {
+  const getDeptNameById = (id: string) => {
+    return treeNodes[id]?.name ?? allDepartments.find(d => d.id === id)?.name
+  }
+
+  const rootIds = childrenByParent[ROOT_KEY] ?? []
+  const loadedCount = useMemo(() => Object.keys(treeNodes).length, [treeNodes])
+
+  const DepartmentTreeItem = ({ id, depth }: { id: string, depth: number }) => {
+    const node = treeNodes[id]
+    if (!node) return null
     const IconComponent = getIconComponent(node.icon)
     const isSelected = node.id === selectedDepartmentId
-    const hasChildren = node.children.length > 0
+    const hasChildren = !!node.hasChildren
     const isExpanded = expandedDepartmentIds.has(node.id)
+    const childIds = childrenByParent[node.id] ?? []
+    const isLoadingKids = !!loadingChildren[node.id]
 
     return (
       <div className="space-y-1">
@@ -408,6 +467,7 @@ export default function DepartmentsPage() {
           onClick={() => {
             setSelectedDepartmentId(node.id)
             setIsRightPanelEditing(false)
+            fetchSelectedDepartment(node.id)
           }}
           className={`group w-full flex items-center gap-2 px-2 py-2 rounded-lg transition-colors text-left border ${
             isSelected ? "bg-accent text-accent-foreground border-border" : "hover:bg-accent border-transparent"
@@ -424,7 +484,11 @@ export default function DepartmentsPage() {
             }}
           >
             {hasChildren ? (
-              isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />
+              isLoadingKids ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />
+              )
             ) : (
               <span className="w-4 h-4" />
             )}
@@ -436,9 +500,6 @@ export default function DepartmentsPage() {
 
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium truncate">{node.name}</div>
-            <div className="text-xs text-muted-foreground truncate">
-              {node.agentCount} 个Agent / 在线 {node.onlineAgentCount}
-            </div>
           </div>
 
           <Badge
@@ -453,9 +514,16 @@ export default function DepartmentsPage() {
         {hasChildren && (
           <Collapsible open={isExpanded} onOpenChange={() => toggleExpand(node.id)}>
             <CollapsibleContent className="space-y-1">
-              {node.children.map(child => (
-                <DepartmentTreeItem key={child.id} node={child} depth={depth + 1} />
-              ))}
+              {isLoadingKids && childIds.length === 0 ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2 pl-6">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  加载子部门…
+                </div>
+              ) : (
+                childIds.map(cid => (
+                  <DepartmentTreeItem key={cid} id={cid} depth={depth + 1} />
+                ))
+              )}
             </CollapsibleContent>
           </Collapsible>
         )}
@@ -463,7 +531,7 @@ export default function DepartmentsPage() {
     )
   }
 
-  if (isLoading) {
+  if (isTreeLoading) {
     return (
       <NewAdminLayout>
         <div className="flex items-center justify-center h-64">
@@ -489,10 +557,10 @@ export default function DepartmentsPage() {
               <Plus className="w-4 h-4 mr-2" />
               添加部门
             </Button>
-            {selectedDepartment && (
+            {selectedDepartmentId && (
               <Button
                 variant="outline"
-                onClick={() => openCreateDialog(selectedDepartment.id)}
+                onClick={() => openCreateDialog(selectedDepartmentId)}
                 className="hover:bg-accent"
               >
                 <Plus className="w-4 h-4 mr-2" />
@@ -529,11 +597,11 @@ export default function DepartmentsPage() {
                 部门
               </CardTitle>
               <CardDescription>
-                当前共有 {departments.length} 个部门
+                已加载 {loadedCount} 个部门（展开节点将按需加载子部门）
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {departments.length === 0 ? (
+              {rootIds.length === 0 ? (
                 <div className="text-center py-8">
                   <Building className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-60" />
                   <p className="text-muted-foreground">暂无部门，点击上方按钮添加第一个部门</p>
@@ -541,8 +609,8 @@ export default function DepartmentsPage() {
               ) : (
                 <ScrollArea className="h-[520px] pr-2">
                   <div className="space-y-1">
-                    {treeRoots.map(root => (
-                      <DepartmentTreeItem key={root.id} node={root} depth={0} />
+                    {rootIds.map(rid => (
+                      <DepartmentTreeItem key={rid} id={rid} depth={0} />
                     ))}
                   </div>
                 </ScrollArea>
@@ -574,10 +642,19 @@ export default function DepartmentsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {!selectedDepartment ? (
+              {!selectedDepartmentId ? (
                 <div className="text-center py-12">
                   <Building className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-60" />
                   <p className="text-muted-foreground">请选择一个部门</p>
+                </div>
+              ) : isLoadingSelected ? (
+                <div className="flex items-center justify-center py-12 text-muted-foreground">
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  加载部门详情…
+                </div>
+              ) : !selectedDepartment ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <p>部门详情加载失败，请重试</p>
                 </div>
               ) : (
                 <div className="space-y-6">
@@ -625,10 +702,10 @@ export default function DepartmentsPage() {
                         <div>{new Date(selectedDepartment.updatedAt).toLocaleString()}</div>
                       </div>
                       <div className="bg-accent/30 border border-border rounded-lg p-4">
-                        <div className="text-xs text-muted-foreground mb-1">父部门</div>
+                        <div className="text-xs text-muted-foreground mb-1">上级部门</div>
                         <div>
                           {selectedDepartment.parentId
-                            ? (departments.find(d => d.id === selectedDepartment.parentId)?.name ?? "（未知）")
+                            ? (getDeptNameById(selectedDepartment.parentId) ?? "（未知）")
                             : "顶级部门"}
                         </div>
                       </div>
@@ -661,25 +738,31 @@ export default function DepartmentsPage() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>父部门</Label>
+                          <Label>上级部门</Label>
                           <Select
                             value={formData.parentId ?? "__ROOT__"}
                             onValueChange={(value) => setFormData(prev => ({ ...prev, parentId: value === "__ROOT__" ? null : value }))}
                           >
                             <SelectTrigger className="">
-                              <SelectValue placeholder="选择父部门（可选）" />
+                              <SelectValue placeholder="选择上级部门（可选）" />
                             </SelectTrigger>
                             <SelectContent className="">
                               <SelectItem value="__ROOT__" className="">
                                 顶级部门（无）
                               </SelectItem>
-                              {departments
+                            {isLoadingAllDepartments ? (
+                              <SelectItem value="__LOADING__" disabled>
+                                加载中…
+                              </SelectItem>
+                            ) : (
+                              allDepartments
                                 .filter(d => !invalidParentIds.has(d.id))
                                 .map((d) => (
                                   <SelectItem key={d.id} value={d.id} className="">
                                     {d.name}
                                   </SelectItem>
-                                ))}
+                                ))
+                            )}
                             </SelectContent>
                           </Select>
                         </div>
@@ -783,23 +866,29 @@ export default function DepartmentsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>父部门</Label>
+                <Label>上级部门</Label>
                 <Select
                   value={formData.parentId ?? "__ROOT__"}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, parentId: value === "__ROOT__" ? null : value }))}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="选择父部门（可选）" />
+                    <SelectValue placeholder="选择上级部门（可选）" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__ROOT__">
                       顶级部门（无）
                     </SelectItem>
-                    {departments.map((d) => (
-                      <SelectItem key={d.id} value={d.id}>
-                        {d.name}
+                    {isLoadingAllDepartments ? (
+                      <SelectItem value="__LOADING__" disabled>
+                        加载中…
                       </SelectItem>
-                    ))}
+                    ) : (
+                      allDepartments.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
