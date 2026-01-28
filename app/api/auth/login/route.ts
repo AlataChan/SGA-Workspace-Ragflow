@@ -142,6 +142,7 @@ export async function POST(request: NextRequest) {
           displayName: user.displayName,
           avatarUrl: user.avatarUrl,
           role: user.role,
+          departmentId: user.departmentId,
           company: user.company,
         },
         token,
@@ -241,6 +242,7 @@ export async function GET(request: NextRequest) {
         displayName: user.displayName,
         avatarUrl: user.avatarUrl,
         role: user.role,
+        departmentId: user.departmentId,
         company: user.company,
       }
     })

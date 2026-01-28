@@ -121,8 +121,6 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [isAutoRotating, setIsAutoRotating] = useState(true)
   const [userInteracting, setUserInteracting] = useState(false)
-  const [collapsedDepts, setCollapsedDepts] = useState<Set<number>>(new Set())
-  const [departments, setDepartments] = useState<any[]>([])
   const [isAdmin, setIsAdmin] = useState(user.role === 'ADMIN')
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false)
@@ -397,74 +395,10 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
     }
   }
 
-  // 从API获取部门数据和最新的Agent数据
-  useEffect(() => {
-    async function fetchDepartments() {
-      try {
-        console.log('[MainWorkspace] 获取最新Agent数据...')
-        const response = await fetch('/api/user/agents', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth-token')}`,
-            'Content-Type': 'application/json',
-          },
-          // 添加缓存控制，确保获取最新数据
-          cache: 'no-cache'
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          console.log('[MainWorkspace] 获取到的最新数据:', data.data)
-          setDepartments(data.data.departments || [])
-
-          // 如果传入的agents数据过时，这里可以触发父组件更新
-          // 但由于这是props，我们只能在控制台提醒
-          if (data.data.agents && data.data.agents.length > 0) {
-            console.log('[MainWorkspace] 检测到最新Agent数据，建议刷新页面获取最新配置')
-          }
-        } else {
-          let detail: any = null
-          try {
-            detail = await response.json()
-          } catch {
-            detail = await response.text()
-          }
-          console.error('[MainWorkspace] 获取 /api/user/agents 失败', {
-            status: response.status,
-            statusText: response.statusText,
-            detail
-          })
-        }
-      } catch (error) {
-        console.error('获取部门数据失败:', error)
-      }
-    }
-
-    fetchDepartments()
-  }, [])
-
   // 加载知识图谱列表
   useEffect(() => {
     loadKnowledgeGraphs()
   }, [])
-
-  // 动态生成组织架构
-  const orgStructure = departments.map((dept) => {
-    const deptAgents = realAgents.filter(
-      (agent) => agent.department.id === dept.id && !pinnedAgentIds.has(agent.id)
-    )
-
-    return {
-      title: dept.name,
-      icon: getIconComponent(dept.icon),
-      members: deptAgents.map((agent) => ({
-        id: agent.id,
-        name: agent.chineseName,
-        role: agent.position,
-        icon: <User className="w-4 h-4" />,
-        pinned: false
-      }))
-    }
-  })
 
   const effectiveAgentSearchQuery = agentSearchOpen ? agentSearchQuery : ''
   const effectiveKgSearchQuery = kgSearchOpen ? kgSearchQuery : ''
@@ -479,6 +413,11 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
       items.push(agent)
     }
     return items
+  }, [pinnedAgentIds, realAgents, recentAgentIds])
+
+  const otherAgents = useMemo(() => {
+    const recentSet = new Set(recentAgentIds)
+    return realAgents.filter((agent) => !pinnedAgentIds.has(agent.id) && !recentSet.has(agent.id))
   }, [pinnedAgentIds, realAgents, recentAgentIds])
 
   const agentSearchResults = useMemo(() => {
@@ -573,28 +512,6 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
     el?.scrollIntoView?.({ block: 'nearest' })
   }, [kgSearchHighlightedIndex, sortedKnowledgeGraphs])
 
-  // 图标映射函数
-  function getIconComponent(iconName: string) {
-    switch (iconName) {
-      case 'Crown':
-        return <Crown className="w-4 h-4" />
-      case 'Bot':
-        return <Bot className="w-4 h-4" />
-      case 'Shield':
-        return <Shield className="w-4 h-4" />
-      case 'Megaphone':
-        return <Megaphone className="w-4 h-4" />
-      case 'TrendingUp':
-        return <TrendingUp className="w-4 h-4" />
-      case 'Cog':
-        return <Cog className="w-4 h-4" />
-      case 'GraduationCap':
-        return <GraduationCap className="w-4 h-4" />
-      default:
-        return <Building className="w-4 h-4" />
-    }
-  }
-
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' })
@@ -634,17 +551,6 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
       setSelectedIndex(agentIndex)
       handleUserInteraction()
     }
-  }
-
-  // 切换部门折叠状态
-  const toggleDepartment = (index: number) => {
-    const newCollapsed = new Set(collapsedDepts)
-    if (newCollapsed.has(index)) {
-      newCollapsed.delete(index)
-    } else {
-      newCollapsed.add(index)
-    }
-    setCollapsedDepts(newCollapsed)
   }
 
   const nextAgent = () => {
@@ -936,10 +842,10 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
       {/* 主布局容器 - 响应式设计 */}
       <div className="relative z-10 flex h-screen md:h-screen">
         {/* 左侧导航栏 - 响应式宽度 */}
-        <nav className="w-[280px] lg:w-[320px] xl:w-[360px] bg-card border-r border-border flex-shrink-0 flex flex-col hidden md:flex">
+        <nav className="w-[280px] lg:w-[320px] xl:w-[360px] bg-card border-r border-border flex-shrink-0 flex flex-col hidden md:flex overflow-hidden">
           {/* 公司信息区域 */}
           <div className="p-6 border-b border-border">
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-3 min-w-0">
               {company?.logoUrl && (
                 <img
                   src={company.logoUrl}
@@ -947,11 +853,11 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                   className="w-10 h-10 rounded-lg object-cover"
                 />
               )}
-              <div>
-                <h2 className="text-xl font-semibold text-foreground mb-1">
+              <div className="min-w-0">
+                <h2 className="text-xl font-semibold text-foreground mb-1 truncate" title={company?.name || 'SGA Team'}>
                   {company?.name || 'SGA Team'}
                 </h2>
-                <p className="text-sm text-muted-foreground">智能体组织架构</p>
+                <p className="text-sm text-muted-foreground truncate">已授权智能体与知识图谱</p>
               </div>
             </div>
           </div>
@@ -964,7 +870,7 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
               }`}
             >
               {/* 智能体列表 */}
-              <div className="min-h-0 rounded-lg border border-border bg-card/50 flex flex-col">
+              <div className="min-h-0 rounded-lg border border-border bg-card/50 flex flex-col overflow-hidden">
                 <div className="px-3 py-2 border-b border-border flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <Users className="w-4 h-4 text-primary" />
@@ -1214,58 +1120,55 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
                         </>
                       )}
 
-                      {orgStructure.map((dept, index) => (
-                        <div key={`${dept.title}-${index}`} className="space-y-1">
-                          <button
-                            onClick={() => toggleDepartment(index)}
-                            className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted transition-colors text-primary text-sm font-medium"
-                          >
+                      {otherAgents.length > 0 && (
+                        <div className="space-y-1">
+                          <div className="px-3 py-2 rounded-lg bg-muted/30 flex items-center justify-between">
                             <div className="flex items-center space-x-2">
-                              <span className="text-primary">{dept.icon}</span>
-                              <span>{dept.title}</span>
+                              <Users className="w-3.5 h-3.5 text-primary" />
+                              <span className="text-xs font-medium text-foreground">全部</span>
+                              <Badge variant="secondary" className="text-[10px]">
+                                {otherAgents.length}
+                              </Badge>
                             </div>
-                            <ChevronDown
-                              className={`w-4 h-4 transition-transform ${
-                                collapsedDepts.has(index) ? '' : 'rotate-180'
-                              }`}
-                            />
-                          </button>
-                          {!collapsedDepts.has(index) && dept.members.length > 0 && (
-                            <div className="space-y-1 ml-2 animate-in slide-in-from-top-2 duration-200">
-                              {dept.members.map((member) => (
-                                <div
-                                  key={member.id}
-                                  className="flex items-center rounded-lg hover:bg-muted transition-all duration-200 group"
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={() => jumpToAgent(member.id)}
-                                    className="flex flex-1 items-center px-3 py-2 text-left"
-                                  >
-                                    <span className="text-primary mr-3 w-4 h-4 flex items-center justify-center opacity-70 group-hover:opacity-100 transition-opacity">
-                                      {member.icon}
-                                    </span>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="text-sm font-medium text-foreground truncate">{member.name}</div>
-                                      <div className="text-xs text-muted-foreground truncate">{member.role}</div>
-                                    </div>
-                                  </button>
+                          </div>
 
-                                  <button
-                                    type="button"
-                                    onClick={() => togglePinnedAgent(member.id)}
-                                    title="置顶"
-                                    aria-label="置顶智能体"
-                                    className="p-2 rounded-md hover:bg-muted/70 transition-colors"
-                                  >
-                                    <Pin className="w-4 h-4 text-muted-foreground/60" />
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                          <div className="space-y-1 ml-2">
+                            {otherAgents.map((agent) => (
+                              <div
+                                key={agent.id}
+                                className="flex items-center rounded-lg hover:bg-muted transition-all duration-200 group"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => jumpToAgent(agent.id)}
+                                  className="flex flex-1 items-center px-3 py-2 text-left"
+                                >
+                                  <span className="text-primary mr-3 w-4 h-4 flex items-center justify-center opacity-70 group-hover:opacity-100 transition-opacity">
+                                    <User className="w-4 h-4" />
+                                  </span>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium text-foreground truncate">{agent.chineseName}</div>
+                                    <div className="text-xs text-muted-foreground truncate">
+                                      {agent.department?.name ? `${agent.department.name} · ` : ""}
+                                      {agent.position}
+                                    </div>
+                                  </div>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => togglePinnedAgent(agent.id)}
+                                  title="置顶"
+                                  aria-label="置顶智能体"
+                                  className="p-2 rounded-md hover:bg-muted/70 transition-colors"
+                                >
+                                  <Pin className="w-4 h-4 text-muted-foreground/60" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      ))}
+                      )}
                     </>
                   )}
                 </div>
