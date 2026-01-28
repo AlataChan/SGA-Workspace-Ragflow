@@ -230,32 +230,45 @@ export const POST = withAdminAuth(async (request, context) => {
     }
 
     // 创建权限
-    const newPermission = await prisma.userAgentPermission.create({
-      data: {
-        userId: targetUserId,
-        agentId: agentId,
-        grantedBy: user.userId,
-      },
-      include: {
-        agent: {
-          select: {
-            id: true,
-            chineseName: true,
-            englishName: true,
-            position: true,
-            platform: true,
-            isOnline: true,
-            department: {
-              select: {
-                id: true,
-                name: true,
-                icon: true,
+    const [newPermission] = await prisma.$transaction([
+      prisma.userAgentPermission.create({
+        data: {
+          userId: targetUserId,
+          agentId: agentId,
+          grantedBy: user.userId,
+        },
+        include: {
+          agent: {
+            select: {
+              id: true,
+              chineseName: true,
+              englishName: true,
+              position: true,
+              platform: true,
+              isOnline: true,
+              department: {
+                select: {
+                  id: true,
+                  name: true,
+                  icon: true,
+                }
               }
             }
           }
         }
-      }
-    })
+      }),
+      // 如果该用户-该Agent存在撤销黑名单，则本次“单独授权”视为显式恢复：解除黑名单
+      prisma.userAgentPermissionRevocation.updateMany({
+        where: {
+          userId: targetUserId,
+          agentId: agentId,
+          isActive: true,
+        },
+        data: {
+          isActive: false,
+        }
+      })
+    ])
 
     return NextResponse.json({
       data: newPermission,
@@ -338,12 +351,35 @@ export const DELETE = withAdminAuth(async (request, context) => {
       )
     }
 
-    // 删除权限
-    await prisma.userAgentPermission.delete({
-      where: {
-        id: existingPermission.id,
-      }
-    })
+    // 删除权限 + 记录撤销黑名单（避免后续批量授权恢复）
+    await prisma.$transaction([
+      prisma.userAgentPermission.delete({
+        where: {
+          id: existingPermission.id,
+        }
+      }),
+      prisma.userAgentPermissionRevocation.upsert({
+        where: {
+          unique_user_agent_revocation: {
+            userId: targetUserId,
+            agentId: agentId,
+          },
+        },
+        create: {
+          userId: targetUserId,
+          agentId: agentId,
+          revokedBy: user.userId,
+          isActive: true,
+        },
+        update: {
+          revokedBy: user.userId,
+          revokedAt: new Date(),
+          isActive: true,
+          expiresAt: null,
+          reason: null,
+        },
+      })
+    ])
 
     return NextResponse.json({
       message: 'Agent权限移除成功'

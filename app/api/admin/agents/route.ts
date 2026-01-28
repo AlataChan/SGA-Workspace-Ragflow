@@ -112,17 +112,11 @@ export const GET = withAdminAuth(async (request) => {
             icon: true,
           }
         },
-        userPermissions: {
+        _count: {
           select: {
-            userId: true,
-            user: {
-              select: {
-                displayName: true,
-                userId: true,
-              }
-            }
+            userPermissions: true,
           }
-        }
+        },
       },
       orderBy: [
         { department: { sortOrder: 'asc' } },
@@ -131,15 +125,20 @@ export const GET = withAdminAuth(async (request) => {
       ]
     })
 
+    const agentsWithPermissionCounts = agents.map(({ _count, ...agent }) => ({
+      ...agent,
+      userPermissionsCount: _count.userPermissions,
+    }))
+
     // 统计信息
     const stats = {
-      total: agents.length,
-      online: agents.filter(agent => agent.isOnline).length,
-      byPlatform: agents.reduce((acc, agent) => {
+      total: agentsWithPermissionCounts.length,
+      online: agentsWithPermissionCounts.filter(agent => agent.isOnline).length,
+      byPlatform: agentsWithPermissionCounts.reduce((acc, agent) => {
         acc[agent.platform] = (acc[agent.platform] || 0) + 1
         return acc
       }, {} as Record<string, number>),
-      byDepartment: agents.reduce((acc, agent) => {
+      byDepartment: agentsWithPermissionCounts.reduce((acc, agent) => {
         const deptName = agent.department.name
         acc[deptName] = (acc[deptName] || 0) + 1
         return acc
@@ -147,7 +146,7 @@ export const GET = withAdminAuth(async (request) => {
     }
 
     return NextResponse.json({
-      data: agents,
+      data: agentsWithPermissionCounts,
       stats,
       message: '获取Agent列表成功'
     }, { headers: corsHeaders })

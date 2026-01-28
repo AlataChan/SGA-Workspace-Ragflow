@@ -54,19 +54,23 @@ async function main() {
     ]
 
     for (const dept of departments) {
-      await prisma.department.upsert({
+      const existing = await prisma.department.findFirst({
         where: {
-          companyId_name: {
-            companyId: company.id,
-            name: dept.name
-          }
-        },
-        update: {},
-        create: {
-          ...dept,
           companyId: company.id,
+          name: dept.name,
+          parentId: null,
         },
+        select: { id: true },
       })
+
+      if (!existing) {
+        await prisma.department.create({
+          data: {
+            ...dept,
+            companyId: company.id,
+          },
+        })
+      }
     }
     console.log('✅ 部门创建完成:', departments.length, '个部门')
 

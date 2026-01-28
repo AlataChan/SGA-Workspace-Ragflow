@@ -117,6 +117,23 @@ docker compose logs app
 | PostgreSQL | 5432 | 5433 | 数据库 |
 | Redis | 6379 | 6380 | 缓存 |
 
+## 🏢 导入客户组织数据（departments.sql）
+
+前端若需要基于“客户组织架构/部门树”进行渲染，可先把 `docs/departments.sql` 导入到本机 Docker PostgreSQL：
+
+```bash
+# 确保 postgres 已启动（外部端口 5433）
+docker compose up -d postgres
+
+# 导入（默认会创建一个导入用管理员账号）
+npm run db:import:departments
+
+# 可选：覆盖重导入 / 不创建管理员 / 指定文件
+npm run db:import:departments -- --replace
+npm run db:import:departments -- --no-admin
+npm run db:import:departments -- --file docs/departments.sql
+```
+
 ## 🔐 安全配置
 
 ### 生产环境必做

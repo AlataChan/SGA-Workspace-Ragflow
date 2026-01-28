@@ -74,6 +74,9 @@ pids
 *.sqlite3
 *.db
 
+# Local database dumps (customer/org data)
+docs/departments.sql
+
 # Temporary files
 tmp/
 temp/

@@ -29,13 +29,15 @@ model Department {
   icon        String?
   sortOrder   Int      @default(0) @map("sort_order")
   isActive    Boolean  @default(true) @map("is_active")
+  parentId    String?  @map("parent_id")
+  parentSids  String?  @map("parent_sids")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
   agents      Agent[]
   company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   users       User[]
 
-  @@unique([companyId, name], name: "companyId_name")
+  @@index([companyId, parentId], name: "idx_department_company_parent")
   @@map("departments")
 }
 
@@ -70,6 +72,7 @@ model User {
   sessions                      ChatSession[]
   uploadedFiles                 UploadedFile[]
   agentPermissions              UserAgentPermission[]
+  agentPermissionRevocations    UserAgentPermissionRevocation[]
   knowledgeGraphPermissions     UserKnowledgeGraphPermission[]
   tempKnowledgeBase             UserTempKnowledgeBase?
   company                       Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -105,6 +108,7 @@ model Agent {
   department         Department            @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   sessions           ChatSession[]
   userPermissions    UserAgentPermission[]
+  userPermissionRevocations UserAgentPermissionRevocation[]
 
   @@map("agents")
 }
@@ -120,6 +124,26 @@ model UserAgentPermission {
 
   @@unique([userId, agentId], name: "unique_user_agent")
   @@map("user_agent_permissions")
+}
+
+model UserAgentPermissionRevocation {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  agentId   String   @map("agent_id")
+
+  revokedBy String   @map("revoked_by")
+  revokedAt DateTime @default(now()) @map("revoked_at")
+  reason    String?
+
+  isActive  Boolean   @default(true) @map("is_active")
+  expiresAt DateTime? @map("expires_at")
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, agentId], name: "unique_user_agent_revocation")
+  @@index([agentId, isActive], name: "idx_user_agent_revocation_agent_active")
+  @@map("user_agent_permission_revocations")
 }
 
 model UserKnowledgeGraphPermission {

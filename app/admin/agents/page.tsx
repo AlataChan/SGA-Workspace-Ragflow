@@ -66,6 +66,7 @@ import {
   Settings
 } from "lucide-react"
 import NewAdminLayout from "@/components/admin/new-admin-layout"
+import AgentBulkGrantDialog from "@/components/admin/agent-bulk-grant-dialog"
 
 // 平台类型定义
 type AgentPlatform = 'DIFY' | 'RAGFLOW' | 'HIAGENT' | 'OPENAI' | 'CLAUDE' | 'CUSTOM'
@@ -91,13 +92,7 @@ interface Agent {
   lastError?: string
   sortOrder: number
   department: Department
-  userPermissions: Array<{
-    userId: string
-    user: {
-      displayName: string
-      userId: string
-    }
-  }>
+  userPermissionsCount: number
   createdAt: string
   updatedAt: string
 }
@@ -220,6 +215,8 @@ export default function AgentsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null)
+  const [isBulkGrantDialogOpen, setIsBulkGrantDialogOpen] = useState(false)
+  const [bulkGrantAgent, setBulkGrantAgent] = useState<Pick<Agent, 'id' | 'chineseName'> | null>(null)
   
   // 表单数据
   const [formData, setFormData] = useState<AgentFormData>({
@@ -340,6 +337,12 @@ export default function AgentsPage() {
     // 重置连接测试状态
     setConnectionTestResult({ success: false, message: '', tested: false })
     setIsEditDialogOpen(true)
+  }
+
+  // 打开批量授权弹窗
+  const openBulkGrantDialog = (agent: Agent) => {
+    setBulkGrantAgent({ id: agent.id, chineseName: agent.chineseName })
+    setIsBulkGrantDialogOpen(true)
   }
 
   // 处理平台变更
@@ -583,10 +586,10 @@ export default function AgentsPage() {
 
   // 删除Agent
   const handleDelete = async (agent: Agent) => {
-    if (agent.userPermissions.length > 0) {
+    if (agent.userPermissionsCount > 0) {
       setMessage({
         type: 'error',
-        text: `Agent还有 ${agent.userPermissions.length} 个用户权限，请先移除这些权限`
+        text: `Agent还有 ${agent.userPermissionsCount} 个用户权限，请先移除这些权限`
       })
       return
     }
@@ -906,7 +909,7 @@ export default function AgentsPage() {
                         <TableCell className="text-center py-6">
                           <div className="flex flex-col items-center space-y-1">
                             <div className="text-base text-foreground font-bold bg-muted/50 px-3 py-1.5 rounded-lg border border-border/50">
-                              {agent.userPermissions.length}
+                              {agent.userPermissionsCount}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               <span className="inline-block w-3 h-3 mr-1">👥</span>
@@ -917,6 +920,25 @@ export default function AgentsPage() {
                         <TableCell className="text-center py-6">
                           <div className="flex flex-col items-center space-y-3">
                             <div className="flex items-center space-x-3">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => openBulkGrantDialog(agent)}
+                                      className="border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-400 transition-all duration-200 shadow-md hover:shadow-emerald-500/20 px-3 py-2"
+                                    >
+                                      <Users className="w-4 h-4 mr-1" />
+                                      批量授权
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>批量授权给部门用户</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -1374,6 +1396,17 @@ export default function AgentsPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* 批量授权弹窗 */}
+        <AgentBulkGrantDialog
+          open={isBulkGrantDialogOpen}
+          onOpenChange={(open) => {
+            setIsBulkGrantDialogOpen(open)
+            if (!open) setBulkGrantAgent(null)
+          }}
+          agent={bulkGrantAgent}
+          onCompleted={() => fetchAgents()}
+        />
 
         {/* 编辑Agent弹窗 */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
