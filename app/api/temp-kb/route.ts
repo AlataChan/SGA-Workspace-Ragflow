@@ -13,12 +13,11 @@ import { verifyToken } from '@/lib/auth/jwt'
  * 从请求中获取用户ID
  */
 async function getUserId(request: NextRequest): Promise<string | null> {
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null
-  }
-  
-  const token = authHeader.substring(7)
+  const headerToken = request.headers.get('authorization')?.replace('Bearer ', '')
+  const cookieToken = request.cookies.get('auth-token')?.value
+  const token = headerToken || cookieToken
+  if (!token) return null
+
   const payload = await verifyToken(token)
   return payload?.userId || null
 }
@@ -104,4 +103,3 @@ export async function DELETE(request: NextRequest) {
     )
   }
 }
-
