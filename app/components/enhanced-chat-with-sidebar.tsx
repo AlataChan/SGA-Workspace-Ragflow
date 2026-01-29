@@ -173,6 +173,25 @@ const TypingIndicator = () => (
   </div>
 )
 
+function mergeStreamingText(prev: string, nextChunk: string) {
+  if (!nextChunk) return prev
+  if (!prev) return nextChunk
+  if (nextChunk.startsWith(prev)) return nextChunk
+  if (prev.startsWith(nextChunk)) return prev
+
+  const includedIndex = nextChunk.indexOf(prev)
+  if (includedIndex >= 0) return nextChunk
+
+  const maxOverlap = Math.min(prev.length, nextChunk.length)
+  for (let overlap = maxOverlap; overlap > 0; overlap--) {
+    if (prev.slice(-overlap) === nextChunk.slice(0, overlap)) {
+      return prev + nextChunk.slice(overlap)
+    }
+  }
+
+  return prev + nextChunk
+}
+
 // 提取下载链接的函数 - 支持DIFY格式的URL
 const extractFileLinks = (content: string) => {
   const fileExtensions = ['doc', 'docx', 'pdf', 'xlsx', 'xls', 'ppt', 'pptx', 'mp4', 'mp3', 'wav', 'avi', 'mov', 'zip', 'rar', '7z', 'txt', 'csv', 'json', 'xml', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']
@@ -2015,7 +2034,7 @@ export default function EnhancedChatWithSidebar({
       return null
     }).filter(Boolean) as DifyFile[]
 
-    await difyClientRef.current!.sendMessage(
+  await difyClientRef.current!.sendMessage(
       messageContent,
       (message: DifyStreamMessage) => {
         console.log('[EnhancedChat] 收到流式消息:', message)
@@ -2025,7 +2044,7 @@ export default function EnhancedChatWithSidebar({
             // 累积流式内容 - 确保内容是字符串
             const contentToAdd = message.content
             if (typeof contentToAdd === 'string' && contentToAdd.length > 0) {
-              fullContent += contentToAdd
+              fullContent = mergeStreamingText(fullContent, contentToAdd)
               console.log('[EnhancedChat] 累积内容:', {
                 newContent: contentToAdd,
                 fullContentLength: fullContent.length,
@@ -2993,7 +3012,7 @@ export default function EnhancedChatWithSidebar({
           </div>
 
           <ScrollArea className="flex-1 p-3 sm:p-4 md:p-6">
-            <div key={currentSessionId} className="space-y-6 w-full">
+            <div key={currentSessionId} className="space-y-6 w-full min-w-0 overflow-x-auto">
               {currentSession?.messages.map((message) => {
                 const isUser = message.role === 'user'
                 const rawContent = safeStringifyContent(message.content)
@@ -3002,10 +3021,11 @@ export default function EnhancedChatWithSidebar({
                   ? stripRagflowInlineReferenceMarkers(rawContent)
                   : rawContent
                 const hasInlineReferenceMarkers = shouldStripRagflowIds && hasRagflowInlineReferenceMarkers(rawContent)
+                const streamingAnswer = !isUser ? splitThinkTags(displayContent).answer : displayContent
 
                 return (
                   <div key={message.id} className={`flex w-full ${isUser ? 'justify-end pr-2 sm:pr-8' : 'justify-start pl-2 sm:pl-8'} mb-6`}>
-                    <div className={`flex ${isUser ? 'flex-row-reverse' : 'flex-row'} items-start space-x-3 sm:space-x-4 ${isUser ? 'space-x-reverse' : ''} max-w-[92%] sm:max-w-[85%] lg:max-w-[75%]`}>
+                    <div className={`flex min-w-0 ${isUser ? 'flex-row-reverse' : 'flex-row'} items-start space-x-3 sm:space-x-4 ${isUser ? 'space-x-reverse' : ''} max-w-[92%] sm:max-w-[85%] lg:max-w-[75%]`}>
                       <Avatar className="w-9 h-9 sm:w-[50px] sm:h-[50px] flex-shrink-0 mt-1">
                         <AvatarImage src={isUser ? actualUserAvatar : actualAgentAvatar} />
                           <AvatarFallback className={`text-white text-lg ${isUser
@@ -3017,12 +3037,12 @@ export default function EnhancedChatWithSidebar({
                       </Avatar>
 
                       <div className="flex-1 min-w-0">
-                        <div className={`rounded-xl px-4 py-3 text-base leading-relaxed ${isUser
+                        <div className={`min-w-0 max-w-full overflow-x-auto rounded-xl px-4 py-3 text-base leading-relaxed ${isUser
                           ? 'bg-primary text-primary-foreground shadow-lg user-message'
                           : 'bg-card text-foreground border border-border shadow-sm'
                           }`} style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                           {message.isStreaming ? (
-                            (message as any).isThinking || !message.content ? (
+                            (message as any).isThinking || !streamingAnswer ? (
                               <TypingIndicator />
                             ) : (
                               <>
@@ -3032,7 +3052,7 @@ export default function EnhancedChatWithSidebar({
                                   content: message.content,
                                   safeContent: rawContent
                                 })}
-                                <TypewriterEffect content={displayContent} speed={20} />
+                                <TypewriterEffect content={streamingAnswer} speed={20} />
                               </>
                             )
                           ) : (
