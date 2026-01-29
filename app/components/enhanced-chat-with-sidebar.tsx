@@ -325,12 +325,17 @@ const EnhancedMessageContent: React.FC<EnhancedMessageContentProps> = ({ content
     if (!src) return ''
 
     try {
-      const result = marked.parse(src)
+      const rewritten =
+        src
+          .replaceAll("https://cdn.jsdelivr.net/gh/foyer-work/cdn-files@latest/quill/config.json", "/quill/config.json")
+          .replaceAll("https://fastly.jsdelivr.net/gh/foyer-work/cdn-files@latest/quill/config.json", "/quill/config.json")
+
+      const result = marked.parse(rewritten)
 
       // 如果返回Promise,降级处理
       if (result instanceof Promise) {
         console.error('[EnhancedMessageContent] marked.parse 返回了Promise,降级处理')
-        return src.replace(/\n/g, '<br>')
+        return rewritten.replace(/\n/g, '<br>')
       }
 
       // 确保是字符串
@@ -339,7 +344,7 @@ const EnhancedMessageContent: React.FC<EnhancedMessageContentProps> = ({ content
       }
 
       console.warn('[EnhancedMessageContent] marked.parse 返回了非字符串:', typeof result)
-      return src.replace(/\n/g, '<br>')
+      return rewritten.replace(/\n/g, '<br>')
     } catch (error) {
       console.error('[EnhancedMessageContent] Markdown解析失败:', error)
       return src.replace(/\n/g, '<br>')
@@ -1398,13 +1403,16 @@ export default function EnhancedChatWithSidebar({
 
   // 初始化时获取历史对话
   useEffect(() => {
+    // 每次进入聊天界面（或切换 Agent）都强制刷新历史对话列表，避免 5 分钟缓存导致看起来“没刷新”
+    historyCacheRef.current.lastFetch = 0
+
     if (agentConfig?.platform === 'DIFY') {
-      if (agentConfig?.difyUrl && agentConfig?.difyKey) fetchHistoryConversations()
+      if (agentConfig?.difyUrl && agentConfig?.difyKey) fetchHistoryConversations(true, false)
       return
     }
 
     if (agentConfig?.platform === 'RAGFLOW') {
-      if (agentConfig?.localAgentId || agentConfig?.agentId) fetchHistoryConversations()
+      if (agentConfig?.localAgentId || agentConfig?.agentId) fetchHistoryConversations(true, false)
     }
   }, [
     agentConfig?.platform,

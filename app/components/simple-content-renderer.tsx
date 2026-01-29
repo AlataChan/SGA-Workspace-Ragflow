@@ -8,6 +8,16 @@ interface SimpleContentRendererProps {
   content: string
 }
 
+const QUIll_CDN_CONFIG_URL = "https://cdn.jsdelivr.net/gh/foyer-work/cdn-files@latest/quill/config.json"
+const QUIll_CDN_CONFIG_URL_FASTLY = "https://fastly.jsdelivr.net/gh/foyer-work/cdn-files@latest/quill/config.json"
+
+function rewriteExternalCdnUrls(input: string) {
+  if (!input) return input
+  return input
+    .replaceAll(QUIll_CDN_CONFIG_URL, "/quill/config.json")
+    .replaceAll(QUIll_CDN_CONFIG_URL_FASTLY, "/quill/config.json")
+}
+
 // 配置标记 - 只初始化一次
 let markedConfigured = false
 
@@ -113,22 +123,23 @@ export default function SimpleContentRenderer({ content }: SimpleContentRenderer
 
     const renderMarkdown = (text: string) => {
       if (!text) return '';
+      const rewritten = rewriteExternalCdnUrls(text)
       try {
-        const result = marked.parse(text);
+        const result = marked.parse(rewritten);
 
         if (result instanceof Promise) {
           console.error('[SimpleContentRenderer] marked.parse 返回了Promise');
-          return text.replace(/\n/g, '<br>');
+          return rewritten.replace(/\n/g, '<br>');
         }
 
         if (typeof result === 'string') {
           return result;
         }
 
-        return text.replace(/\n/g, '<br>');
+        return rewritten.replace(/\n/g, '<br>');
       } catch (error) {
         console.error('[SimpleContentRenderer] Markdown渲染失败:', error);
-        return text.replace(/\n/g, '<br>');
+        return rewritten.replace(/\n/g, '<br>');
       }
     };
 
