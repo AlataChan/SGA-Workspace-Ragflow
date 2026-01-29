@@ -214,17 +214,25 @@ export class RAGFlowProxyClient {
 
           buffer += decoder.decode(value, { stream: true })
 
-          // SSE is delimited by a blank line (\n\n or \r\n\r\n). Parse by event blocks so
+          // SSE is delimited by a blank line. Parse by event blocks so
           // multi-line JSON (pretty-printed) won't break JSON.parse.
           while (true) {
-            const delimiterIndex = buffer.indexOf('\n\n')
-            const delimiterLen = delimiterIndex >= 0 ? 2 : -1
-            if (delimiterIndex < 0) break
+            const lfIndex = buffer.indexOf('\n\n')
+            const crlfIndex = buffer.indexOf('\r\n\r\n')
+
+            const hasLf = lfIndex >= 0
+            const hasCrlf = crlfIndex >= 0
+            if (!hasLf && !hasCrlf) break
+
+            const delimiterIndex =
+              hasLf && hasCrlf ? Math.min(lfIndex, crlfIndex) : (hasLf ? lfIndex : crlfIndex)
+            const delimiterLen = delimiterIndex === crlfIndex ? 4 : 2
 
             const rawEvent = buffer.slice(0, delimiterIndex)
             buffer = buffer.slice(delimiterIndex + delimiterLen)
 
-            const lines = rawEvent.split('\n')
+            const normalizedEvent = rawEvent.replace(/\r\n/g, '\n')
+            const lines = normalizedEvent.split('\n')
             const dataLines: string[] = []
             for (const line of lines) {
               if (!line) continue

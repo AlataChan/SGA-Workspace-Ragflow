@@ -17,7 +17,13 @@ export async function GET(
       where: { id: params.sessionId, userId: user.userId }
     })
     if (!session) {
-      return NextResponse.json({ error: '会话不存在' }, { status: 404 })
+      // NOTE: The chat UI may optimistically query local messages for a RAGFlow session
+      // that hasn't been persisted to Prisma yet. Treat it as empty instead of 404 to avoid
+      // noisy console errors and improve UX.
+      return NextResponse.json({
+        success: true,
+        data: []
+      })
     }
 
     const messages = await prisma.chatMessage.findMany({
