@@ -73,24 +73,42 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    
-    if (!body.content || typeof body.content !== 'string') {
+
+    const rawContent = body?.content
+    const content =
+      typeof rawContent === 'string'
+        ? rawContent
+        : rawContent === null || rawContent === undefined
+          ? ''
+          : String(rawContent)
+
+    const trimmed = content.trim()
+
+    if (!trimmed) {
       return NextResponse.json(
         { success: false, error: '内容不能为空' },
         { status: 400 }
       )
     }
 
-    if (body.content.length > 10000) {
+    // Allow larger chunks for real-world assistant replies; truncate to avoid oversized payloads.
+    const MAX_CONTENT_LENGTH = 50000
+    const SAFE_CONTENT_LENGTH = 45000
+    const normalizedContent =
+      trimmed.length > MAX_CONTENT_LENGTH
+        ? `${trimmed.slice(0, SAFE_CONTENT_LENGTH)}\n\n…(内容过长已截断)…`
+        : trimmed
+
+    if (normalizedContent.length > MAX_CONTENT_LENGTH) {
       return NextResponse.json(
-        { success: false, error: '内容长度不能超过10000字符' },
+        { success: false, error: `内容长度不能超过${MAX_CONTENT_LENGTH}字符` },
         { status: 400 }
       )
     }
 
     const result = await tempKbService.saveChunk({
       userId,
-      content: body.content,
+      content: normalizedContent,
       keywords: body.keywords,
       sourceMessageId: body.sourceMessageId,
       sourceType: body.sourceType

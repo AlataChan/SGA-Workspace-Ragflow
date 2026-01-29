@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/tooltip"
 import { Bookmark, BookmarkCheck, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { splitThinkTags } from "@/lib/thinking"
+import { stripRagflowInlineReferenceMarkers } from "@/lib/ragflow-utils"
 
 interface SaveKnowledgeButtonProps {
   /** 要保存的内容 */
@@ -50,8 +52,16 @@ export default function SaveKnowledgeButton({
   const [isSaving, setIsSaving] = useState(false)
   const [isSaved, setIsSaved] = useState(false)
 
+  const normalizedContent = (() => {
+    const answer = splitThinkTags(content).answer
+    const stripped = stripRagflowInlineReferenceMarkers(answer)
+    const trimmed = stripped.trim()
+    const MAX_LEN = 45000
+    return trimmed.length > MAX_LEN ? `${trimmed.slice(0, MAX_LEN)}\n\n…(内容过长已截断)…` : trimmed
+  })()
+
   const handleSave = async () => {
-    if (isSaving || isSaved || !content.trim()) return
+    if (isSaving || isSaved || !normalizedContent) return
 
     setIsSaving(true)
 
@@ -68,7 +78,7 @@ export default function SaveKnowledgeButton({
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          content: content.trim(),
+          content: normalizedContent,
           sourceMessageId,
           sourceType,
           keywords
@@ -109,7 +119,7 @@ export default function SaveKnowledgeButton({
             variant="ghost"
             size={size}
             onClick={handleSave}
-            disabled={isSaving || !content.trim()}
+            disabled={isSaving || !normalizedContent}
             className={cn(
               "transition-colors",
               isSaved && "text-green-500 hover:text-green-600",
@@ -133,4 +143,3 @@ export default function SaveKnowledgeButton({
     </TooltipProvider>
   )
 }
-

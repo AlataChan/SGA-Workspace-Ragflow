@@ -213,92 +213,104 @@ export class RAGFlowProxyClient {
           }
 
           buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() || ''
 
-          for (const line of lines) {
-            const trimmedLine = line.trim()
-            if (!trimmedLine || trimmedLine.startsWith(':')) continue
+          // SSE is delimited by a blank line (\n\n or \r\n\r\n). Parse by event blocks so
+          // multi-line JSON (pretty-printed) won't break JSON.parse.
+          while (true) {
+            const delimiterIndex = buffer.indexOf('\n\n')
+            const delimiterLen = delimiterIndex >= 0 ? 2 : -1
+            if (delimiterIndex < 0) break
 
-            if (trimmedLine.startsWith('data:')) {
-              const dataStr = trimmedLine.substring(5).trim()
-              if (dataStr === '[DONE]') continue
+            const rawEvent = buffer.slice(0, delimiterIndex)
+            buffer = buffer.slice(delimiterIndex + delimiterLen)
 
-              try {
-                const data = JSON.parse(dataStr)
+            const lines = rawEvent.split('\n')
+            const dataLines: string[] = []
+            for (const line of lines) {
+              if (!line) continue
+              if (line.startsWith(':')) continue // comment/heartbeat
+              if (line.startsWith('data:')) {
+                dataLines.push(line.substring(5).replace(/^\s/, ''))
+              }
+            }
 
-                // 兼容两种 SSE 格式：
-                // 1) Chat Assistant: { code, message, data: { answer, reference, session_id } }
-                // 2) Agent: { event, data, session_id, message_id, ... }
+            if (dataLines.length === 0) continue
+            const dataStr = dataLines.join('\n').trim()
+            if (!dataStr || dataStr === '[DONE]') continue
 
-                if (typeof data?.code === 'number') {
-                  if (data.code !== 0) {
-                    const errorMsg = data.message || '请求失败'
-                    onError?.(errorMsg)
-                    onMessage({ type: 'error', content: errorMsg })
-                    continue
-                  }
+            try {
+              const data = JSON.parse(dataStr)
 
-                  const payload = data.data
-                  const answerCandidate = payload?.answer
-                    ?? payload?.content
-                    ?? payload?.final_answer
-                    ?? payload?.outputs?.content
+              // 兼容两种 SSE 格式：
+              // 1) Chat Assistant: { code, message, data: { answer, reference, session_id } }
+              // 2) Agent: { event, data, session_id, message_id, ... }
 
-                  const reference = payload?.reference ?? payload?.data?.reference
-                  const sessionId = payload?.session_id ?? payload?.data?.session_id
-
-                  if (answerCandidate !== undefined && answerCandidate !== null) {
-                    const normalizedContent = normalizeRagflowContent(answerCandidate)
-                    if (normalizedContent.length > 0) {
-                      // chat assistant 往往返回“累计全文”，这里按“以最新为准”
-                      fullContent = normalizedContent
-
-                      onMessage({
-                        type: 'content',
-                        content: fullContent,
-                        reference: reference || null,
-                        conversationId: sessionId || this.sessionId || undefined
-                      })
-                    }
-                  }
-
-                  if (reference) finalReference = reference
-                  if (sessionId) finalSessionId = sessionId
+              if (typeof data?.code === 'number') {
+                if (data.code !== 0) {
+                  const errorMsg = data.message || '请求失败'
+                  onError?.(errorMsg)
+                  onMessage({ type: 'error', content: errorMsg })
                   continue
                 }
 
-                // Agent SSE：根据 event 处理
-                const sessionId = data?.session_id ?? data?.data?.session_id
-                if (sessionId) finalSessionId = sessionId
+                const payload = data.data
+                const answerCandidate = payload?.answer
+                  ?? payload?.content
+                  ?? payload?.final_answer
+                  ?? payload?.outputs?.content
 
-                const reference = data?.data?.reference ?? data?.reference
-                if (reference) finalReference = reference
+                const reference = payload?.reference ?? payload?.data?.reference
+                const sessionId = payload?.session_id ?? payload?.data?.session_id
 
-                const contentCandidate =
-                  data?.data?.content
-                  ?? data?.data?.answer
-                  ?? data?.data?.output
-                  ?? data?.content
-
-                if (contentCandidate !== undefined && contentCandidate !== null) {
-                  const normalized = normalizeRagflowContent(contentCandidate)
-                  if (normalized.length > 0) {
-                    // agent 既可能是“增量片段”，也可能返回“累计全文”；这里做一次去重合并，避免内容翻倍
-                    fullContent = mergeStreamingText(fullContent, normalized)
+                if (answerCandidate !== undefined && answerCandidate !== null) {
+                  const normalizedContent = normalizeRagflowContent(answerCandidate)
+                  if (normalizedContent.length > 0) {
+                    // chat assistant 往往返回“累计全文”，这里按“以最新为准”
+                    fullContent = normalizedContent
 
                     onMessage({
                       type: 'content',
                       content: fullContent,
-                      reference: finalReference || null,
-                      conversationId: finalSessionId || undefined
+                      reference: reference || null,
+                      conversationId: sessionId || this.sessionId || undefined
                     })
                   }
                 }
 
-              } catch (parseError) {
-                console.warn('[RAGFlowProxy] 解析 SSE 数据失败:', parseError)
+                if (reference) finalReference = reference
+                if (sessionId) finalSessionId = sessionId
+                continue
               }
+
+              // Agent SSE：根据 event 处理
+              const sessionId = data?.session_id ?? data?.data?.session_id
+              if (sessionId) finalSessionId = sessionId
+
+              const reference = data?.data?.reference ?? data?.reference
+              if (reference) finalReference = reference
+
+              const contentCandidate =
+                data?.data?.content
+                ?? data?.data?.answer
+                ?? data?.data?.output
+                ?? data?.content
+
+              if (contentCandidate !== undefined && contentCandidate !== null) {
+                const normalized = normalizeRagflowContent(contentCandidate)
+                if (normalized.length > 0) {
+                  // agent 既可能是“增量片段”，也可能返回“累计全文”；这里做一次去重合并，避免内容翻倍
+                  fullContent = mergeStreamingText(fullContent, normalized)
+
+                  onMessage({
+                    type: 'content',
+                    content: fullContent,
+                    reference: finalReference || null,
+                    conversationId: finalSessionId || undefined
+                  })
+                }
+              }
+            } catch (parseError) {
+              console.warn('[RAGFlowProxy] 解析 SSE 数据失败:', parseError, dataStr.slice(0, 200))
             }
           }
         }
