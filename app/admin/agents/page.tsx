@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -331,10 +331,15 @@ export default function AgentsPage() {
     fetchAgents()
   }, [filterDepartment, filterPlatform])
 
+  const getDefaultDepartmentId = useCallback(() => {
+    const managementDepartment = departments.find((dept) => dept.name === "管理层")
+    return managementDepartment?.id || ""
+  }, [departments])
+
   // 重置表单
   const resetForm = () => {
     setFormData({
-      departmentId: "",
+      departmentId: getDefaultDepartmentId(),
       chineseName: "",
       englishName: "",
       position: "",
@@ -347,6 +352,17 @@ export default function AgentsPage() {
     })
     setConnectionTestResult({ success: false, message: '', tested: false })
   }
+
+  useEffect(() => {
+    if (!isCreateDialogOpen) return
+    if (formData.departmentId) return
+    if (departments.length === 0) return
+
+    const defaultDepartmentId = getDefaultDepartmentId()
+    if (!defaultDepartmentId) return
+
+    setFormData((prev) => ({ ...prev, departmentId: defaultDepartmentId }))
+  }, [departments, formData.departmentId, getDefaultDepartmentId, isCreateDialogOpen])
 
   // 打开创建弹窗
   const openCreateDialog = () => {
