@@ -31,8 +31,9 @@ type CompanyCandidate = {
 async function getTopCompaniesByDepartmentCount(limit: number): Promise<CompanyCandidate[]> {
   const grouped = await prisma.department.groupBy({
     by: ['companyId'],
-    _count: { _all: true },
-    orderBy: { _count: { _all: 'desc' } },
+    // Prisma(当前项目版本) 的 groupBy orderBy 不支持 `_all`，改用统计非空字段 `id` 来代表行数
+    _count: { id: true },
+    orderBy: { _count: { id: 'desc' } },
     take: Math.max(1, Math.min(20, limit)),
   })
 
@@ -53,7 +54,7 @@ async function getTopCompaniesByDepartmentCount(limit: number): Promise<CompanyC
         id: company.id,
         name: company.name,
         logoUrl: company.logoUrl ?? null,
-        departmentCount: g._count._all,
+        departmentCount: g._count.id,
       } satisfies CompanyCandidate
     })
     .filter(Boolean) as CompanyCandidate[]
@@ -287,4 +288,3 @@ export const POST = withAdminAuth(async (request) => {
     await prisma.$disconnect()
   }
 })
-
