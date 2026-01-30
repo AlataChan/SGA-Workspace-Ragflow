@@ -6,13 +6,30 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, Upload, Building, CheckCircle, AlertCircle } from "lucide-react"
+import { Loader2, Upload, Building, CheckCircle, AlertCircle, ArrowRightLeft } from "lucide-react"
 import NewAdminLayout from "@/components/admin/new-admin-layout"
 
 interface CompanyInfo {
   id: string
   name: string
   logoUrl?: string
+}
+
+interface AdoptCompanyCandidate {
+  id: string
+  name: string
+  logoUrl?: string | null
+  departmentCount: number
+}
+
+interface AdoptCompanyInfo {
+  currentCompany: {
+    id: string
+    name: string
+    logoUrl?: string | null
+  } | null
+  recommendedCompany: AdoptCompanyCandidate | null
+  candidates: AdoptCompanyCandidate[]
 }
 
 export default function CompanySettingsPage() {
@@ -24,6 +41,8 @@ export default function CompanySettingsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [adoptInfo, setAdoptInfo] = useState<AdoptCompanyInfo | null>(null)
+  const [isAdopting, setIsAdopting] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
 
@@ -51,7 +70,20 @@ export default function CompanySettingsPage() {
       }
     }
 
+    const fetchAdoptInfo = async () => {
+      try {
+        const response = await fetch('/api/admin/company/adopt', { cache: 'no-cache' })
+        if (response.ok) {
+          const data = await response.json()
+          setAdoptInfo(data.data as AdoptCompanyInfo)
+        }
+      } catch (error) {
+        console.error('获取公司绑定建议失败:', error)
+      }
+    }
+
     fetchCompanyInfo()
+    fetchAdoptInfo()
   }, [])
 
   // 处理Logo文件选择
@@ -168,6 +200,39 @@ export default function CompanySettingsPage() {
     }
   }
 
+  const handleAdoptCompany = async () => {
+    if (!adoptInfo?.recommendedCompany) return
+    if (companyInfo?.id === adoptInfo.recommendedCompany.id) return
+
+    setIsAdopting(true)
+    setMessage(null)
+    try {
+      const response = await fetch('/api/admin/company/adopt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyId: adoptInfo.recommendedCompany.id }),
+      })
+
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(result?.error?.message || '绑定失败')
+      }
+
+      setMessage({ type: 'success', text: '已绑定到导入公司，正在刷新页面…' })
+      setTimeout(() => {
+        window.location.reload()
+      }, 800)
+    } catch (error) {
+      console.error('绑定到导入公司失败:', error)
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : '绑定失败，请稍后重试',
+      })
+    } finally {
+      setIsAdopting(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <NewAdminLayout>
@@ -200,6 +265,41 @@ export default function CompanySettingsPage() {
             )}
             <AlertDescription className={message.type === 'success' ? 'text-green-700 dark:text-green-200' : 'text-red-700 dark:text-red-200'}>
               {message.text}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* 公司绑定建议（解决“导入管理员能看到全部部门，admin 只能看到少量部门”的问题） */}
+        {adoptInfo?.recommendedCompany && companyInfo?.id && adoptInfo.recommendedCompany.id !== companyInfo.id && (
+          <Alert className="mb-6 border-blue-500/20 bg-blue-500/10">
+            <AlertDescription className="text-blue-700 dark:text-blue-200 flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <div className="font-medium">检测到导入公司（部门更多）</div>
+                <div className="text-sm opacity-90">
+                  推荐绑定到：{adoptInfo.recommendedCompany.name}（部门数：{adoptInfo.recommendedCompany.departmentCount}）
+                </div>
+                <div className="text-xs opacity-80">
+                  绑定后，“admin” 将与导入部门处于同一公司范围内，管理端可见部门/用户/Agent 将统一显示。
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleAdoptCompany}
+                disabled={isAdopting}
+                className="border-blue-500/30 text-blue-700 hover:bg-blue-500/10 dark:text-blue-200"
+              >
+                {isAdopting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    绑定中...
+                  </>
+                ) : (
+                  <>
+                    <ArrowRightLeft className="w-4 h-4 mr-2" />
+                    绑定到导入公司
+                  </>
+                )}
+              </Button>
             </AlertDescription>
           </Alert>
         )}
