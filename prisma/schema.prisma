@@ -22,61 +22,62 @@ model Company {
 }
 
 model Department {
-  id          String   @id @default(cuid())
-  companyId   String   @map("company_id")
-  name        String
-  description String?
-  icon        String?
-  sortOrder   Int      @default(0) @map("sort_order")
-  isActive    Boolean  @default(true) @map("is_active")
-  parentId    String?  @map("parent_id")
-  parentSids  String?  @map("parent_sids")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  agents      Agent[]
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  users       User[]
+  id                    String                 @id @default(cuid())
+  companyId             String                 @map("company_id")
+  name                  String
+  description           String?
+  icon                  String?
+  sortOrder             Int                    @default(0) @map("sort_order")
+  isActive              Boolean                @default(true) @map("is_active")
+  parentId              String?                @map("parent_id")
+  parentSids            String?                @map("parent_sids")
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
+  agents                Agent[]
+  agentDepartmentGrants AgentDepartmentGrant[]
+  company               Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  users                 User[]
 
   @@index([companyId, parentId], name: "idx_department_company_parent")
   @@map("departments")
 }
 
 model User {
-  id               String                @id @default(cuid())
-  companyId        String                @map("company_id")
-  username         String                @map("username")
-  userId           String                @default("") @map("user_id")
-  phone            String                @default("")
-  passwordHash     String                @map("password_hash")
-  chineseName      String                @default("") @map("chinese_name")
-  englishName      String?               @map("english_name")
-  email            String?
-  displayName      String?               @map("display_name")
-  avatarUrl        String?               @map("avatar_url")
-  departmentId     String?               @map("department_id")
-  position         String?
-  role             UserRole              @default(USER)
-  isActive         Boolean               @default(true) @map("is_active")
-  lastLoginAt      DateTime?             @map("last_login_at")
-  createdAt        DateTime              @default(now()) @map("created_at")
-  updatedAt        DateTime              @updatedAt @map("updated_at")
-  
+  id           String    @id @default(cuid())
+  companyId    String    @map("company_id")
+  username     String    @map("username")
+  userId       String    @default("") @map("user_id")
+  phone        String    @default("")
+  passwordHash String    @map("password_hash")
+  chineseName  String    @default("") @map("chinese_name")
+  englishName  String?   @map("english_name")
+  email        String?
+  displayName  String?   @map("display_name")
+  avatarUrl    String?   @map("avatar_url")
+  departmentId String?   @map("department_id")
+  position     String?
+  role         UserRole  @default(USER)
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
   // SSO 相关字段
   yunzhijiaUserId   String?   @unique @map("yunzhijia_user_id")
   ssoProvider       String?   @map("sso_provider")
   ssoAccessToken    String?   @map("sso_access_token")
   ssoRefreshToken   String?   @map("sso_refresh_token")
   ssoTokenExpiresAt DateTime? @map("sso_token_expires_at")
-  
-  messages                      ChatMessage[]
-  sessions                      ChatSession[]
-  uploadedFiles                 UploadedFile[]
-  agentPermissions              UserAgentPermission[]
-  agentPermissionRevocations    UserAgentPermissionRevocation[]
-  knowledgeGraphPermissions     UserKnowledgeGraphPermission[]
-  tempKnowledgeBase             UserTempKnowledgeBase?
-  company                       Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  department                    Department?                   @relation(fields: [departmentId], references: [id])
+
+  messages                   ChatMessage[]
+  sessions                   ChatSession[]
+  uploadedFiles              UploadedFile[]
+  agentPermissions           UserAgentPermission[]
+  agentPermissionRevocations UserAgentPermissionRevocation[]
+  knowledgeGraphPermissions  UserKnowledgeGraphPermission[]
+  tempKnowledgeBase          UserTempKnowledgeBase?
+  company                    Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  department                 Department?                     @relation(fields: [departmentId], references: [id])
 
   @@unique([companyId, username], name: "unique_username")
   @@unique([companyId, userId], name: "unique_user_id")
@@ -85,32 +86,54 @@ model User {
 }
 
 model Agent {
-  id                 String                @id @default(cuid())
-  companyId          String                @map("company_id")
-  departmentId       String                @map("department_id")
-  chineseName        String                @map("chinese_name")
-  englishName        String?               @map("english_name")
-  position           String
-  description        String?
-  avatarUrl          String?               @map("avatar_url")
-  photoUrl           String?               @map("photo_url")
-  platform           AgentPlatform         @default(DIFY)
-  platformConfig     Json?                 @map("platform_config")
-  difyUrl            String?               @map("dify_url")
-  difyKey            String?               @map("dify_key")
-  isOnline           Boolean               @default(false) @map("is_online")
-  connectionTestedAt DateTime?             @map("connection_tested_at")
-  lastError          String?               @map("last_error")
-  sortOrder          Int                   @default(0) @map("sort_order")
-  createdAt          DateTime              @default(now()) @map("created_at")
-  updatedAt          DateTime              @updatedAt @map("updated_at")
-  company            Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  department         Department            @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  sessions           ChatSession[]
-  userPermissions    UserAgentPermission[]
+  id                        String                          @id @default(cuid())
+  companyId                 String                          @map("company_id")
+  departmentId              String                          @map("department_id")
+  chineseName               String                          @map("chinese_name")
+  englishName               String?                         @map("english_name")
+  position                  String
+  description               String?
+  avatarUrl                 String?                         @map("avatar_url")
+  photoUrl                  String?                         @map("photo_url")
+  platform                  AgentPlatform                   @default(DIFY)
+  platformConfig            Json?                           @map("platform_config")
+  difyUrl                   String?                         @map("dify_url")
+  difyKey                   String?                         @map("dify_key")
+  isOnline                  Boolean                         @default(false) @map("is_online")
+  connectionTestedAt        DateTime?                       @map("connection_tested_at")
+  lastError                 String?                         @map("last_error")
+  sortOrder                 Int                             @default(0) @map("sort_order")
+  createdAt                 DateTime                        @default(now()) @map("created_at")
+  updatedAt                 DateTime                        @updatedAt @map("updated_at")
+  company                   Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  department                Department                      @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  sessions                  ChatSession[]
+  userPermissions           UserAgentPermission[]
   userPermissionRevocations UserAgentPermissionRevocation[]
+  departmentGrants          AgentDepartmentGrant[]
 
   @@map("agents")
+}
+
+model AgentDepartmentGrant {
+  id                    String  @id @default(cuid())
+  companyId             String  @map("company_id")
+  agentId               String  @map("agent_id")
+  departmentId          String  @map("department_id")
+  includeSubDepartments Boolean @default(true) @map("include_sub_departments")
+  isActive              Boolean @default(true) @map("is_active")
+
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  agent      Agent      @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, departmentId], name: "unique_agent_department_grant")
+  @@index([companyId, agentId], name: "idx_agent_department_grant_company_agent")
+  @@index([companyId, departmentId], name: "idx_agent_department_grant_company_department")
+  @@map("agent_department_grants")
 }
 
 model UserAgentPermission {
@@ -127,9 +150,9 @@ model UserAgentPermission {
 }
 
 model UserAgentPermissionRevocation {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  agentId   String   @map("agent_id")
+  id      String @id @default(cuid())
+  userId  String @map("user_id")
+  agentId String @map("agent_id")
 
   revokedBy String   @map("revoked_by")
   revokedAt DateTime @default(now()) @map("revoked_at")
@@ -147,13 +170,13 @@ model UserAgentPermissionRevocation {
 }
 
 model UserKnowledgeGraphPermission {
-  id                String         @id @default(cuid())
-  userId            String         @map("user_id")
-  knowledgeGraphId  String         @map("knowledge_graph_id")
-  grantedBy         String         @map("granted_by")
-  createdAt         DateTime       @default(now()) @map("created_at")
-  knowledgeGraph    KnowledgeGraph @relation(fields: [knowledgeGraphId], references: [id], onDelete: Cascade)
-  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String         @id @default(cuid())
+  userId           String         @map("user_id")
+  knowledgeGraphId String         @map("knowledge_graph_id")
+  grantedBy        String         @map("granted_by")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  knowledgeGraph   KnowledgeGraph @relation(fields: [knowledgeGraphId], references: [id], onDelete: Cascade)
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, knowledgeGraphId], name: "userId_knowledgeGraphId")
   @@map("user_knowledge_graph_permissions")
@@ -203,23 +226,23 @@ model UploadedFile {
 }
 
 model KnowledgeGraph {
-  id          String    @id @default(cuid())
-  companyId   String    @map("company_id")
-  name        String
-  description String?
-  ragflowUrl  String    @map("ragflow_url")
-  apiKey      String    @map("api_key")
-  kbId        String    @map("kb_id")
-  isActive    Boolean   @default(true) @map("is_active")
-  lastSyncAt  DateTime? @map("last_sync_at")
-  lastError   String?   @map("last_error")
-  nodeCount   Int       @default(0) @map("node_count")
-  edgeCount   Int       @default(0) @map("edge_count")
-  sortOrder   Int       @default(0) @map("sort_order")
-  createdAt         DateTime                       @default(now()) @map("created_at")
-  updatedAt         DateTime                       @updatedAt @map("updated_at")
-  company           Company                        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  userPermissions   UserKnowledgeGraphPermission[]
+  id              String                         @id @default(cuid())
+  companyId       String                         @map("company_id")
+  name            String
+  description     String?
+  ragflowUrl      String                         @map("ragflow_url")
+  apiKey          String                         @map("api_key")
+  kbId            String                         @map("kb_id")
+  isActive        Boolean                        @default(true) @map("is_active")
+  lastSyncAt      DateTime?                      @map("last_sync_at")
+  lastError       String?                        @map("last_error")
+  nodeCount       Int                            @default(0) @map("node_count")
+  edgeCount       Int                            @default(0) @map("edge_count")
+  sortOrder       Int                            @default(0) @map("sort_order")
+  createdAt       DateTime                       @default(now()) @map("created_at")
+  updatedAt       DateTime                       @updatedAt @map("updated_at")
+  company         Company                        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userPermissions UserKnowledgeGraphPermission[]
 
   @@unique([companyId, name], name: "companyId_name")
   @@map("knowledge_graphs")
@@ -250,42 +273,42 @@ enum MessageRole {
 
 /// 用户临时知识库 - 存储用户在聊天过程中保存的知识片段
 model UserTempKnowledgeBase {
-  id              String    @id @default(cuid())
-  userId          String    @unique @map("user_id")
-  ragflowKbId     String    @map("ragflow_kb_id")      // RAGFlow dataset ID
-  ragflowDocId    String?   @map("ragflow_doc_id")     // RAGFlow 虚拟文档ID
-  ragflowUrl      String    @map("ragflow_url")        // RAGFlow 服务地址
-  apiKey          String    @map("api_key")            // RAGFlow API Key
-  sessionId       String?   @map("session_id")         // 关联的聊天会话ID
-  chunkCount      Int       @default(0) @map("chunk_count")
-  nodeCount       Int       @default(0) @map("node_count")   // 图谱节点数
-  edgeCount       Int       @default(0) @map("edge_count")   // 图谱边数
-  status          TempKbStatus @default(ACTIVE)        // 状态
-  isPersistent    Boolean   @default(false) @map("is_persistent")
-  lastActiveAt    DateTime  @default(now()) @map("last_active_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  expiresAt       DateTime? @map("expires_at")         // 过期时间
+  id           String       @id @default(cuid())
+  userId       String       @unique @map("user_id")
+  ragflowKbId  String       @map("ragflow_kb_id") // RAGFlow dataset ID
+  ragflowDocId String?      @map("ragflow_doc_id") // RAGFlow 虚拟文档ID
+  ragflowUrl   String       @map("ragflow_url") // RAGFlow 服务地址
+  apiKey       String       @map("api_key") // RAGFlow API Key
+  sessionId    String?      @map("session_id") // 关联的聊天会话ID
+  chunkCount   Int          @default(0) @map("chunk_count")
+  nodeCount    Int          @default(0) @map("node_count") // 图谱节点数
+  edgeCount    Int          @default(0) @map("edge_count") // 图谱边数
+  status       TempKbStatus @default(ACTIVE) // 状态
+  isPersistent Boolean      @default(false) @map("is_persistent")
+  lastActiveAt DateTime     @default(now()) @map("last_active_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  expiresAt    DateTime?    @map("expires_at") // 过期时间
 
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  savedChunks     UserSavedChunk[]
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  savedChunks UserSavedChunk[]
 
   @@map("user_temp_knowledge_bases")
 }
 
 /// 用户保存的知识片段记录
 model UserSavedChunk {
-  id              String    @id @default(cuid())
-  tempKbId        String    @map("temp_kb_id")
-  ragflowChunkId  String?   @map("ragflow_chunk_id")   // RAGFlow chunk ID
-  content         String    @db.Text                    // 内容
-  contentSummary  String?   @map("content_summary")     // 内容摘要
-  keywords        String[]                              // 关键词
-  sourceMessageId String?   @map("source_message_id")  // 来源消息ID
-  sourceType      String?   @map("source_type")        // 来源类型: assistant_reply, reference, user_input
-  createdAt       DateTime  @default(now()) @map("created_at")
+  id              String   @id @default(cuid())
+  tempKbId        String   @map("temp_kb_id")
+  ragflowChunkId  String?  @map("ragflow_chunk_id") // RAGFlow chunk ID
+  content         String   @db.Text // 内容
+  contentSummary  String?  @map("content_summary") // 内容摘要
+  keywords        String[] // 关键词
+  sourceMessageId String?  @map("source_message_id") // 来源消息ID
+  sourceType      String?  @map("source_type") // 来源类型: assistant_reply, reference, user_input
+  createdAt       DateTime @default(now()) @map("created_at")
 
-  tempKb          UserTempKnowledgeBase @relation(fields: [tempKbId], references: [id], onDelete: Cascade)
+  tempKb UserTempKnowledgeBase @relation(fields: [tempKbId], references: [id], onDelete: Cascade)
 
   @@index([tempKbId])
   @@map("user_saved_chunks")
@@ -293,8 +316,8 @@ model UserSavedChunk {
 
 /// 临时知识库状态枚举
 enum TempKbStatus {
-  ACTIVE          // 活跃中
-  BUILDING        // 图谱构建中
-  EXPIRED         // 已过期
-  PERSISTENT      // 已持久化
+  ACTIVE // 活跃中
+  BUILDING // 图谱构建中
+  EXPIRED // 已过期
+  PERSISTENT // 已持久化
 }

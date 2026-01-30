@@ -4,23 +4,11 @@
  * POST: 保存新的知识片段
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { tempKbService } from '@/lib/services/temp-kb-service'
-import { verifyToken } from '@/lib/auth/jwt'
+import { withAuth, type AuthenticatedRequest } from '@/lib/auth/middleware'
+import { canUserAccessAgent } from '@/lib/auth/agent-access'
 import prisma from '@/lib/prisma'
-
-/**
- * 从请求中获取用户ID
- */
-async function getAuthPayload(request: NextRequest) {
-  const headerToken = request.headers.get('authorization')?.replace('Bearer ', '')
-  const cookieToken = request.cookies.get('auth-token')?.value
-  const token = headerToken || cookieToken
-  if (!token) return null
-
-  const payload = verifyToken(token)
-  return payload || null
-}
 
 function normalizeRagflowBaseUrl(value: unknown): string {
   let base = String(value ?? '').trim()
@@ -34,20 +22,14 @@ function normalizeRagflowBaseUrl(value: unknown): string {
  * GET /api/temp-kb/chunks
  * 获取用户保存的知识片段列表
  */
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: AuthenticatedRequest) => {
   try {
-    const auth = await getAuthPayload(request)
-    if (!auth?.userId) {
-      return NextResponse.json(
-        { success: false, error: '未授权' },
-        { status: 401 }
-      )
-    }
+    const user = request.user!
 
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get('limit') || '50', 10)
 
-    const result = await tempKbService.getSavedChunks(auth.userId, limit)
+    const result = await tempKbService.getSavedChunks(user.userId, limit)
     
     return NextResponse.json(result)
   } catch (error) {
@@ -56,8 +38,10 @@ export async function GET(request: NextRequest) {
       { success: false, error: '服务器错误' },
       { status: 500 }
     )
+  } finally {
+    await prisma.$disconnect()
   }
-}
+})
 
 /**
  * POST /api/temp-kb/chunks
@@ -71,15 +55,9 @@ export async function GET(request: NextRequest) {
  *   sourceType?: string        // 可选：来源类型
  * }
  */
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: AuthenticatedRequest) => {
   try {
-    const auth = await getAuthPayload(request)
-    if (!auth?.userId) {
-      return NextResponse.json(
-        { success: false, error: '未授权' },
-        { status: 401 }
-      )
-    }
+    const user = request.user!
 
     const body = await request.json()
 
@@ -123,7 +101,7 @@ export async function POST(request: NextRequest) {
       const agent = await prisma.agent.findFirst({
         where: {
           id: agentId,
-          companyId: auth.companyId,
+          companyId: user.companyId,
         },
         select: {
           platform: true,
@@ -132,20 +110,12 @@ export async function POST(request: NextRequest) {
       })
 
       if (agent?.platform === 'RAGFLOW') {
-        if (auth.role !== 'ADMIN') {
-          const permission = await prisma.userAgentPermission.findFirst({
-            where: {
-              userId: auth.userId,
-              agentId,
-            },
-            select: { id: true },
-          })
-          if (!permission) {
-            return NextResponse.json(
-              { success: false, error: '无权访问该 Agent' },
-              { status: 403 }
-            )
-          }
+        const hasAccess = await canUserAccessAgent(user, agentId)
+        if (!hasAccess) {
+          return NextResponse.json(
+            { success: false, error: '无权访问该 Agent' },
+            { status: 403 }
+          )
         }
 
         const platformConfig = agent.platformConfig as Record<string, any> | null
@@ -158,7 +128,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await tempKbService.saveChunk({
-      userId: auth.userId,
+      userId: user.userId,
       content: normalizedContent,
       keywords: body.keywords,
       sourceMessageId: body.sourceMessageId,
@@ -173,5 +143,7 @@ export async function POST(request: NextRequest) {
       { success: false, error: '服务器错误' },
       { status: 500 }
     )
+  } finally {
+    await prisma.$disconnect()
   }
-}
+})

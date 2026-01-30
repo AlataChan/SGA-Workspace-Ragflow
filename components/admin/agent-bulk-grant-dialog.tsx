@@ -30,20 +30,16 @@ type DepartmentTreeResponse = {
   message: string
 }
 
-type BulkGrantPreview = {
+type DepartmentGrantPreview = {
+  rulesUpserted: number
   usersMatched: number
+  usersMatchedActive: number
+  usersMatchedInactive: number
   usersRevoked: number
   usersEligible: number
-  alreadyHasCount: number
-  willInsert: number
-}
-
-type BulkGrantResult = {
-  usersMatched: number
-  usersRevoked: number
-  usersProcessed: number
-  inserted: number
-  skipped: number
+  alreadyExplicitCount: number
+  alreadyEffectiveCount: number
+  usersWillHaveAccess: number
 }
 
 type FlatRow = {
@@ -103,13 +99,11 @@ export default function AgentBulkGrantDialog({
   const [selectedDepartmentIds, setSelectedDepartmentIds] = useState<Set<string>>(new Set())
 
   const [includeSubDepartments, setIncludeSubDepartments] = useState(true)
-  const [includeAdmins, setIncludeAdmins] = useState(false)
-  const [includeInactive, setIncludeInactive] = useState(true)
 
   const [isPreviewing, setIsPreviewing] = useState(false)
   const [isGranting, setIsGranting] = useState(false)
-  const [preview, setPreview] = useState<BulkGrantPreview | null>(null)
-  const [result, setResult] = useState<BulkGrantResult | null>(null)
+  const [preview, setPreview] = useState<DepartmentGrantPreview | null>(null)
+  const [result, setResult] = useState<DepartmentGrantPreview | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const fetchDepartmentTree = async () => {
@@ -138,8 +132,6 @@ export default function AgentBulkGrantDialog({
     setSearch("")
     setSelectedDepartmentIds(new Set())
     setIncludeSubDepartments(true)
-    setIncludeAdmins(false)
-    setIncludeInactive(true)
     setPreview(null)
     setResult(null)
     setError(null)
@@ -259,15 +251,12 @@ export default function AgentBulkGrantDialog({
       setPreview(null)
       setResult(null)
 
-      const response = await fetch(`/api/admin/agents/${agent.id}/bulk/grant-users`, {
+      const response = await fetch(`/api/admin/agents/${agent.id}/department-grants`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mode: "departments",
           departmentIds: Array.from(selectedDepartmentIds),
           includeSubDepartments,
-          includeAdmins,
-          includeInactive,
           dryRun: true,
         }),
       })
@@ -276,7 +265,7 @@ export default function AgentBulkGrantDialog({
       if (!response.ok) {
         throw new Error(json?.error?.message || "预览失败")
       }
-      setPreview(json.data as BulkGrantPreview)
+      setPreview(json.data as DepartmentGrantPreview)
     } catch (e) {
       console.error("预览失败:", e)
       setError(e instanceof Error ? e.message : "预览失败")
@@ -297,29 +286,26 @@ export default function AgentBulkGrantDialog({
       setError(null)
       setResult(null)
 
-      const response = await fetch(`/api/admin/agents/${agent.id}/bulk/grant-users`, {
+      const response = await fetch(`/api/admin/agents/${agent.id}/department-grants`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mode: "departments",
           departmentIds: Array.from(selectedDepartmentIds),
           includeSubDepartments,
-          includeAdmins,
-          includeInactive,
           dryRun: false,
         }),
       })
 
       const json = await response.json().catch(() => ({}))
       if (!response.ok) {
-        throw new Error(json?.error?.message || "批量授权失败")
+        throw new Error(json?.error?.message || "保存规则失败")
       }
 
-      setResult(json.data as BulkGrantResult)
+      setResult(json.data as DepartmentGrantPreview)
       onCompleted?.()
     } catch (e) {
-      console.error("批量授权失败:", e)
-      setError(e instanceof Error ? e.message : "批量授权失败")
+      console.error("保存规则失败:", e)
+      setError(e instanceof Error ? e.message : "保存规则失败")
     } finally {
       setIsGranting(false)
     }
@@ -331,14 +317,14 @@ export default function AgentBulkGrantDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>批量授权</DialogTitle>
+          <DialogTitle>部门授权（自动）</DialogTitle>
           <DialogDescription>
             {agent ? (
               <>
-                目标 Agent：<span className="font-medium">{agent.chineseName}</span>
+                目标 Agent：<span className="font-medium">{agent.chineseName}</span>（保存规则后，部门内用户将自动获得使用权限）
               </>
             ) : (
-              "选择一个 Agent 后进行批量授权"
+              "选择一个 Agent 后配置部门授权规则"
             )}
           </DialogDescription>
         </DialogHeader>
@@ -443,29 +429,13 @@ export default function AgentBulkGrantDialog({
             <div className="text-sm text-muted-foreground">已选部门：{selectedCount}</div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-1">
             <div className="flex items-center justify-between rounded-md border p-3">
               <div className="space-y-0.5">
                 <div className="text-sm font-medium">包含子部门</div>
                 <div className="text-xs text-muted-foreground">选中部门将覆盖其后代部门用户</div>
               </div>
               <Switch checked={includeSubDepartments} onCheckedChange={setIncludeSubDepartments} />
-            </div>
-
-            <div className="flex items-center justify-between rounded-md border p-3">
-              <div className="space-y-0.5">
-                <div className="text-sm font-medium">包含管理员</div>
-                <div className="text-xs text-muted-foreground">默认仅授权普通用户</div>
-              </div>
-              <Switch checked={includeAdmins} onCheckedChange={setIncludeAdmins} />
-            </div>
-
-            <div className="flex items-center justify-between rounded-md border p-3">
-              <div className="space-y-0.5">
-                <div className="text-sm font-medium">包含停用用户</div>
-                <div className="text-xs text-muted-foreground">默认包含停用账号</div>
-              </div>
-              <Switch checked={includeInactive} onCheckedChange={setIncludeInactive} />
             </div>
           </div>
 
@@ -475,21 +445,28 @@ export default function AgentBulkGrantDialog({
 
               {preview && (
                 <div className="text-sm text-muted-foreground space-y-1">
-                  <div>匹配用户数：{preview.usersMatched}</div>
-                  <div>已被撤销（将跳过）：{preview.usersRevoked}</div>
-                  <div>符合条件用户：{preview.usersEligible}</div>
-                  <div>已有权限（将跳过）：{preview.alreadyHasCount}</div>
-                  <div className="text-foreground font-medium">预计新增：{preview.willInsert}</div>
+                  <div>
+                    匹配用户数：{preview.usersMatched}（启用 {preview.usersMatchedActive} / 停用 {preview.usersMatchedInactive}）
+                  </div>
+                  <div>已被撤销（不会获得权限）：{preview.usersRevoked}</div>
+                  <div>符合条件用户（排除撤销）：{preview.usersEligible}</div>
+                  <div>已有显式权限：{preview.alreadyExplicitCount}</div>
+                  <div>已具备访问权限（显式+已有规则）：{preview.alreadyEffectiveCount}</div>
+                  <div className="text-foreground font-medium">预计新增可访问：{preview.usersWillHaveAccess}</div>
                 </div>
               )}
 
               {result && (
                 <div className="text-sm text-muted-foreground space-y-1">
-                  <div>匹配用户数：{result.usersMatched}</div>
-                  <div>已被撤销（已跳过）：{result.usersRevoked}</div>
-                  <div>实际处理用户：{result.usersProcessed}</div>
-                  <div className="text-foreground font-medium">新增授权：{result.inserted}</div>
-                  <div>已存在（跳过）：{result.skipped}</div>
+                  <div className="text-foreground font-medium">规则写入：{result.rulesUpserted}</div>
+                  <div>
+                    匹配用户数：{result.usersMatched}（启用 {result.usersMatchedActive} / 停用 {result.usersMatchedInactive}）
+                  </div>
+                  <div>已被撤销（不会获得权限）：{result.usersRevoked}</div>
+                  <div>符合条件用户（排除撤销）：{result.usersEligible}</div>
+                  <div>已有显式权限：{result.alreadyExplicitCount}</div>
+                  <div>已具备访问权限（显式+已有规则）：{result.alreadyEffectiveCount}</div>
+                  <div className="text-foreground font-medium">预计新增可访问：{result.usersWillHaveAccess}</div>
                 </div>
               )}
             </div>
@@ -511,11 +488,10 @@ export default function AgentBulkGrantDialog({
             onClick={handleGrant}
             disabled={!agent || selectedCount === 0 || isLoadingDepartments || isPreviewing || isGranting}
           >
-            {isGranting ? <Loader2 className="h-4 w-4 animate-spin" /> : "确认授权"}
+            {isGranting ? <Loader2 className="h-4 w-4 animate-spin" /> : "保存规则"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
 }
-
