@@ -121,8 +121,8 @@ export class TempKbService {
           lastActiveAt: new Date()
         }
 
-        // 如果状态不是 ACTIVE，更新为 ACTIVE
-        if (tempKb.status !== 'ACTIVE') {
+        // 仅当已过期时才恢复为 ACTIVE；构建中(BUILDING)/已持久化(PERSISTENT)不应被写回 ACTIVE
+        if (tempKb.status === 'EXPIRED') {
           updateData.status = 'ACTIVE'
         }
 
@@ -390,13 +390,32 @@ export class TempKbService {
         }
       }
 
+      const client = this.createClientForTempKb(tempKb)
+
+      // 如果本地已标记为 BUILDING，直接视为幂等成功（避免重复触发导致 RAGFlow 返回 “Graph Task is already running”）
+      if (tempKb.status === 'BUILDING') {
+        return { success: true, data: { taskId: '' } }
+      }
+
+      // 额外兜底：即使本地状态不是 BUILDING，也先探测一次远端任务状态，避免状态不同步导致重复触发
+      try {
+        const statusResult = await client.getGraphRAGStatus(tempKb.ragflowKbId)
+        if (statusResult.success && statusResult.data?.status === 'building') {
+          await prisma.userTempKnowledgeBase.update({
+            where: { id: tempKb.id },
+            data: { status: 'BUILDING' },
+          })
+          return { success: true, data: { taskId: '' } }
+        }
+      } catch {
+        // ignore probe failure and continue to trigger
+      }
+
       // 更新状态为构建中
       await prisma.userTempKnowledgeBase.update({
         where: { id: tempKb.id },
         data: { status: 'BUILDING' }
       })
-
-      const client = this.createClientForTempKb(tempKb)
 
       // 触发RAGFlow图谱构建
       const result = await client.runGraphRAG(tempKb.ragflowKbId)

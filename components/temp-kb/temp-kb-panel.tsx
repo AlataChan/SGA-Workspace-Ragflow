@@ -145,6 +145,7 @@ export default function TempKbPanel({
             setIsBuilding(false)
             fetchKbInfo()
             onGraphReady?.()
+            window.dispatchEvent(new Event('temp-kb-graph-built'))
             return true
           } else if (result.data.status === 'failed') {
             setIsBuilding(false)

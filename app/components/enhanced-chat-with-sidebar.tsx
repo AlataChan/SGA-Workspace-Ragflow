@@ -1401,27 +1401,8 @@ export default function EnhancedChatWithSidebar({
     }
   }, [agentConfig, agentName, actualAgentAvatar])
 
-  // 初始化时获取历史对话
-  useEffect(() => {
-    // 每次进入聊天界面（或切换 Agent）都强制刷新历史对话列表，避免 5 分钟缓存导致看起来“没刷新”
-    historyCacheRef.current.lastFetch = 0
-
-    if (agentConfig?.platform === 'DIFY') {
-      if (agentConfig?.difyUrl && agentConfig?.difyKey) fetchHistoryConversations(true, false)
-      return
-    }
-
-    if (agentConfig?.platform === 'RAGFLOW') {
-      if (agentConfig?.localAgentId || agentConfig?.agentId) fetchHistoryConversations(true, false)
-    }
-  }, [
-    agentConfig?.platform,
-    agentConfig?.difyUrl,
-    agentConfig?.difyKey,
-    agentConfig?.agentId,
-    agentConfig?.localAgentId,
-    fetchHistoryConversations
-  ])
+  // 历史对话刷新逻辑放到“客户端初始化”useEffect 内部执行：
+  // 这样可以确保 RAGFlow 代理客户端（ragflowProxyClientRef）已就绪，避免首次进入聊天页走旧回退接口导致“看起来没刷新”。
 
   // 支持通过 URL 等方式直达某个会话
   const initialConversationLoadedRef = useRef(false)
@@ -1770,6 +1751,7 @@ export default function EnhancedChatWithSidebar({
     // 清理之前的客户端
     difyClientRef.current = null
     ragflowClientRef.current = null
+    ragflowProxyClientRef.current = null
 
     if (!agentConfig?.platform || !agentConfig?.userId) {
       console.warn('[EnhancedChat] Agent配置不完整，缺少平台或用户ID')
@@ -1811,7 +1793,20 @@ export default function EnhancedChatWithSidebar({
         console.warn('[EnhancedChat] RAGFlow 配置不完整')
       }
     }
-  }, [agentConfig?.platform, agentConfig?.difyUrl, agentConfig?.difyKey, agentConfig?.baseUrl, agentConfig?.apiKey, agentConfig?.agentId, agentConfig?.userId, agentConfig?.localAgentId])
+    // 每次进入聊天界面（或切换 Agent）都强制刷新历史对话列表，避免缓存/回退接口导致看起来“没刷新”
+    historyCacheRef.current.lastFetch = 0
+    fetchHistoryConversations(true, false)
+  }, [
+    agentConfig?.platform,
+    agentConfig?.difyUrl,
+    agentConfig?.difyKey,
+    agentConfig?.baseUrl,
+    agentConfig?.apiKey,
+    agentConfig?.agentId,
+    agentConfig?.userId,
+    agentConfig?.localAgentId,
+    fetchHistoryConversations,
+  ])
 
   // 上次发送时间
   const lastSendTimeRef = useRef<number>(0)

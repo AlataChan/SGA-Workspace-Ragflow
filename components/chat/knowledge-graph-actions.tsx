@@ -144,6 +144,7 @@ export default function KnowledgeGraphActions(props: {
             if (status.ok) {
               setBuildState("done");
               toast.success("图谱生成成功");
+              window.dispatchEvent(new Event("temp-kb-graph-built"));
             } else {
               setBuildState("idle");
               toast.error("图谱生成失败");

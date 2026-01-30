@@ -314,9 +314,23 @@ export class RAGFlowTempKbClient {
         }
       }
 
+      // RAGFlow 在已有任务运行中时，可能会返回非 0 code 但 message 表示“Graph Task is already running”
+      // 这种情况应视为幂等成功，前端继续轮询 status 即可。
+      const message = this.getErrorMessage(result, '触发图谱构建失败')
+      const lower = message.toLowerCase()
+      if (lower.includes('graph') && lower.includes('task') && lower.includes('already') && lower.includes('running')) {
+        const taskMatch =
+          message.match(/Task\\s+([0-9a-fA-F]{16,})\\s+in\\s+progress/i)
+          || message.match(/task[_\\s-]*id\\s*[:=]\\s*([0-9a-fA-F]{16,})/i)
+        return {
+          success: true,
+          data: { taskId: taskMatch?.[1] ?? '' }
+        }
+      }
+
       return {
         success: false,
-        error: this.getErrorMessage(result, '触发图谱构建失败')
+        error: message
       }
     } catch (error) {
       console.error('[TempKbClient] 触发图谱构建异常:', error)
@@ -351,17 +365,35 @@ export class RAGFlowTempKbClient {
 
       if (this.isSuccess(result) && result.data) {
         const data = result.data
-        let status = 'unknown'
-        const progress = data.progress || 0
+        let status: 'building' | 'completed' | 'failed' | 'unknown' = 'unknown'
 
-        // 检查进度
-        if (progress >= 1) {
+        const progressRaw = data.progress ?? 0
+        let progress = typeof progressRaw === 'number' ? progressRaw : Number.parseFloat(String(progressRaw))
+        if (!Number.isFinite(progress)) progress = 0
+        // 兼容 0~100 或 0~1 两种进度形态
+        if (progress > 1 && progress <= 100) progress = progress / 100
+
+        const rawStatus = String(data.status ?? data.state ?? '').trim().toLowerCase()
+        if (rawStatus === 'completed' || rawStatus === 'complete' || rawStatus === 'done') {
           status = 'completed'
-        } else if (data.progress_msg?.includes('fail') || data.progress_msg?.includes('error')) {
+        } else if (rawStatus === 'failed' || rawStatus === 'fail' || rawStatus === 'error') {
           status = 'failed'
-        } else {
+        } else if (rawStatus) {
           status = 'building'
         }
+
+        const progressMsg = String(data.progress_msg ?? data.message ?? data.msg ?? '')
+        const progressMsgLower = progressMsg.toLowerCase()
+        if (progressMsgLower.includes('fail') || progressMsgLower.includes('error')) {
+          status = 'failed'
+        }
+
+        // 如果没有显式 status，则根据进度推断
+        if (status === 'unknown') {
+          status = progress >= 1 ? 'completed' : 'building'
+        }
+
+        if (status === 'completed') progress = 1
 
         console.log('[TempKbClient] 图谱状态:', { status, progress })
         return {

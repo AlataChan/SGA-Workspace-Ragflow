@@ -69,6 +69,7 @@ export default function KnowledgeGraphView({ className, height = 300 }: Knowledg
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [graphData, setGraphData] = useState<GraphData | null>(null)
+  const [graphBuildStatus, setGraphBuildStatus] = useState<{ status: string; progress?: number } | null>(null)
   const [legendOpen, setLegendOpen] = useState(true)
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set())
   const [typeFilterInitialized, setTypeFilterInitialized] = useState(false)
@@ -148,42 +149,127 @@ export default function KnowledgeGraphView({ className, height = 300 }: Knowledg
     return new Set(scored.slice(0, maxLabels).map(s => s.id))
   }, [filteredGraph])
 
-  // 获取图谱数据
-  const fetchGraphData = useCallback(async () => {
+  const fetchGraphStatus = useCallback(async () => {
     try {
-      setIsLoading(true)
-      setError(null)
+      const token = localStorage.getItem('auth-token')
+      if (!token) return null
+
+      const response = await fetch('/api/temp-kb/graph/status', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+
+      const result = await response.json().catch(() => ({}))
+      if (result?.success && result?.data?.status) {
+        return {
+          status: String(result.data.status),
+          progress: typeof result.data.progress === 'number' ? result.data.progress : undefined
+        }
+      }
+      return null
+    } catch {
+      return null
+    }
+  }, [])
+
+  // 获取图谱数据
+  const fetchGraphData = useCallback(async (options?: { showLoading?: boolean }) => {
+    const showLoading = options?.showLoading ?? false
+    try {
+      if (showLoading) setIsLoading(true)
 
       const token = localStorage.getItem('auth-token')
       if (!token) {
-        setError('未登录')
-        return
+        return { ok: false, error: '未登录', nodeCount: 0, edgeCount: 0 }
       }
 
       const response = await fetch('/api/temp-kb/graph', {
         headers: { 'Authorization': `Bearer ${token}` }
       })
 
-      const result = await response.json()
+      const result = await response.json().catch(() => ({}))
 
       if (result.success && result.data?.graph) {
-        setGraphData({
-          nodes: result.data.graph.nodes || [],
-          edges: result.data.graph.edges || []
-        })
-      } else {
-        setError(result.error || '获取图谱数据失败')
+        const nodes = result.data.graph.nodes || []
+        const edges = result.data.graph.edges || []
+
+        setGraphData({ nodes, edges })
+        setError(null)
+
+        return { ok: true, nodeCount: nodes.length, edgeCount: edges.length }
+      }
+
+      return {
+        ok: false,
+        error: result.error || '获取图谱数据失败',
+        nodeCount: 0,
+        edgeCount: 0
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '获取图谱数据异常')
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : '获取图谱数据异常',
+        nodeCount: 0,
+        edgeCount: 0
+      }
     } finally {
-      setIsLoading(false)
+      if (showLoading) setIsLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    fetchGraphData()
-  }, [fetchGraphData])
+    let cancelled = false
+    let pollingTimer: number | null = null
+
+    const tick = async (showLoading = false) => {
+      const status = await fetchGraphStatus()
+      if (cancelled) return
+      if (status) setGraphBuildStatus(status)
+
+      const graphResult = await fetchGraphData({ showLoading })
+      if (cancelled) return
+
+      const isBuilding = status?.status === 'building'
+      const hasGraph = graphResult.ok && (graphResult.nodeCount > 0 || graphResult.edgeCount > 0)
+
+      // 构建中：图谱为空/接口短暂中断时不要报错，继续轮询
+      if (!hasGraph && isBuilding) {
+        setError(null)
+        if (pollingTimer === null) {
+          pollingTimer = window.setInterval(() => tick(false), 5000)
+        }
+        return
+      }
+
+      // 非构建中：若接口明确报错则展示
+      if (!graphResult.ok && graphResult.error) {
+        setError(graphResult.error)
+      }
+
+      // 停止轮询
+      if (pollingTimer !== null) {
+        window.clearInterval(pollingTimer)
+        pollingTimer = null
+      }
+    }
+
+    tick(true)
+    return () => {
+      cancelled = true
+      if (pollingTimer !== null) window.clearInterval(pollingTimer)
+    }
+  }, [fetchGraphData, fetchGraphStatus])
+
+  useEffect(() => {
+    const handler = () => {
+      fetchGraphStatus().then((status) => {
+        if (status) setGraphBuildStatus(status)
+      })
+      fetchGraphData({ showLoading: false })
+    }
+
+    window.addEventListener('temp-kb-graph-built', handler)
+    return () => window.removeEventListener('temp-kb-graph-built', handler)
+  }, [fetchGraphData, fetchGraphStatus])
 
   // D3 力导向图渲染
   useEffect(() => {
@@ -435,16 +521,41 @@ export default function KnowledgeGraphView({ className, height = 300 }: Knowledg
 
   if (isLoading) {
     return (
-      <div className={`flex items-center justify-center h-[300px] rounded-lg border border-slate-800/80 bg-slate-950 ${className}`}>
+      <div
+        className={`flex items-center justify-center rounded-lg border border-slate-800/80 bg-slate-950 ${className}`}
+        style={{ height }}
+      >
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <span className="ml-2 text-slate-300">加载图谱数据...</span>
       </div>
     )
   }
 
+  const buildPercent = graphBuildStatus?.progress !== undefined
+    ? Math.max(0, Math.min(100, Math.round(graphBuildStatus.progress * 100)))
+    : null
+  const isBuilding = graphBuildStatus?.status === 'building'
+
+  if (isBuilding && (!graphData || graphData.nodes.length === 0)) {
+    return (
+      <div
+        className={`flex items-center justify-center rounded-lg border border-slate-800/80 bg-slate-950 ${className}`}
+        style={{ height }}
+      >
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-2 text-slate-300">
+          图谱构建中{buildPercent !== null ? `（${buildPercent}%）` : '…'}
+        </span>
+      </div>
+    )
+  }
+
   if (error) {
     return (
-      <div className={`flex items-center justify-center h-[300px] rounded-lg border border-slate-800/80 bg-slate-950 ${className}`}>
+      <div
+        className={`flex items-center justify-center rounded-lg border border-slate-800/80 bg-slate-950 ${className}`}
+        style={{ height }}
+      >
         <p className="text-rose-400">{error}</p>
       </div>
     )
@@ -452,16 +563,22 @@ export default function KnowledgeGraphView({ className, height = 300 }: Knowledg
 
   if (!graphData || graphData.nodes.length === 0) {
     return (
-      <div className={`flex flex-col items-center justify-center h-[300px] rounded-lg border border-slate-800/80 bg-slate-950 ${className}`}>
+      <div
+        className={`flex flex-col items-center justify-center rounded-lg border border-slate-800/80 bg-slate-950 ${className}`}
+        style={{ height }}
+      >
         <p className="text-slate-300 mb-2">暂无图谱数据</p>
-        <p className="text-slate-400 text-sm">请先构建知识图谱</p>
+        <p className="text-slate-400 text-sm">请先构建知识图谱，或等待构建完成后自动刷新</p>
       </div>
     )
   }
 
   if (filteredGraph && filteredGraph.nodes.length === 0) {
     return (
-      <div className={`flex flex-col items-center justify-center h-[300px] rounded-lg border border-slate-800/80 bg-slate-950 ${className}`}>
+      <div
+        className={`flex flex-col items-center justify-center rounded-lg border border-slate-800/80 bg-slate-950 ${className}`}
+        style={{ height }}
+      >
         <p className="text-slate-300 mb-2">当前筛选无结果</p>
         <Button
           size="sm"
