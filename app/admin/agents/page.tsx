@@ -306,7 +306,7 @@ export default function AgentsPage() {
       }
       const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : ''
 
-      const response = await fetch(`/api/admin/agents${queryString}`)
+      const response = await fetch(`/api/admin/agents${queryString}`, { cache: 'no-cache' })
       if (response.ok) {
         const data = await response.json()
         setAgents(data.data)
