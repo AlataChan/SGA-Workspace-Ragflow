@@ -7,18 +7,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { tempKbService } from '@/lib/services/temp-kb-service'
 import { verifyToken } from '@/lib/auth/jwt'
+import prisma from '@/lib/prisma'
 
 /**
  * 从请求中获取用户ID
  */
-async function getUserId(request: NextRequest): Promise<string | null> {
+async function getAuthPayload(request: NextRequest) {
   const headerToken = request.headers.get('authorization')?.replace('Bearer ', '')
   const cookieToken = request.cookies.get('auth-token')?.value
   const token = headerToken || cookieToken
   if (!token) return null
 
-  const payload = await verifyToken(token)
-  return payload?.userId || null
+  const payload = verifyToken(token)
+  return payload || null
+}
+
+function normalizeRagflowBaseUrl(value: unknown): string {
+  let base = String(value ?? '').trim()
+  base = base.replace(/\/+$/, '')
+  base = base.replace(/\/api\/v1$/i, '')
+  base = base.replace(/\/v1$/i, '')
+  return base.replace(/\/+$/, '')
 }
 
 /**
@@ -27,8 +36,8 @@ async function getUserId(request: NextRequest): Promise<string | null> {
  */
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getUserId(request)
-    if (!userId) {
+    const auth = await getAuthPayload(request)
+    if (!auth?.userId) {
       return NextResponse.json(
         { success: false, error: '未授权' },
         { status: 401 }
@@ -38,7 +47,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get('limit') || '50', 10)
 
-    const result = await tempKbService.getSavedChunks(userId, limit)
+    const result = await tempKbService.getSavedChunks(auth.userId, limit)
     
     return NextResponse.json(result)
   } catch (error) {
@@ -64,8 +73,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getUserId(request)
-    if (!userId) {
+    const auth = await getAuthPayload(request)
+    if (!auth?.userId) {
       return NextResponse.json(
         { success: false, error: '未授权' },
         { status: 401 }
@@ -106,12 +115,55 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 可选：从当前聊天 Agent 读取可用的 RAGFlow 配置，用于创建/更新临时知识库
+    const agentId = typeof body?.agentId === 'string' ? body.agentId : null
+    let ragflowConfig: { baseUrl: string; apiKey: string } | undefined = undefined
+
+    if (agentId) {
+      const agent = await prisma.agent.findFirst({
+        where: {
+          id: agentId,
+          companyId: auth.companyId,
+        },
+        select: {
+          platform: true,
+          platformConfig: true,
+        },
+      })
+
+      if (agent?.platform === 'RAGFLOW') {
+        if (auth.role !== 'ADMIN') {
+          const permission = await prisma.userAgentPermission.findFirst({
+            where: {
+              userId: auth.userId,
+              agentId,
+            },
+            select: { id: true },
+          })
+          if (!permission) {
+            return NextResponse.json(
+              { success: false, error: '无权访问该 Agent' },
+              { status: 403 }
+            )
+          }
+        }
+
+        const platformConfig = agent.platformConfig as Record<string, any> | null
+        const baseUrl = normalizeRagflowBaseUrl(platformConfig?.baseUrl)
+        const apiKey = String(platformConfig?.apiKey || '').trim()
+        if (baseUrl && apiKey) {
+          ragflowConfig = { baseUrl, apiKey }
+        }
+      }
+    }
+
     const result = await tempKbService.saveChunk({
-      userId,
+      userId: auth.userId,
       content: normalizedContent,
       keywords: body.keywords,
       sourceMessageId: body.sourceMessageId,
-      sourceType: body.sourceType
+      sourceType: body.sourceType,
+      ragflowConfig
     })
     
     return NextResponse.json(result)

@@ -3163,6 +3163,7 @@ export default function EnhancedChatWithSidebar({
                               <KnowledgeGraphActions
                                 content={displayContent}
                                 sourceMessageId={message.id}
+                                agentId={agentConfig?.localAgentId}
                                 disabled={isLoading || isStreaming}
                               />
                             </div>

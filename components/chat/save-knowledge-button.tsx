@@ -18,6 +18,8 @@ interface SaveKnowledgeButtonProps {
   content: string
   /** 来源消息ID */
   sourceMessageId?: string
+  /** 可选：当前聊天的本地 Agent ID（用于服务端选取对应的 RAGFlow 配置） */
+  agentId?: string
   /** 来源类型 */
   sourceType?: 'assistant_reply' | 'reference' | 'user_input'
   /** 关键词 */
@@ -41,6 +43,7 @@ interface SaveKnowledgeButtonProps {
 export default function SaveKnowledgeButton({
   content,
   sourceMessageId,
+  agentId,
   sourceType = 'assistant_reply',
   keywords,
   size = 'icon',
@@ -80,6 +83,7 @@ export default function SaveKnowledgeButton({
         body: JSON.stringify({
           content: normalizedContent,
           sourceMessageId,
+          agentId,
           sourceType,
           keywords
         })

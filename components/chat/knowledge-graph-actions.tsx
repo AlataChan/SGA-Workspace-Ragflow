@@ -21,10 +21,11 @@ type BuildState = "idle" | "running" | "done";
 export default function KnowledgeGraphActions(props: {
   content: string;
   sourceMessageId: string;
+  agentId?: string;
   disabled?: boolean;
   className?: string;
 }) {
-  const { content, sourceMessageId, disabled, className } = props;
+  const { content, sourceMessageId, agentId, disabled, className } = props;
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"preview" | "full">("preview");
@@ -78,6 +79,7 @@ export default function KnowledgeGraphActions(props: {
         content: cleanedContent,
         sourceMessageId,
         sourceType: "assistant_reply",
+        agentId,
       }),
     });
 
@@ -226,4 +228,3 @@ export default function KnowledgeGraphActions(props: {
     </>
   );
 }
-

@@ -7,12 +7,22 @@ import prisma from '@/lib/prisma'
 import { RAGFlowTempKbClient, GraphData } from '@/lib/ragflow-temp-kb-client'
 import { TempKbStatus } from '@prisma/client'
 
+export interface TempKbRagflowConfig {
+  baseUrl: string
+  apiKey: string
+}
+
 export interface SaveChunkParams {
   userId: string
   content: string
   keywords?: string[]
   sourceMessageId?: string
   sourceType?: 'assistant_reply' | 'reference' | 'user_input'
+  /**
+   * 可选：使用指定的 RAGFlow 配置创建/更新临时知识库。
+   * 典型场景：用户当前使用的 Agent 绑定了可用的 RAGFlow baseUrl/apiKey，而环境变量未配置或不可用。
+   */
+  ragflowConfig?: TempKbRagflowConfig
 }
 
 export interface SaveChunkResult {
@@ -50,7 +60,6 @@ export interface GetGraphResult {
  * 临时知识库服务类
  */
 export class TempKbService {
-  private client: RAGFlowTempKbClient
   private ragflowUrl: string
   private apiKey: string
 
@@ -61,17 +70,41 @@ export class TempKbService {
     if (!this.ragflowUrl || !this.apiKey) {
       console.warn('[TempKbService] RAGFlow配置缺失')
     }
-    
-    this.client = new RAGFlowTempKbClient({
-      baseUrl: this.ragflowUrl,
-      apiKey: this.apiKey
+  }
+
+  private normalizeRagflowBaseUrl(value: unknown): string {
+    let base = String(value ?? '').trim()
+    base = base.replace(/\/+$/, '')
+    base = base.replace(/\/api\/v1$/i, '')
+    base = base.replace(/\/v1$/i, '')
+    return base.replace(/\/+$/, '')
+  }
+
+  private getEffectiveRagflowConfig(override?: TempKbRagflowConfig): TempKbRagflowConfig | null {
+    const baseUrl = this.normalizeRagflowBaseUrl(override?.baseUrl || this.ragflowUrl || '')
+    const apiKey = String(override?.apiKey || this.apiKey || '').trim()
+    if (!baseUrl || !apiKey) return null
+    return { baseUrl, apiKey }
+  }
+
+  private createClient(config: TempKbRagflowConfig): RAGFlowTempKbClient {
+    return new RAGFlowTempKbClient({
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey
+    })
+  }
+
+  private createClientForTempKb(tempKb: { ragflowUrl: string; apiKey: string }): RAGFlowTempKbClient {
+    return this.createClient({
+      baseUrl: this.normalizeRagflowBaseUrl(tempKb.ragflowUrl),
+      apiKey: tempKb.apiKey
     })
   }
 
   /**
    * 获取或创建用户的临时知识库
    */
-  async getOrCreateTempKb(userId: string): Promise<{
+  async getOrCreateTempKb(userId: string, overrideConfig?: TempKbRagflowConfig): Promise<{
     success: boolean
     data?: TempKbInfo
     error?: string
@@ -84,22 +117,29 @@ export class TempKbService {
 
       // 如果已存在知识库，直接复用（无论状态）
       if (tempKb) {
+        const updateData: Record<string, any> = {
+          lastActiveAt: new Date()
+        }
+
         // 如果状态不是 ACTIVE，更新为 ACTIVE
         if (tempKb.status !== 'ACTIVE') {
-          tempKb = await prisma.userTempKnowledgeBase.update({
-            where: { id: tempKb.id },
-            data: {
-              status: 'ACTIVE',
-              lastActiveAt: new Date()
-            }
-          })
-        } else {
-          // 更新最后活跃时间
-          await prisma.userTempKnowledgeBase.update({
-            where: { id: tempKb.id },
-            data: { lastActiveAt: new Date() }
-          })
+          updateData.status = 'ACTIVE'
         }
+
+        // 如果传入了可用的 RAGFlow 配置，允许覆盖存储配置（修复环境变量/旧配置导致的不可用）
+        if (overrideConfig) {
+          if (overrideConfig.baseUrl && overrideConfig.baseUrl !== tempKb.ragflowUrl) {
+            updateData.ragflowUrl = this.normalizeRagflowBaseUrl(overrideConfig.baseUrl)
+          }
+          if (overrideConfig.apiKey && overrideConfig.apiKey !== tempKb.apiKey) {
+            updateData.apiKey = overrideConfig.apiKey
+          }
+        }
+
+        tempKb = await prisma.userTempKnowledgeBase.update({
+          where: { id: tempKb.id },
+          data: updateData,
+        })
 
         return {
           success: true,
@@ -108,6 +148,14 @@ export class TempKbService {
       }
 
       // 2. 创建新的临时知识库（仅当不存在时）
+      const effectiveConfig = this.getEffectiveRagflowConfig(overrideConfig)
+      if (!effectiveConfig) {
+        return {
+          success: false,
+          error: 'RAGFlow 配置缺失，请检查 RAGFLOW_URL / RAGFLOW_API_KEY 或传入可用的 Agent 配置'
+        }
+      }
+
       const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { username: true, chineseName: true }
@@ -121,8 +169,10 @@ export class TempKbService {
       // 格式: 张三_20251225_1430_temp_kb
       const kbName = `${userName}_${dateStr}_${timeStr}_temp_kb`
 
+      const client = this.createClient(effectiveConfig)
+
       // 在RAGFlow中创建知识库
-      const createResult = await this.client.createDataset({
+      const createResult = await client.createDataset({
         name: kbName,
         description: `用户 ${user?.chineseName || user?.username || userId} 的临时知识图谱 (创建于 ${now.toLocaleString('zh-CN')})`,
         enableGraphRAG: true,
@@ -138,7 +188,7 @@ export class TempKbService {
       }
 
       // 创建虚拟文档
-      const docResult = await this.client.createVirtualDocument(
+      const docResult = await client.createVirtualDocument(
         createResult.data.id,
         'user_saved_knowledge'
       )
@@ -149,8 +199,8 @@ export class TempKbService {
           userId,
           ragflowKbId: createResult.data.id,
           ragflowDocId: docResult.data?.documentId || null,
-          ragflowUrl: this.ragflowUrl,
-          apiKey: this.apiKey,
+          ragflowUrl: this.normalizeRagflowBaseUrl(effectiveConfig.baseUrl),
+          apiKey: effectiveConfig.apiKey,
           status: 'ACTIVE',
           chunkCount: 0,
           nodeCount: 0,
@@ -183,7 +233,7 @@ export class TempKbService {
   async saveChunk(params: SaveChunkParams): Promise<SaveChunkResult> {
     try {
       // 1. 获取或创建临时知识库
-      const kbResult = await this.getOrCreateTempKb(params.userId)
+      const kbResult = await this.getOrCreateTempKb(params.userId, params.ragflowConfig)
       if (!kbResult.success || !kbResult.data) {
         return {
           success: false,
@@ -202,10 +252,12 @@ export class TempKbService {
         }
       }
 
+      const client = this.createClientForTempKb(tempKb)
+
       // 如果虚拟文档未创建，尝试创建
       if (!tempKb.ragflowDocId) {
         console.log('[TempKbService] 虚拟文档未创建，尝试创建...')
-        const docResult = await this.client.createVirtualDocument(
+        const docResult = await client.createVirtualDocument(
           tempKb.ragflowKbId,
           'user_saved_knowledge'
         )
@@ -266,7 +318,7 @@ export class TempKbService {
       }
 
       // 2. 添加到RAGFlow
-      const addResult = await this.client.addChunk({
+      const addResult = await client.addChunk({
         datasetId: tempKb.ragflowKbId,
         documentId: tempKb.ragflowDocId,
         content: params.content,
@@ -344,8 +396,10 @@ export class TempKbService {
         data: { status: 'BUILDING' }
       })
 
+      const client = this.createClientForTempKb(tempKb)
+
       // 触发RAGFlow图谱构建
-      const result = await this.client.runGraphRAG(tempKb.ragflowKbId)
+      const result = await client.runGraphRAG(tempKb.ragflowKbId)
 
       if (!result.success) {
         // 恢复状态
@@ -386,7 +440,8 @@ export class TempKbService {
         }
       }
 
-      const result = await this.client.getGraphRAGStatus(tempKb.ragflowKbId)
+      const client = this.createClientForTempKb(tempKb)
+      const result = await client.getGraphRAGStatus(tempKb.ragflowKbId)
 
       // 如果构建完成，更新状态
       if (result.success && result.data?.status === 'completed') {
@@ -421,7 +476,8 @@ export class TempKbService {
         }
       }
 
-      const result = await this.client.getKnowledgeGraph(tempKb.ragflowKbId)
+      const client = this.createClientForTempKb(tempKb)
+      const result = await client.getKnowledgeGraph(tempKb.ragflowKbId)
 
       // 更新图谱统计
       if (result.success && result.data) {
