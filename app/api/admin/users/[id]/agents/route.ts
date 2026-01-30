@@ -5,10 +5,12 @@
  * DELETE /api/admin/users/[id]/agents/[agentId] - 移除Agent权限
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withAdminAuth } from '@/lib/auth/middleware'
+import type { CurrentUser } from '@/lib/auth/middleware'
 import { z } from 'zod'
+import { getEffectiveAgentIdsForUser } from '@/lib/auth/agent-access'
 
 // CORS headers for cross-origin requests
 const corsHeaders = {
@@ -62,6 +64,19 @@ export const GET = withAdminAuth(async (request, context) => {
       )
     }
 
+    // 管理员用户拥有全部权限：无需返回完整列表，避免大 payload
+    if (targetUser.role === 'ADMIN') {
+      return NextResponse.json({
+        data: {
+          user: targetUser,
+          userAgents: [],
+          availableAgents: [],
+          permissions: [],
+        },
+        message: '获取用户Agent权限成功',
+      }, { headers: corsHeaders })
+    }
+
     // 获取用户的Agent权限
     const userAgentPermissions = await prisma.userAgentPermission.findMany({
       where: {
@@ -88,10 +103,52 @@ export const GET = withAdminAuth(async (request, context) => {
       }
     })
 
-    // 获取所有可用的Agent（用于显示可添加的Agent）
-    const allAgents = await prisma.agent.findMany({
+    // 计算 EffectiveAgents(user)（explicit ∪ policy − revoked）
+    const targetAsCurrentUser: CurrentUser = {
+      userId: targetUser.id,
+      companyId: targetUser.companyId,
+      role: targetUser.role,
+      departmentId: targetUser.departmentId ?? undefined,
+    }
+
+    const { agentIds, sourcesByAgentId, revokedAgentIds } = await getEffectiveAgentIdsForUser(targetAsCurrentUser)
+
+    const effectiveAgents = agentIds.length > 0
+      ? await prisma.agent.findMany({
+          where: {
+            companyId: user.companyId,
+            id: { in: agentIds },
+          },
+          select: {
+            id: true,
+            chineseName: true,
+            englishName: true,
+            position: true,
+            platform: true,
+            isOnline: true,
+            avatarUrl: true,
+            department: {
+              select: {
+                id: true,
+                name: true,
+                icon: true,
+              },
+            },
+          },
+          orderBy: [
+            { department: { sortOrder: 'asc' } },
+            { sortOrder: 'asc' },
+            { createdAt: 'desc' },
+          ],
+        })
+      : []
+
+    // 可添加的 Agent = 所有 Agent − 当前已具备访问权限的 Agent（policy/explicit）
+    // 说明：被撤销的 Agent 不在 effectiveSet 中，会出现在可添加列表，可用于“显式恢复”（POST 会清除撤销黑名单）。
+    const availableAgents = await prisma.agent.findMany({
       where: {
         companyId: user.companyId,
+        ...(agentIds.length > 0 ? { id: { notIn: agentIds } } : {}),
       },
       select: {
         id: true,
@@ -100,31 +157,35 @@ export const GET = withAdminAuth(async (request, context) => {
         position: true,
         platform: true,
         isOnline: true,
+        avatarUrl: true,
         department: {
           select: {
             id: true,
             name: true,
             icon: true,
-          }
-        }
+          },
+        },
       },
       orderBy: [
         { department: { sortOrder: 'asc' } },
         { sortOrder: 'asc' },
-        { createdAt: 'desc' }
-      ]
+        { createdAt: 'desc' },
+      ],
     })
 
-    // 过滤出用户还没有权限的Agent
-    const userAgentIds = userAgentPermissions.map(p => p.agentId)
-    const availableAgents = allAgents.filter(agent => !userAgentIds.includes(agent.id))
+    // 将 accessSource 标注到返回的 userAgents
+    const userAgents = effectiveAgents.map((agent) => ({
+      ...agent,
+      accessSource: sourcesByAgentId[agent.id] ?? 'policy',
+    }))
 
     return NextResponse.json({
       data: {
         user: targetUser,
-        userAgents: userAgentPermissions.map(p => p.agent),
+        userAgents,
         availableAgents: availableAgents,
-        permissions: userAgentPermissions
+        permissions: userAgentPermissions,
+        revokedAgentIds,
       },
       message: '获取用户Agent权限成功'
     }, { headers: corsHeaders })
@@ -331,7 +392,7 @@ export const DELETE = withAdminAuth(async (request, context) => {
       )
     }
 
-    // 检查权限是否存在
+    // 检查权限是否存在（显式授权）
     const existingPermission = await prisma.userAgentPermission.findFirst({
       where: {
         userId: targetUserId,
@@ -339,25 +400,13 @@ export const DELETE = withAdminAuth(async (request, context) => {
       }
     })
 
-    if (!existingPermission) {
-      return NextResponse.json(
-        {
-          error: {
-            code: 'PERMISSION_NOT_FOUND',
-            message: '权限不存在'
-          }
-        },
-        { status: 404, headers: corsHeaders }
-      )
+    // 删除显式权限（如果存在） + 记录撤销黑名单（避免后续部门规则/批量授权恢复）
+    const tx: any[] = []
+    if (existingPermission) {
+      tx.push(prisma.userAgentPermission.delete({ where: { id: existingPermission.id } }))
     }
 
-    // 删除权限 + 记录撤销黑名单（避免后续批量授权恢复）
-    await prisma.$transaction([
-      prisma.userAgentPermission.delete({
-        where: {
-          id: existingPermission.id,
-        }
-      }),
+    tx.push(
       prisma.userAgentPermissionRevocation.upsert({
         where: {
           unique_user_agent_revocation: {
@@ -379,9 +428,12 @@ export const DELETE = withAdminAuth(async (request, context) => {
           reason: null,
         },
       })
-    ])
+    )
+
+    await prisma.$transaction(tx)
 
     return NextResponse.json({
+      data: { explicitDeleted: existingPermission ? 1 : 0, revoked: true },
       message: 'Agent权限移除成功'
     }, { headers: corsHeaders })
 

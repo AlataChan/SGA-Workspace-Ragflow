@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
 import { ChevronDown, ChevronRight, Loader2, Search } from "lucide-react"
+import { toast } from "sonner"
 
 type DepartmentNode = {
   id: string
@@ -40,6 +41,19 @@ type DepartmentGrantPreview = {
   alreadyExplicitCount: number
   alreadyEffectiveCount: number
   usersWillHaveAccess: number
+}
+
+type DepartmentGrantListResponse = {
+  data: {
+    agentId: string
+    grants: Array<{
+      id: string
+      departmentId: string
+      includeSubDepartments: boolean
+      isActive: boolean
+    }>
+  }
+  message: string
 }
 
 type FlatRow = {
@@ -93,6 +107,7 @@ export default function AgentBulkGrantDialog({
 }) {
   const [departments, setDepartments] = useState<DepartmentNode[] | null>(null)
   const [isLoadingDepartments, setIsLoadingDepartments] = useState(false)
+  const [isLoadingExistingGrants, setIsLoadingExistingGrants] = useState(false)
 
   const [search, setSearch] = useState("")
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
@@ -125,6 +140,32 @@ export default function AgentBulkGrantDialog({
     }
   }
 
+  const fetchExistingGrants = async (agentId: string) => {
+    try {
+      setIsLoadingExistingGrants(true)
+
+      const response = await fetch(`/api/admin/agents/${agentId}/department-grants`, { cache: "no-cache" })
+      const json = (await response.json().catch(() => ({}))) as Partial<DepartmentGrantListResponse> & any
+      if (!response.ok) {
+        throw new Error(json?.error?.message || `获取已保存规则失败 (HTTP ${response.status})`)
+      }
+
+      const grants = (json?.data?.grants ?? []) as DepartmentGrantListResponse["data"]["grants"]
+      const activeDeptIds = grants.filter((g) => g.isActive).map((g) => g.departmentId)
+      setSelectedDepartmentIds(new Set(activeDeptIds))
+
+      const uniqueIncludeValues = new Set(grants.filter((g) => g.isActive).map((g) => g.includeSubDepartments))
+      if (uniqueIncludeValues.size === 1) {
+        setIncludeSubDepartments(Array.from(uniqueIncludeValues)[0])
+      }
+    } catch (e) {
+      console.error("获取已保存规则失败:", e)
+      setError(e instanceof Error ? e.message : "获取已保存规则失败")
+    } finally {
+      setIsLoadingExistingGrants(false)
+    }
+  }
+
   useEffect(() => {
     if (!open) return
 
@@ -138,12 +179,15 @@ export default function AgentBulkGrantDialog({
 
     if (!departments) {
       fetchDepartmentTree()
-      return
+    } else {
+      setExpandedIds(new Set(departments.map((d) => d.id)))
     }
 
-    setExpandedIds(new Set(departments.map((d) => d.id)))
+    if (agent) {
+      fetchExistingGrants(agent.id)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [open, agent?.id])
 
   const allDepartments = useMemo(() => {
     if (!departments) return []
@@ -302,7 +346,9 @@ export default function AgentBulkGrantDialog({
       }
 
       setResult(json.data as DepartmentGrantPreview)
+      toast.success("规则已保存")
       onCompleted?.()
+      onOpenChange(false)
     } catch (e) {
       console.error("保存规则失败:", e)
       setError(e instanceof Error ? e.message : "保存规则失败")
@@ -367,6 +413,13 @@ export default function AgentBulkGrantDialog({
                     <div className="flex items-center gap-2 text-sm text-muted-foreground p-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       正在加载部门树…
+                    </div>
+                  )}
+
+                  {!isLoadingDepartments && isLoadingExistingGrants && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground p-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      正在加载已保存规则…
                     </div>
                   )}
 

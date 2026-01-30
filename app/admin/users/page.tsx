@@ -1116,8 +1116,18 @@ export default function UsersPage() {
                                         </AvatarFallback>
                                       </Avatar>
                                       <div>
-                                        <div className="text-sm font-medium text-foreground">
+                                        <div className="text-sm font-medium text-foreground flex items-center gap-2">
                                           {agent.chineseName}
+                                          {agent.accessSource === 'policy' && (
+                                            <Badge variant="secondary" className="text-xs">
+                                              部门规则
+                                            </Badge>
+                                          )}
+                                          {agent.accessSource === 'explicit' && (
+                                            <Badge variant="outline" className="text-xs">
+                                              显式
+                                            </Badge>
+                                          )}
                                         </div>
                                         <div className="text-xs text-muted-foreground">
                                           {agent.position} • {agent.department?.name}
