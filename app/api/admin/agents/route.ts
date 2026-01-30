@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withAdminAuth } from '@/lib/auth/middleware'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 
 // CORS headers for cross-origin requests
 const corsHeaders = {
@@ -125,9 +126,81 @@ export const GET = withAdminAuth(async (request) => {
       ]
     })
 
+    // 计算每个 Agent 的“有效可访问用户数”（显式 ∪ 部门规则 − 撤销黑名单）
+    const effectiveUserCounts = await prisma.$queryRaw<Array<{ agentId: string; userCount: bigint | number | string }>>(
+      Prisma.sql`
+WITH RECURSIVE covered_departments AS (
+  SELECT g.agent_id AS agent_id, g.department_id AS department_id, g.include_sub_departments AS include_sub
+  FROM agent_department_grants g
+  WHERE g.company_id = ${user.companyId} AND g.is_active = true
+
+  UNION ALL
+
+  SELECT cd.agent_id AS agent_id, d.id AS department_id, cd.include_sub AS include_sub
+  FROM covered_departments cd
+  JOIN departments d
+    ON d.parent_id = cd.department_id
+   AND d.company_id = ${user.companyId}
+  WHERE cd.include_sub = true
+),
+active_revocations AS (
+  SELECT r.user_id AS user_id, r.agent_id AS agent_id
+  FROM user_agent_permission_revocations r
+  WHERE r.is_active = true AND (r.expires_at IS NULL OR r.expires_at > NOW())
+),
+policy_access AS (
+  SELECT DISTINCT u.id AS user_id, cd.agent_id AS agent_id
+  FROM covered_departments cd
+  JOIN users u
+    ON u.department_id = cd.department_id
+   AND u.company_id = ${user.companyId}
+  JOIN departments dep
+    ON dep.id = u.department_id
+   AND dep.company_id = ${user.companyId}
+  WHERE u.role = 'USER' AND u.is_active = true AND dep.is_active = true
+),
+explicit_access AS (
+  SELECT DISTINCT p.user_id AS user_id, p.agent_id AS agent_id
+  FROM user_agent_permissions p
+  JOIN users u
+    ON u.id = p.user_id
+   AND u.company_id = ${user.companyId}
+  LEFT JOIN departments dep
+    ON dep.id = u.department_id
+   AND dep.company_id = ${user.companyId}
+  WHERE u.role = 'USER' AND u.is_active = true AND (u.department_id IS NULL OR dep.is_active = true)
+),
+combined_access AS (
+  SELECT user_id, agent_id FROM policy_access
+  UNION
+  SELECT user_id, agent_id FROM explicit_access
+),
+filtered_access AS (
+  SELECT ca.user_id AS user_id, ca.agent_id AS agent_id
+  FROM combined_access ca
+  JOIN agents a
+    ON a.id = ca.agent_id
+   AND a.company_id = ${user.companyId}
+  LEFT JOIN active_revocations r
+    ON r.user_id = ca.user_id AND r.agent_id = ca.agent_id
+  WHERE r.user_id IS NULL
+)
+SELECT agent_id AS "agentId", COUNT(DISTINCT user_id) AS "userCount"
+FROM filtered_access
+GROUP BY agent_id
+      `
+    )
+    const effectiveCountByAgentId = new Map<string, number>()
+    for (const row of effectiveUserCounts) {
+      effectiveCountByAgentId.set(row.agentId, Number(row.userCount))
+    }
+
     const agentsWithPermissionCounts = agents.map(({ _count, ...agent }) => ({
       ...agent,
-      userPermissionsCount: _count.userPermissions,
+      // NOTE: 这里展示“有效可访问用户数”（包含部门授权规则）。
+      // 显式授权数量仍然保留在 explicitUserPermissionsCount 中，便于后续排查。
+      userPermissionsCount: effectiveCountByAgentId.get(agent.id) ?? 0,
+      explicitUserPermissionsCount: _count.userPermissions,
     }))
 
     // 统计信息

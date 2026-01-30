@@ -640,7 +640,7 @@ export default function AgentsPage() {
     if (agent.userPermissionsCount > 0) {
       setMessage({
         type: 'error',
-        text: `Agent还有 ${agent.userPermissionsCount} 个用户权限，请先移除这些权限`
+        text: `Agent还有 ${agent.userPermissionsCount} 个可访问用户（含部门规则），请先撤销授权/停用规则`
       })
       return
     }
