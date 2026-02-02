@@ -81,6 +81,20 @@ export class RAGFlowTempKbClient {
     }
   }
 
+  private isSuccess(result: any): boolean {
+    return result?.code === 0 || result?.retcode === 0
+  }
+
+  private getErrorMessage(result: any, fallback: string): string {
+    return (
+      result?.message ||
+      result?.retmsg ||
+      result?.retMsg ||
+      result?.error ||
+      fallback
+    )
+  }
+
   /**
    * 创建临时知识库（启用GraphRAG）
    */
@@ -121,9 +135,9 @@ export class RAGFlowTempKbClient {
         signal: AbortSignal.timeout(30000)
       })
 
-      const result = await response.json()
+      const result = await response.json().catch(() => ({}))
 
-      if (result.code === 0 && result.data) {
+      if (this.isSuccess(result) && result.data) {
         console.log('[TempKbClient] 知识库创建成功:', result.data.id)
         return {
           success: true,
@@ -136,7 +150,7 @@ export class RAGFlowTempKbClient {
 
       return {
         success: false,
-        error: result.message || '创建知识库失败'
+        error: this.getErrorMessage(result, '创建知识库失败')
       }
     } catch (error) {
       console.error('[TempKbClient] 创建知识库异常:', error)
@@ -179,11 +193,22 @@ export class RAGFlowTempKbClient {
         signal: AbortSignal.timeout(30000)
       })
 
-      const result = await response.json()
+      const result = await response.json().catch(() => ({}))
       console.log('[TempKbClient] 上传文档结果:', result)
 
-      if (result.code === 0 && result.data && result.data.length > 0) {
-        const documentId = result.data[0].id
+      if (this.isSuccess(result) && result.data) {
+        const data = result.data
+        const documentId = Array.isArray(data)
+          ? data?.[0]?.id
+          : (data?.id || data?.document_id || data?.documentId || data?.data?.[0]?.id)
+
+        if (!documentId) {
+          return {
+            success: false,
+            error: this.getErrorMessage(result, '上传初始文档失败: 未返回documentId')
+          }
+        }
+
         console.log('[TempKbClient] 获取到 document_id:', documentId)
         return {
           success: true,
@@ -193,7 +218,7 @@ export class RAGFlowTempKbClient {
 
       return {
         success: false,
-        error: result.message || '上传初始文档失败'
+        error: this.getErrorMessage(result, '上传初始文档失败')
       }
     } catch (error) {
       console.error('[TempKbClient] 创建初始文档异常:', error)
@@ -230,9 +255,9 @@ export class RAGFlowTempKbClient {
         signal: AbortSignal.timeout(30000)
       })
 
-      const result = await response.json()
+      const result = await response.json().catch(() => ({}))
 
-      if (result.code === 0 && result.data) {
+      if (this.isSuccess(result) && result.data) {
         console.log('[TempKbClient] 知识片段添加成功')
         return {
           success: true,
@@ -244,7 +269,7 @@ export class RAGFlowTempKbClient {
 
       return {
         success: false,
-        error: result.message || '添加知识片段失败'
+        error: this.getErrorMessage(result, '添加知识片段失败')
       }
     } catch (error) {
       console.error('[TempKbClient] 添加知识片段异常:', error)
@@ -277,21 +302,35 @@ export class RAGFlowTempKbClient {
         signal: AbortSignal.timeout(30000)
       })
 
-      const result = await response.json()
+      const result = await response.json().catch(() => ({}))
 
-      if (result.code === 0) {
-        console.log('[TempKbClient] 图谱构建已触发:', result.data?.graphrag_task_id)
+      if (this.isSuccess(result)) {
+        console.log('[TempKbClient] 图谱构建已触发:', result.data?.graphrag_task_id || result.data?.task_id)
         return {
           success: true,
           data: {
-            taskId: result.data?.graphrag_task_id || ''
+            taskId: result.data?.graphrag_task_id || result.data?.task_id || ''
           }
+        }
+      }
+
+      // RAGFlow 在已有任务运行中时，可能会返回非 0 code 但 message 表示“Graph Task is already running”
+      // 这种情况应视为幂等成功，前端继续轮询 status 即可。
+      const message = this.getErrorMessage(result, '触发图谱构建失败')
+      const lower = message.toLowerCase()
+      if (lower.includes('graph') && lower.includes('task') && lower.includes('already') && lower.includes('running')) {
+        const taskMatch =
+          message.match(/Task\\s+([0-9a-fA-F]{16,})\\s+in\\s+progress/i)
+          || message.match(/task[_\\s-]*id\\s*[:=]\\s*([0-9a-fA-F]{16,})/i)
+        return {
+          success: true,
+          data: { taskId: taskMatch?.[1] ?? '' }
         }
       }
 
       return {
         success: false,
-        error: result.message || '触发图谱构建失败'
+        error: message
       }
     } catch (error) {
       console.error('[TempKbClient] 触发图谱构建异常:', error)
@@ -321,22 +360,40 @@ export class RAGFlowTempKbClient {
         signal: AbortSignal.timeout(30000)
       })
 
-      const result = await response.json()
+      const result = await response.json().catch(() => ({}))
       console.log('[TempKbClient] 图谱构建状态响应:', JSON.stringify(result).slice(0, 200))
 
-      if (result.code === 0 && result.data) {
+      if (this.isSuccess(result) && result.data) {
         const data = result.data
-        let status = 'unknown'
-        const progress = data.progress || 0
+        let status: 'building' | 'completed' | 'failed' | 'unknown' = 'unknown'
 
-        // 检查进度
-        if (progress >= 1) {
+        const progressRaw = data.progress ?? 0
+        let progress = typeof progressRaw === 'number' ? progressRaw : Number.parseFloat(String(progressRaw))
+        if (!Number.isFinite(progress)) progress = 0
+        // 兼容 0~100 或 0~1 两种进度形态
+        if (progress > 1 && progress <= 100) progress = progress / 100
+
+        const rawStatus = String(data.status ?? data.state ?? '').trim().toLowerCase()
+        if (rawStatus === 'completed' || rawStatus === 'complete' || rawStatus === 'done') {
           status = 'completed'
-        } else if (data.progress_msg?.includes('fail') || data.progress_msg?.includes('error')) {
+        } else if (rawStatus === 'failed' || rawStatus === 'fail' || rawStatus === 'error') {
           status = 'failed'
-        } else {
+        } else if (rawStatus) {
           status = 'building'
         }
+
+        const progressMsg = String(data.progress_msg ?? data.message ?? data.msg ?? '')
+        const progressMsgLower = progressMsg.toLowerCase()
+        if (progressMsgLower.includes('fail') || progressMsgLower.includes('error')) {
+          status = 'failed'
+        }
+
+        // 如果没有显式 status，则根据进度推断
+        if (status === 'unknown') {
+          status = progress >= 1 ? 'completed' : 'building'
+        }
+
+        if (status === 'completed') progress = 1
 
         console.log('[TempKbClient] 图谱状态:', { status, progress })
         return {
@@ -346,7 +403,7 @@ export class RAGFlowTempKbClient {
       }
 
       // 如果 API 返回错误码，可能是没有构建任务
-      if (result.code === 102 || result.message?.includes('not found')) {
+      if (result.code === 102 || result.retcode === 102 || this.getErrorMessage(result, '').includes('not found')) {
         return {
           success: true,
           data: { status: 'completed', progress: 1 }
@@ -355,7 +412,7 @@ export class RAGFlowTempKbClient {
 
       return {
         success: false,
-        error: result.message || '获取构建状态失败'
+        error: this.getErrorMessage(result, '获取构建状态失败')
       }
     } catch (error) {
       console.error('[TempKbClient] 获取图谱状态异常:', error)
@@ -383,10 +440,10 @@ export class RAGFlowTempKbClient {
         signal: AbortSignal.timeout(60000)
       })
 
-      const result = await response.json()
+      const result = await response.json().catch(() => ({}))
       console.log('[TempKbClient] 知识图谱原始响应:', JSON.stringify(result).slice(0, 500))
 
-      if (result.code === 0) {
+      if (this.isSuccess(result)) {
         // RAGFlow 可能返回 result.data 直接是图谱，也可能是 result.data.graph
         const graph = result.data?.graph || result.data || {}
         const nodes = graph.nodes || graph.entity || []
@@ -408,7 +465,7 @@ export class RAGFlowTempKbClient {
 
       return {
         success: false,
-        error: result.message || '获取知识图谱失败'
+        error: this.getErrorMessage(result, '获取知识图谱失败')
       }
     } catch (error) {
       console.error('[TempKbClient] 获取知识图谱异常:', error)
@@ -443,16 +500,16 @@ export class RAGFlowTempKbClient {
         signal: AbortSignal.timeout(30000)
       })
 
-      const result = await response.json()
+      const result = await response.json().catch(() => ({}))
 
-      if (result.code === 0) {
+      if (this.isSuccess(result)) {
         console.log('[TempKbClient] 知识库删除成功')
         return { success: true }
       }
 
       return {
         success: false,
-        error: result.message || '删除知识库失败'
+        error: this.getErrorMessage(result, '删除知识库失败')
       }
     } catch (error) {
       console.error('[TempKbClient] 删除知识库异常:', error)
@@ -482,9 +539,9 @@ export class RAGFlowTempKbClient {
         signal: AbortSignal.timeout(30000)
       })
 
-      const result = await response.json()
+      const result = await response.json().catch(() => ({}))
 
-      if (result.code === 0) {
+      if (this.isSuccess(result)) {
         return {
           success: true,
           data: result.data || []
@@ -493,7 +550,7 @@ export class RAGFlowTempKbClient {
 
       return {
         success: false,
-        error: result.message || '获取文档列表失败'
+        error: this.getErrorMessage(result, '获取文档列表失败')
       }
     } catch (error) {
       return {

@@ -173,6 +173,25 @@ const TypingIndicator = () => (
   </div>
 )
 
+function mergeStreamingText(prev: string, nextChunk: string) {
+  if (!nextChunk) return prev
+  if (!prev) return nextChunk
+  if (nextChunk.startsWith(prev)) return nextChunk
+  if (prev.startsWith(nextChunk)) return prev
+
+  const includedIndex = nextChunk.indexOf(prev)
+  if (includedIndex >= 0) return nextChunk
+
+  const maxOverlap = Math.min(prev.length, nextChunk.length)
+  for (let overlap = maxOverlap; overlap > 0; overlap--) {
+    if (prev.slice(-overlap) === nextChunk.slice(0, overlap)) {
+      return prev + nextChunk.slice(overlap)
+    }
+  }
+
+  return prev + nextChunk
+}
+
 // 提取下载链接的函数 - 支持DIFY格式的URL
 const extractFileLinks = (content: string) => {
   const fileExtensions = ['doc', 'docx', 'pdf', 'xlsx', 'xls', 'ppt', 'pptx', 'mp4', 'mp3', 'wav', 'avi', 'mov', 'zip', 'rar', '7z', 'txt', 'csv', 'json', 'xml', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']
@@ -306,12 +325,17 @@ const EnhancedMessageContent: React.FC<EnhancedMessageContentProps> = ({ content
     if (!src) return ''
 
     try {
-      const result = marked.parse(src)
+      const rewritten =
+        src
+          .replaceAll("https://cdn.jsdelivr.net/gh/foyer-work/cdn-files@latest/quill/config.json", "/quill/config.json")
+          .replaceAll("https://fastly.jsdelivr.net/gh/foyer-work/cdn-files@latest/quill/config.json", "/quill/config.json")
+
+      const result = marked.parse(rewritten)
 
       // 如果返回Promise,降级处理
       if (result instanceof Promise) {
         console.error('[EnhancedMessageContent] marked.parse 返回了Promise,降级处理')
-        return src.replace(/\n/g, '<br>')
+        return rewritten.replace(/\n/g, '<br>')
       }
 
       // 确保是字符串
@@ -320,7 +344,7 @@ const EnhancedMessageContent: React.FC<EnhancedMessageContentProps> = ({ content
       }
 
       console.warn('[EnhancedMessageContent] marked.parse 返回了非字符串:', typeof result)
-      return src.replace(/\n/g, '<br>')
+      return rewritten.replace(/\n/g, '<br>')
     } catch (error) {
       console.error('[EnhancedMessageContent] Markdown解析失败:', error)
       return src.replace(/\n/g, '<br>')
@@ -1377,24 +1401,8 @@ export default function EnhancedChatWithSidebar({
     }
   }, [agentConfig, agentName, actualAgentAvatar])
 
-  // 初始化时获取历史对话
-  useEffect(() => {
-    if (agentConfig?.platform === 'DIFY') {
-      if (agentConfig?.difyUrl && agentConfig?.difyKey) fetchHistoryConversations()
-      return
-    }
-
-    if (agentConfig?.platform === 'RAGFLOW') {
-      if (agentConfig?.localAgentId || agentConfig?.agentId) fetchHistoryConversations()
-    }
-  }, [
-    agentConfig?.platform,
-    agentConfig?.difyUrl,
-    agentConfig?.difyKey,
-    agentConfig?.agentId,
-    agentConfig?.localAgentId,
-    fetchHistoryConversations
-  ])
+  // 历史对话刷新逻辑放到“客户端初始化”useEffect 内部执行：
+  // 这样可以确保 RAGFlow 代理客户端（ragflowProxyClientRef）已就绪，避免首次进入聊天页走旧回退接口导致“看起来没刷新”。
 
   // 支持通过 URL 等方式直达某个会话
   const initialConversationLoadedRef = useRef(false)
@@ -1470,9 +1478,13 @@ export default function EnhancedChatWithSidebar({
   const upsertLocalChatSession = async (sessionId: string, sessionName: string) => {
     if (!agentConfig?.localAgentId) return
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null
       await fetch('/api/chat-sessions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           id: sessionId,
           agentId: agentConfig.localAgentId,
@@ -1492,9 +1504,13 @@ export default function EnhancedChatWithSidebar({
   ) => {
     if (!agentConfig?.localAgentId) return
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null
       await fetch(`/api/chat-sessions/${encodeURIComponent(sessionId)}/messages`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ role, content, metadata })
       })
     } catch (error) {
@@ -1504,9 +1520,13 @@ export default function EnhancedChatWithSidebar({
 
   const loadLocalAssistantReferences = async (sessionId: string): Promise<Map<string, any>> => {
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null
       const resp = await fetch(`/api/chat-sessions/${encodeURIComponent(sessionId)}/messages`, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
       })
       if (!resp.ok) return new Map()
       const data = await resp.json().catch(() => ({}))
@@ -1731,6 +1751,7 @@ export default function EnhancedChatWithSidebar({
     // 清理之前的客户端
     difyClientRef.current = null
     ragflowClientRef.current = null
+    ragflowProxyClientRef.current = null
 
     if (!agentConfig?.platform || !agentConfig?.userId) {
       console.warn('[EnhancedChat] Agent配置不完整，缺少平台或用户ID')
@@ -1772,7 +1793,20 @@ export default function EnhancedChatWithSidebar({
         console.warn('[EnhancedChat] RAGFlow 配置不完整')
       }
     }
-  }, [agentConfig?.platform, agentConfig?.difyUrl, agentConfig?.difyKey, agentConfig?.baseUrl, agentConfig?.apiKey, agentConfig?.agentId, agentConfig?.userId, agentConfig?.localAgentId])
+    // 每次进入聊天界面（或切换 Agent）都强制刷新历史对话列表，避免缓存/回退接口导致看起来“没刷新”
+    historyCacheRef.current.lastFetch = 0
+    fetchHistoryConversations(true, false)
+  }, [
+    agentConfig?.platform,
+    agentConfig?.difyUrl,
+    agentConfig?.difyKey,
+    agentConfig?.baseUrl,
+    agentConfig?.apiKey,
+    agentConfig?.agentId,
+    agentConfig?.userId,
+    agentConfig?.localAgentId,
+    fetchHistoryConversations,
+  ])
 
   // 上次发送时间
   const lastSendTimeRef = useRef<number>(0)
@@ -2015,7 +2049,7 @@ export default function EnhancedChatWithSidebar({
       return null
     }).filter(Boolean) as DifyFile[]
 
-    await difyClientRef.current!.sendMessage(
+  await difyClientRef.current!.sendMessage(
       messageContent,
       (message: DifyStreamMessage) => {
         console.log('[EnhancedChat] 收到流式消息:', message)
@@ -2025,7 +2059,7 @@ export default function EnhancedChatWithSidebar({
             // 累积流式内容 - 确保内容是字符串
             const contentToAdd = message.content
             if (typeof contentToAdd === 'string' && contentToAdd.length > 0) {
-              fullContent += contentToAdd
+              fullContent = mergeStreamingText(fullContent, contentToAdd)
               console.log('[EnhancedChat] 累积内容:', {
                 newContent: contentToAdd,
                 fullContentLength: fullContent.length,
@@ -2993,7 +3027,7 @@ export default function EnhancedChatWithSidebar({
           </div>
 
           <ScrollArea className="flex-1 p-3 sm:p-4 md:p-6">
-            <div key={currentSessionId} className="space-y-6 w-full">
+            <div key={currentSessionId} className="space-y-6 w-full min-w-0 overflow-x-auto">
               {currentSession?.messages.map((message) => {
                 const isUser = message.role === 'user'
                 const rawContent = safeStringifyContent(message.content)
@@ -3002,10 +3036,11 @@ export default function EnhancedChatWithSidebar({
                   ? stripRagflowInlineReferenceMarkers(rawContent)
                   : rawContent
                 const hasInlineReferenceMarkers = shouldStripRagflowIds && hasRagflowInlineReferenceMarkers(rawContent)
+                const streamingAnswer = !isUser ? splitThinkTags(displayContent).answer : displayContent
 
                 return (
                   <div key={message.id} className={`flex w-full ${isUser ? 'justify-end pr-2 sm:pr-8' : 'justify-start pl-2 sm:pl-8'} mb-6`}>
-                    <div className={`flex ${isUser ? 'flex-row-reverse' : 'flex-row'} items-start space-x-3 sm:space-x-4 ${isUser ? 'space-x-reverse' : ''} max-w-[92%] sm:max-w-[85%] lg:max-w-[75%]`}>
+                    <div className={`flex min-w-0 ${isUser ? 'flex-row-reverse' : 'flex-row'} items-start space-x-3 sm:space-x-4 ${isUser ? 'space-x-reverse' : ''} max-w-[92%] sm:max-w-[85%] lg:max-w-[75%]`}>
                       <Avatar className="w-9 h-9 sm:w-[50px] sm:h-[50px] flex-shrink-0 mt-1">
                         <AvatarImage src={isUser ? actualUserAvatar : actualAgentAvatar} />
                           <AvatarFallback className={`text-white text-lg ${isUser
@@ -3017,12 +3052,12 @@ export default function EnhancedChatWithSidebar({
                       </Avatar>
 
                       <div className="flex-1 min-w-0">
-                        <div className={`rounded-xl px-4 py-3 text-base leading-relaxed ${isUser
+                        <div className={`min-w-0 max-w-full overflow-x-auto rounded-xl px-4 py-3 text-base leading-relaxed ${isUser
                           ? 'bg-primary text-primary-foreground shadow-lg user-message'
                           : 'bg-card text-foreground border border-border shadow-sm'
                           }`} style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                           {message.isStreaming ? (
-                            (message as any).isThinking || !message.content ? (
+                            (message as any).isThinking || !streamingAnswer ? (
                               <TypingIndicator />
                             ) : (
                               <>
@@ -3032,7 +3067,7 @@ export default function EnhancedChatWithSidebar({
                                   content: message.content,
                                   safeContent: rawContent
                                 })}
-                                <TypewriterEffect content={displayContent} speed={20} />
+                                <TypewriterEffect content={streamingAnswer} speed={20} />
                               </>
                             )
                           ) : (
@@ -3123,6 +3158,7 @@ export default function EnhancedChatWithSidebar({
                               <KnowledgeGraphActions
                                 content={displayContent}
                                 sourceMessageId={message.id}
+                                agentId={agentConfig?.localAgentId}
                                 disabled={isLoading || isStreaming}
                               />
                             </div>

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withAuth } from '@/lib/auth/middleware'
+import { getEffectiveAgentIdsForUser } from '@/lib/auth/agent-access'
 
 // CORS headers
 const corsHeaders = {
@@ -107,32 +108,45 @@ export const GET = withAuth(async (request) => {
       }, { headers: corsHeaders })
     }
 
-    // 普通用户：获取有权限的Agent
-    const userAgentPermissions = await prisma.userAgentPermission.findMany({
+    // 普通用户：返回 EffectiveAgents(user)（explicit ∪ policy − revoked）
+    const { agentIds, sourcesByAgentId } = await getEffectiveAgentIdsForUser(user)
+
+    if (agentIds.length === 0) {
+      return NextResponse.json({
+        data: {
+          agents: [],
+          departments: [],
+          isAdmin: false,
+        },
+        message: '获取Agent列表成功',
+      }, { headers: corsHeaders })
+    }
+
+    const userAgents = await prisma.agent.findMany({
       where: {
-        userId: user.userId, // 使用userId而不是id
+        companyId: user.companyId,
+        id: { in: agentIds },
       },
       include: {
-        agent: {
-          include: {
-            department: {
-              select: {
-                id: true,
-                name: true,
-                icon: true,
-                sortOrder: true,
-              }
-            }
-          }
-        }
-      }
+        department: {
+          select: {
+            id: true,
+            name: true,
+            icon: true,
+            sortOrder: true,
+          },
+        },
+      },
+      orderBy: [
+        { department: { sortOrder: 'asc' } },
+        { sortOrder: 'asc' },
+        { createdAt: 'desc' },
+      ],
     })
-
-    const userAgents = userAgentPermissions.map(p => p.agent)
 
     // 处理Agent数据，提取平台配置到兼容字段
     const processedUserAgents = userAgents.map(agent => {
-      const processed = { ...agent }
+      const processed: any = { ...agent, accessSource: sourcesByAgentId[agent.id] }
 
       console.log(`[API] 处理用户Agent ${agent.chineseName}:`, {
         id: agent.id,

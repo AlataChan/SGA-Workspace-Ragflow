@@ -21,10 +21,11 @@ type BuildState = "idle" | "running" | "done";
 export default function KnowledgeGraphActions(props: {
   content: string;
   sourceMessageId: string;
+  agentId?: string;
   disabled?: boolean;
   className?: string;
 }) {
-  const { content, sourceMessageId, disabled, className } = props;
+  const { content, sourceMessageId, agentId, disabled, className } = props;
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"preview" | "full">("preview");
@@ -78,6 +79,7 @@ export default function KnowledgeGraphActions(props: {
         content: cleanedContent,
         sourceMessageId,
         sourceType: "assistant_reply",
+        agentId,
       }),
     });
 
@@ -142,6 +144,7 @@ export default function KnowledgeGraphActions(props: {
             if (status.ok) {
               setBuildState("done");
               toast.success("图谱生成成功");
+              window.dispatchEvent(new Event("temp-kb-graph-built"));
             } else {
               setBuildState("idle");
               toast.error("图谱生成失败");
@@ -226,4 +229,3 @@ export default function KnowledgeGraphActions(props: {
     </>
   );
 }
-

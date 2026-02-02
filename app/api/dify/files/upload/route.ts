@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withAuth, type AuthenticatedRequest } from "@/lib/auth/middleware";
+import { canUserAccessAgent } from "@/lib/auth/agent-access";
 import prisma from "@/lib/prisma";
 
 // CORS headers
@@ -77,16 +78,8 @@ async function resolveDifyConfigByAgentId(agentId: string, request: Authenticate
   }
 
   if (user.role !== "ADMIN") {
-    const permission = await prisma.userAgentPermission.findUnique({
-      where: {
-        unique_user_agent: {
-          userId: user.userId,
-          agentId,
-        },
-      },
-      select: { id: true },
-    });
-    if (!permission) {
+    const hasAccess = await canUserAccessAgent(user, agentId);
+    if (!hasAccess) {
       return { ok: false as const, status: 403, message: "无权访问该 Agent" };
     }
   }

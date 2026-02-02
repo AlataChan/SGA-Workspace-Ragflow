@@ -42,7 +42,7 @@ function buildPreviewUrl(datasetId: string, documentId: string, documentName: st
 
 interface RAGFlowChunk {
   id: string
-  content: string
+  content?: string | null
   document_id: string
   document_name: string
   dataset_id: string
@@ -94,11 +94,14 @@ export default function RAGFlowReferenceCard({
     const document_name =
       chunk.document_name ?? chunk.doc_name ?? chunk.documentName ?? chunk.docName ?? chunk.documentNAME ?? ''
     const dataset_id = chunk.dataset_id ?? chunk.datasetId ?? datasetId ?? ''
+    const contentRaw = chunk.content ?? chunk.text ?? chunk.chunk_content ?? ''
+    const content = typeof contentRaw === 'string' ? contentRaw : ''
     return {
       ...chunk,
       document_id,
       document_name,
       dataset_id,
+      content,
       img_id: chunk.img_id ?? chunk.image_id ?? chunk.imgId ?? chunk.imageId,
       image_id: chunk.image_id ?? chunk.img_id ?? chunk.imageId ?? chunk.imgId,
     }
@@ -189,6 +192,7 @@ export default function RAGFlowReferenceCard({
               ? buildPreviewUrl(chunk.dataset_id, chunk.document_id, chunk.document_name, chunk.positions)
               : null
             const page = inferPdfPage(chunk.positions)
+            const content = typeof chunk.content === "string" ? chunk.content : ""
 
             return (
               <div
@@ -243,7 +247,7 @@ export default function RAGFlowReferenceCard({
                 </div>
 
                 <div className="text-sm text-gray-700 dark:text-gray-300 mb-2">
-                  {isChunkExpanded ? chunk.content : truncateContent(chunk.content)}
+                  {content ? (isChunkExpanded ? content : truncateContent(content)) : "无内容"}
 
                   {/* 显示引用截图 */}
                   {(chunk.img_id || chunk.image_id) && agentId && isChunkExpanded && (
@@ -267,7 +271,7 @@ export default function RAGFlowReferenceCard({
                   </div>
 
                   <div className="flex items-center gap-1">
-                    {(chunk.content.length > 150 || chunk.img_id || chunk.image_id) && (
+                    {(content.length > 150 || chunk.img_id || chunk.image_id) && (
                       <Button
                         variant="ghost"
                         size="sm"

@@ -4,6 +4,7 @@
 
 -- 启用必要的扩展
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 CREATE EXTENSION IF NOT EXISTS "btree_gin";
 
@@ -19,6 +20,9 @@ CREATE TYPE "AgentPlatform" AS ENUM ('DIFY', 'RAGFLOW', 'HIAGENT', 'OPENAI', 'CL
 
 -- 消息角色枚举
 CREATE TYPE "MessageRole" AS ENUM ('USER', 'ASSISTANT');
+
+-- 临时知识库状态枚举
+CREATE TYPE "TempKbStatus" AS ENUM ('ACTIVE', 'BUILDING', 'EXPIRED', 'PERSISTENT');
 
 -- ===========================================
 -- 核心业务表
@@ -43,9 +47,9 @@ CREATE TABLE departments (
     icon VARCHAR(100),
     sort_order INTEGER NOT NULL DEFAULT 0,
     is_active BOOLEAN NOT NULL DEFAULT true,
+    parent_sids TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- 用户表
@@ -116,6 +120,38 @@ CREATE TABLE user_agent_permissions (
     CONSTRAINT "unique_user_agent" UNIQUE (user_id, agent_id)
 );
 
+-- 用户 Agent 权限撤销表（用于审计/临时禁用等场景）
+CREATE TABLE user_agent_permission_revocations (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+
+    revoked_by TEXT NOT NULL,
+    revoked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    reason TEXT,
+
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    expires_at TIMESTAMPTZ,
+
+    CONSTRAINT "unique_user_agent_revocation" UNIQUE (user_id, agent_id)
+);
+
+-- Agent 按部门授权表（支持授权部门及其子部门）
+CREATE TABLE agent_department_grants (
+    id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    department_id TEXT NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+    include_sub_departments BOOLEAN NOT NULL DEFAULT true,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+
+    created_by TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT "unique_agent_department_grant" UNIQUE (agent_id, department_id)
+);
+
 -- ===========================================
 -- 知识图谱系统表
 -- ===========================================
@@ -150,6 +186,43 @@ CREATE TABLE user_knowledge_graph_permissions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     
     CONSTRAINT "userId_knowledgeGraphId" UNIQUE (user_id, knowledge_graph_id)
+);
+
+-- ===========================================
+-- 临时知识库（用户侧）表
+-- ===========================================
+
+-- 用户临时知识库（RAGFlow dataset + 虚拟文档）
+CREATE TABLE user_temp_knowledge_bases (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    ragflow_kb_id VARCHAR(255) NOT NULL,
+    ragflow_doc_id VARCHAR(255),
+    ragflow_url VARCHAR(500) NOT NULL,
+    api_key VARCHAR(500) NOT NULL,
+    session_id TEXT,
+    chunk_count INTEGER NOT NULL DEFAULT 0,
+    node_count INTEGER NOT NULL DEFAULT 0,
+    edge_count INTEGER NOT NULL DEFAULT 0,
+    status "TempKbStatus" NOT NULL DEFAULT 'ACTIVE',
+    is_persistent BOOLEAN NOT NULL DEFAULT false,
+    last_active_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ
+);
+
+-- 用户保存的知识片段
+CREATE TABLE user_saved_chunks (
+    id TEXT PRIMARY KEY,
+    temp_kb_id TEXT NOT NULL REFERENCES user_temp_knowledge_bases(id) ON DELETE CASCADE,
+    ragflow_chunk_id VARCHAR(255),
+    content TEXT NOT NULL,
+    content_summary TEXT,
+    keywords TEXT[] NOT NULL,
+    source_message_id TEXT,
+    source_type VARCHAR(100),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ===========================================
@@ -200,7 +273,7 @@ CREATE TABLE uploaded_files (
 
 -- 公司相关索引
 CREATE INDEX idx_departments_company_id ON departments(company_id);
-CREATE INDEX idx_departments_company_parent ON departments(company_id, parent_id);
+CREATE INDEX idx_department_company_parent ON departments(company_id, parent_id);
 
 -- 用户相关索引
 CREATE INDEX idx_users_company_id ON users(company_id);
@@ -214,11 +287,17 @@ CREATE INDEX idx_agents_department_id ON agents(department_id);
 -- 权限相关索引
 CREATE INDEX idx_user_agent_permissions_user_id ON user_agent_permissions(user_id);
 CREATE INDEX idx_user_agent_permissions_agent_id ON user_agent_permissions(agent_id);
+CREATE INDEX idx_user_agent_revocation_agent_active ON user_agent_permission_revocations(agent_id, is_active);
+CREATE INDEX idx_agent_department_grant_company_agent ON agent_department_grants(company_id, agent_id);
+CREATE INDEX idx_agent_department_grant_company_department ON agent_department_grants(company_id, department_id);
 CREATE INDEX idx_user_kg_permissions_user_id ON user_knowledge_graph_permissions(user_id);
 CREATE INDEX idx_user_kg_permissions_kg_id ON user_knowledge_graph_permissions(knowledge_graph_id);
 
 -- 知识图谱相关索引
 CREATE INDEX idx_knowledge_graphs_company_id ON knowledge_graphs(company_id);
+
+-- 临时知识库相关索引
+CREATE INDEX idx_user_saved_chunks_temp_kb_id ON user_saved_chunks(temp_kb_id);
 
 -- 聊天相关索引
 CREATE INDEX idx_chat_sessions_user_id ON chat_sessions(user_id);
@@ -251,8 +330,10 @@ CREATE TRIGGER update_companies_updated_at BEFORE UPDATE ON companies FOR EACH R
 CREATE TRIGGER update_departments_updated_at BEFORE UPDATE ON departments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_agents_updated_at BEFORE UPDATE ON agents FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_agent_department_grants_updated_at BEFORE UPDATE ON agent_department_grants FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_knowledge_graphs_updated_at BEFORE UPDATE ON knowledge_graphs FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_chat_sessions_updated_at BEFORE UPDATE ON chat_sessions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_user_temp_knowledge_bases_updated_at BEFORE UPDATE ON user_temp_knowledge_bases FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ===========================================
 -- 初始数据
@@ -276,7 +357,7 @@ INSERT INTO departments (id, company_id, name, description, icon, sort_order) VA
 ('cldept00000002', 'cldefault00001', 'AI Consultant 中心', '人工智能咨询服务团队', 'Bot', 2),
 ('cldept00000003', 'cldefault00001', '财务及风控中心', '财务管理和风险控制团队', 'Shield', 3),
 ('cldept00000004', 'cldefault00001', '市场营销部', '市场推广和营销团队', 'Megaphone', 4)
-ON CONFLICT ON CONSTRAINT "companyId_parentId_name" DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 -- 插入固定的管理员账号
 -- 密码: sga0303 (使用bcrypt加密)

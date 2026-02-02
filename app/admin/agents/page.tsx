@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -66,6 +66,8 @@ import {
   Settings
 } from "lucide-react"
 import NewAdminLayout from "@/components/admin/new-admin-layout"
+import AgentBulkGrantDialog from "@/components/admin/agent-bulk-grant-dialog"
+import DepartmentPicker, { type DepartmentPickerOption } from "@/components/admin/department-picker"
 
 // 平台类型定义
 type AgentPlatform = 'DIFY' | 'RAGFLOW' | 'HIAGENT' | 'OPENAI' | 'CLAUDE' | 'CUSTOM'
@@ -91,13 +93,7 @@ interface Agent {
   lastError?: string
   sortOrder: number
   department: Department
-  userPermissions: Array<{
-    userId: string
-    user: {
-      displayName: string
-      userId: string
-    }
-  }>
+  userPermissionsCount: number
   createdAt: string
   updatedAt: string
 }
@@ -204,13 +200,15 @@ export default function AgentsPage() {
   }, [])
 
   const [agents, setAgents] = useState<Agent[]>([])
-  const [departments, setDepartments] = useState<Department[]>([])
+  const [departments, setDepartments] = useState<DepartmentPickerOption[]>([])
   const [stats, setStats] = useState<AgentStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const [isTesting, setIsTesting] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [currentUserDepartmentId, setCurrentUserDepartmentId] = useState<string | null>(null)
   
   // 筛选状态
   const [filterDepartment, setFilterDepartment] = useState<string>('all')
@@ -220,6 +218,8 @@ export default function AgentsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null)
+  const [isBulkGrantDialogOpen, setIsBulkGrantDialogOpen] = useState(false)
+  const [bulkGrantAgent, setBulkGrantAgent] = useState<Pick<Agent, 'id' | 'chineseName'> | null>(null)
   
   // 表单数据
   const [formData, setFormData] = useState<AgentFormData>({
@@ -245,20 +245,51 @@ export default function AgentsPage() {
   // 获取部门列表
   const fetchDepartments = async () => {
     try {
-      const response = await fetch('/api/admin/departments')
+      const response = await fetch('/api/admin/departments/tree', { cache: 'no-cache' })
       if (response.ok) {
         const data = await response.json()
-        console.log('部门数据:', data.data)
-        // 检查图标字段
-        data.data.forEach((dept: any) => {
-          console.log(`部门: ${dept.name}, 图标: ${dept.icon}`)
-        })
-        setDepartments(data.data)
+        const roots = data?.data?.departments || []
+
+        const flat: DepartmentPickerOption[] = []
+        const walk = (nodes: any[], ancestors: string[]) => {
+          for (const node of nodes) {
+            const currentPath = ancestors.join(' / ')
+            flat.push({
+              id: String(node.id),
+              name: String(node.name),
+              icon: String(node.icon || 'Building'),
+              isActive: Boolean(node.isActive),
+              sortOrder: typeof node.sortOrder === 'number' ? node.sortOrder : 0,
+              parentId: node.parentId ? String(node.parentId) : null,
+              path: currentPath,
+            })
+            if (Array.isArray(node.children) && node.children.length > 0) {
+              walk(node.children, [...ancestors, String(node.name)])
+            }
+          }
+        }
+
+        walk(roots, [])
+        setDepartments(flat)
       } else {
         console.error('获取部门失败:', response.status, response.statusText)
       }
     } catch (error) {
       console.error('获取部门列表失败:', error)
+    }
+  }
+
+  const fetchCurrentUser = async () => {
+    try {
+      const response = await fetch('/api/auth/login', { cache: 'no-cache' })
+      if (!response.ok) return
+      const data = await response.json().catch(() => ({}))
+      if (data?.authenticated && data?.user?.id) {
+        setCurrentUserId(String(data.user.id))
+        setCurrentUserDepartmentId(data.user.departmentId ? String(data.user.departmentId) : null)
+      }
+    } catch (error) {
+      console.error('获取当前用户信息失败:', error)
     }
   }
 
@@ -275,7 +306,7 @@ export default function AgentsPage() {
       }
       const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : ''
 
-      const response = await fetch(`/api/admin/agents${queryString}`)
+      const response = await fetch(`/api/admin/agents${queryString}`, { cache: 'no-cache' })
       if (response.ok) {
         const data = await response.json()
         setAgents(data.data)
@@ -293,16 +324,22 @@ export default function AgentsPage() {
 
   useEffect(() => {
     fetchDepartments()
+    fetchCurrentUser()
   }, [])
 
   useEffect(() => {
     fetchAgents()
   }, [filterDepartment, filterPlatform])
 
+  const getDefaultDepartmentId = useCallback(() => {
+    const managementDepartment = departments.find((dept) => dept.name === "管理层")
+    return managementDepartment?.id || ""
+  }, [departments])
+
   // 重置表单
   const resetForm = () => {
     setFormData({
-      departmentId: "",
+      departmentId: getDefaultDepartmentId(),
       chineseName: "",
       englishName: "",
       position: "",
@@ -315,6 +352,17 @@ export default function AgentsPage() {
     })
     setConnectionTestResult({ success: false, message: '', tested: false })
   }
+
+  useEffect(() => {
+    if (!isCreateDialogOpen) return
+    if (formData.departmentId) return
+    if (departments.length === 0) return
+
+    const defaultDepartmentId = getDefaultDepartmentId()
+    if (!defaultDepartmentId) return
+
+    setFormData((prev) => ({ ...prev, departmentId: defaultDepartmentId }))
+  }, [departments, formData.departmentId, getDefaultDepartmentId, isCreateDialogOpen])
 
   // 打开创建弹窗
   const openCreateDialog = () => {
@@ -340,6 +388,12 @@ export default function AgentsPage() {
     // 重置连接测试状态
     setConnectionTestResult({ success: false, message: '', tested: false })
     setIsEditDialogOpen(true)
+  }
+
+  // 打开批量授权弹窗
+  const openBulkGrantDialog = (agent: Agent) => {
+    setBulkGrantAgent({ id: agent.id, chineseName: agent.chineseName })
+    setIsBulkGrantDialogOpen(true)
   }
 
   // 处理平台变更
@@ -583,10 +637,10 @@ export default function AgentsPage() {
 
   // 删除Agent
   const handleDelete = async (agent: Agent) => {
-    if (agent.userPermissions.length > 0) {
+    if (agent.userPermissionsCount > 0) {
       setMessage({
         type: 'error',
-        text: `Agent还有 ${agent.userPermissions.length} 个用户权限，请先移除这些权限`
+        text: `Agent还有 ${agent.userPermissionsCount} 个可访问用户（含部门规则），请先撤销授权/停用规则`
       })
       return
     }
@@ -906,7 +960,7 @@ export default function AgentsPage() {
                         <TableCell className="text-center py-6">
                           <div className="flex flex-col items-center space-y-1">
                             <div className="text-base text-foreground font-bold bg-muted/50 px-3 py-1.5 rounded-lg border border-border/50">
-                              {agent.userPermissions.length}
+                              {agent.userPermissionsCount}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               <span className="inline-block w-3 h-3 mr-1">👥</span>
@@ -917,6 +971,25 @@ export default function AgentsPage() {
                         <TableCell className="text-center py-6">
                           <div className="flex flex-col items-center space-y-3">
                             <div className="flex items-center space-x-3">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => openBulkGrantDialog(agent)}
+                                      className="border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-400 transition-all duration-200 shadow-md hover:shadow-emerald-500/20 px-3 py-2"
+                                    >
+                                      <Users className="w-4 h-4 mr-1" />
+                                      批量授权
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>批量授权给部门用户</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -1017,56 +1090,13 @@ export default function AgentsPage() {
                       暂无部门，请先创建部门
                     </div>
                   ) : (
-                    <div className="relative">
-                      <div className="flex items-center space-x-3">
-                        {/* 部门图标显示 */}
-                        <div className="flex-shrink-0">
-                          {formData.departmentId ? (
-                            (() => {
-                              const selectedDept = departments.find(d => d.id === formData.departmentId)
-                              if (selectedDept) {
-                                const IconComponent = getIconComponent(selectedDept.icon)
-                                return (
-                                  <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
-                                    <IconComponent className="w-4 h-4 text-white" />
-                                  </div>
-                                )
-                              }
-                              return null
-                            })()
-                          ) : (
-                            <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center">
-                              <Building className="w-4 h-4 text-muted-foreground" />
-                            </div>
-                          )}
-                        </div>
-
-                        {/* 选择器 */}
-                        <div className="relative flex-1">
-                          <select
-                            value={formData.departmentId}
-                            onChange={(e) => {
-                              console.log('选择部门:', e.target.value)
-                              setFormData(prev => ({ ...prev, departmentId: e.target.value }))
-                            }}
-                            className="w-full bg-background border border-input text-foreground rounded-md px-3 py-2 hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 appearance-none cursor-pointer"
-                          >
-                            <option value="">请选择部门</option>
-                            {departments.map((dept) => (
-                              <option
-                                key={dept.id}
-                                value={dept.id}
-                              >
-                                {dept.name}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <DepartmentPicker
+                      value={formData.departmentId}
+                      onChange={(departmentId) => setFormData((prev) => ({ ...prev, departmentId }))}
+                      departments={departments}
+                      myDepartmentId={currentUserDepartmentId}
+                      currentUserId={currentUserId}
+                    />
 	                  )}
 	                  {departments.length > 0 && (
 	                    <p className="text-xs text-muted-foreground">
@@ -1375,6 +1405,17 @@ export default function AgentsPage() {
           </DialogContent>
         </Dialog>
 
+        {/* 批量授权弹窗 */}
+        <AgentBulkGrantDialog
+          open={isBulkGrantDialogOpen}
+          onOpenChange={(open) => {
+            setIsBulkGrantDialogOpen(open)
+            if (!open) setBulkGrantAgent(null)
+          }}
+          agent={bulkGrantAgent}
+          onCompleted={() => fetchAgents()}
+        />
+
         {/* 编辑Agent弹窗 */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -1413,56 +1454,13 @@ export default function AgentsPage() {
                       暂无部门，请先创建部门
                     </div>
                   ) : (
-                    <div className="relative">
-                      <div className="flex items-center space-x-3">
-                        {/* 部门图标显示 */}
-                        <div className="flex-shrink-0">
-                          {formData.departmentId ? (
-                            (() => {
-                              const selectedDept = departments.find(d => d.id === formData.departmentId)
-                              if (selectedDept) {
-                                const IconComponent = getIconComponent(selectedDept.icon)
-                                return (
-                                  <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
-                                    <IconComponent className="w-4 h-4 text-white" />
-                                  </div>
-                                )
-                              }
-                              return null
-                            })()
-                          ) : (
-                            <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center">
-                              <Building className="w-4 h-4 text-muted-foreground" />
-                            </div>
-                          )}
-                        </div>
-
-                        {/* 选择器 */}
-                        <div className="relative flex-1">
-                          <select
-                            value={formData.departmentId}
-                            onChange={(e) => {
-                              console.log('选择部门:', e.target.value)
-                              setFormData(prev => ({ ...prev, departmentId: e.target.value }))
-                            }}
-                            className="w-full bg-background border border-input text-foreground rounded-md px-3 py-2 hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 appearance-none cursor-pointer"
-                          >
-                            <option value="">请选择部门</option>
-                            {departments.map((dept) => (
-                              <option
-                                key={dept.id}
-                                value={dept.id}
-                              >
-                                {dept.name}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <DepartmentPicker
+                      value={formData.departmentId}
+                      onChange={(departmentId) => setFormData((prev) => ({ ...prev, departmentId }))}
+                      departments={departments}
+                      myDepartmentId={currentUserDepartmentId}
+                      currentUserId={currentUserId}
+                    />
                   )}
                   {departments.length > 0 && (
                     <p className="text-xs text-muted-foreground">

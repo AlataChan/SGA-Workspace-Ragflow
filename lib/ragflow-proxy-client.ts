@@ -33,6 +33,16 @@ export class RAGFlowProxyClient {
     this.config = config
   }
 
+  private getAuthHeaders(): Record<string, string> {
+    if (typeof window === 'undefined') return {}
+    try {
+      const token = localStorage.getItem('auth-token')
+      return token ? { Authorization: `Bearer ${token}` } : {}
+    } catch {
+      return {}
+    }
+  }
+
   /**
    * 取消当前请求
    */
@@ -55,6 +65,7 @@ export class RAGFlowProxyClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...this.getAuthHeaders(),
         },
         body: JSON.stringify({
           action: 'createSession',
@@ -116,6 +127,7 @@ export class RAGFlowProxyClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...this.getAuthHeaders(),
         },
         body: JSON.stringify({
           action: 'sendMessage',
@@ -201,92 +213,112 @@ export class RAGFlowProxyClient {
           }
 
           buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() || ''
 
-          for (const line of lines) {
-            const trimmedLine = line.trim()
-            if (!trimmedLine || trimmedLine.startsWith(':')) continue
+          // SSE is delimited by a blank line. Parse by event blocks so
+          // multi-line JSON (pretty-printed) won't break JSON.parse.
+          while (true) {
+            const lfIndex = buffer.indexOf('\n\n')
+            const crlfIndex = buffer.indexOf('\r\n\r\n')
 
-            if (trimmedLine.startsWith('data:')) {
-              const dataStr = trimmedLine.substring(5).trim()
-              if (dataStr === '[DONE]') continue
+            const hasLf = lfIndex >= 0
+            const hasCrlf = crlfIndex >= 0
+            if (!hasLf && !hasCrlf) break
 
-              try {
-                const data = JSON.parse(dataStr)
+            const delimiterIndex =
+              hasLf && hasCrlf ? Math.min(lfIndex, crlfIndex) : (hasLf ? lfIndex : crlfIndex)
+            const delimiterLen = delimiterIndex === crlfIndex ? 4 : 2
 
-                // 兼容两种 SSE 格式：
-                // 1) Chat Assistant: { code, message, data: { answer, reference, session_id } }
-                // 2) Agent: { event, data, session_id, message_id, ... }
+            const rawEvent = buffer.slice(0, delimiterIndex)
+            buffer = buffer.slice(delimiterIndex + delimiterLen)
 
-                if (typeof data?.code === 'number') {
-                  if (data.code !== 0) {
-                    const errorMsg = data.message || '请求失败'
-                    onError?.(errorMsg)
-                    onMessage({ type: 'error', content: errorMsg })
-                    continue
-                  }
+            const normalizedEvent = rawEvent.replace(/\r\n/g, '\n')
+            const lines = normalizedEvent.split('\n')
+            const dataLines: string[] = []
+            for (const line of lines) {
+              if (!line) continue
+              if (line.startsWith(':')) continue // comment/heartbeat
+              if (line.startsWith('data:')) {
+                dataLines.push(line.substring(5).replace(/^\s/, ''))
+              }
+            }
 
-                  const payload = data.data
-                  const answerCandidate = payload?.answer
-                    ?? payload?.content
-                    ?? payload?.final_answer
-                    ?? payload?.outputs?.content
+            if (dataLines.length === 0) continue
+            const dataStr = dataLines.join('\n').trim()
+            if (!dataStr || dataStr === '[DONE]') continue
 
-                  const reference = payload?.reference ?? payload?.data?.reference
-                  const sessionId = payload?.session_id ?? payload?.data?.session_id
+            try {
+              const data = JSON.parse(dataStr)
 
-                  if (answerCandidate !== undefined && answerCandidate !== null) {
-                    const normalizedContent = normalizeRagflowContent(answerCandidate)
-                    if (normalizedContent.length > 0) {
-                      // chat assistant 往往返回“累计全文”，这里按“以最新为准”
-                      fullContent = normalizedContent
+              // 兼容两种 SSE 格式：
+              // 1) Chat Assistant: { code, message, data: { answer, reference, session_id } }
+              // 2) Agent: { event, data, session_id, message_id, ... }
 
-                      onMessage({
-                        type: 'content',
-                        content: fullContent,
-                        reference: reference || null,
-                        conversationId: sessionId || this.sessionId || undefined
-                      })
-                    }
-                  }
-
-                  if (reference) finalReference = reference
-                  if (sessionId) finalSessionId = sessionId
+              if (typeof data?.code === 'number') {
+                if (data.code !== 0) {
+                  const errorMsg = data.message || '请求失败'
+                  onError?.(errorMsg)
+                  onMessage({ type: 'error', content: errorMsg })
                   continue
                 }
 
-                // Agent SSE：根据 event 处理
-                const sessionId = data?.session_id ?? data?.data?.session_id
-                if (sessionId) finalSessionId = sessionId
+                const payload = data.data
+                const answerCandidate = payload?.answer
+                  ?? payload?.content
+                  ?? payload?.final_answer
+                  ?? payload?.outputs?.content
 
-                const reference = data?.data?.reference ?? data?.reference
-                if (reference) finalReference = reference
+                const reference = payload?.reference ?? payload?.data?.reference
+                const sessionId = payload?.session_id ?? payload?.data?.session_id
 
-                const contentCandidate =
-                  data?.data?.content
-                  ?? data?.data?.answer
-                  ?? data?.data?.output
-                  ?? data?.content
-
-                if (contentCandidate !== undefined && contentCandidate !== null) {
-                  const normalized = normalizeRagflowContent(contentCandidate)
-                  if (normalized.length > 0) {
-                    // agent 既可能是“增量片段”，也可能返回“累计全文”；这里做一次去重合并，避免内容翻倍
-                    fullContent = mergeStreamingText(fullContent, normalized)
+                if (answerCandidate !== undefined && answerCandidate !== null) {
+                  const normalizedContent = normalizeRagflowContent(answerCandidate)
+                  if (normalizedContent.length > 0) {
+                    // chat assistant 往往返回“累计全文”，这里按“以最新为准”
+                    fullContent = normalizedContent
 
                     onMessage({
                       type: 'content',
                       content: fullContent,
-                      reference: finalReference || null,
-                      conversationId: finalSessionId || undefined
+                      reference: reference || null,
+                      conversationId: sessionId || this.sessionId || undefined
                     })
                   }
                 }
 
-              } catch (parseError) {
-                console.warn('[RAGFlowProxy] 解析 SSE 数据失败:', parseError)
+                if (reference) finalReference = reference
+                if (sessionId) finalSessionId = sessionId
+                continue
               }
+
+              // Agent SSE：根据 event 处理
+              const sessionId = data?.session_id ?? data?.data?.session_id
+              if (sessionId) finalSessionId = sessionId
+
+              const reference = data?.data?.reference ?? data?.reference
+              if (reference) finalReference = reference
+
+              const contentCandidate =
+                data?.data?.content
+                ?? data?.data?.answer
+                ?? data?.data?.output
+                ?? data?.content
+
+              if (contentCandidate !== undefined && contentCandidate !== null) {
+                const normalized = normalizeRagflowContent(contentCandidate)
+                if (normalized.length > 0) {
+                  // agent 既可能是“增量片段”，也可能返回“累计全文”；这里做一次去重合并，避免内容翻倍
+                  fullContent = mergeStreamingText(fullContent, normalized)
+
+                  onMessage({
+                    type: 'content',
+                    content: fullContent,
+                    reference: finalReference || null,
+                    conversationId: finalSessionId || undefined
+                  })
+                }
+              }
+            } catch (parseError) {
+              console.warn('[RAGFlowProxy] 解析 SSE 数据失败:', parseError, dataStr.slice(0, 200))
             }
           }
         }
@@ -336,6 +368,7 @@ export class RAGFlowProxyClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...this.getAuthHeaders(),
         },
         body: JSON.stringify({
           action: 'listSessions',
@@ -366,6 +399,7 @@ export class RAGFlowProxyClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...this.getAuthHeaders(),
         },
         body: JSON.stringify({
           action: 'getHistory',
@@ -395,6 +429,7 @@ export class RAGFlowProxyClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...this.getAuthHeaders(),
         },
         body: JSON.stringify({
           action: 'deleteSession',
@@ -420,6 +455,7 @@ export class RAGFlowProxyClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...this.getAuthHeaders(),
         },
         body: JSON.stringify({
           action: 'renameSession',
