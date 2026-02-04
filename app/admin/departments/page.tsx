@@ -137,7 +137,9 @@ export default function DepartmentsPage() {
     const key = parentId ?? ROOT_KEY
     setLoadingChildren(prev => ({ ...prev, [key]: true }))
     try {
-      const url = parentId ? `/api/admin/departments/tree?parentId=${encodeURIComponent(parentId)}` : `/api/admin/departments/tree`
+      const url = parentId
+        ? `/api/admin/departments/children?parentId=${encodeURIComponent(parentId)}`
+        : `/api/admin/departments/children`
       const response = await fetch(url)
       if (response.ok) {
         const payload = await response.json().catch(() => ({}))

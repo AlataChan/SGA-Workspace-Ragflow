@@ -42,7 +42,7 @@ CREATE TABLE departments (
     id TEXT PRIMARY KEY,
     company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
-    parent_id TEXT REFERENCES departments(id) ON DELETE SET NULL,
+    parent_id TEXT,
     description TEXT,
     icon VARCHAR(100),
     sort_order INTEGER NOT NULL DEFAULT 0,
@@ -346,51 +346,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 插入默认企业
-INSERT INTO companies (id, name, logo_url) VALUES
-('cldefault00001', 'SGA企业', '/assets/sga-logo.png')
-ON CONFLICT (name) DO NOTHING;
 
--- 插入默认部门
-INSERT INTO departments (id, company_id, name, description, icon, sort_order) VALUES
-('cldept00000001', 'cldefault00001', '管理层', '公司高级管理团队', 'Crown', 1),
-('cldept00000002', 'cldefault00001', 'AI Consultant 中心', '人工智能咨询服务团队', 'Bot', 2),
-('cldept00000003', 'cldefault00001', '财务及风控中心', '财务管理和风险控制团队', 'Shield', 3),
-('cldept00000004', 'cldefault00001', '市场营销部', '市场推广和营销团队', 'Megaphone', 4)
-ON CONFLICT DO NOTHING;
 
--- 插入固定的管理员账号
--- 密码: sga0303 (使用bcrypt加密)
-INSERT INTO users (
-    id,
-    company_id,
-    username,
-    user_id,
-    phone,
-    password_hash,
-    chinese_name,
-    english_name,
-    email,
-    display_name,
-    role,
-    is_active
-) VALUES (
-    'cladmin0000001',
-    'cldefault00001',
-    'admin',
-    'admin',
-    '17700000771',
-    '$2a$12$ZYaqH0KbjfBYnnfyj66h7ub/PUxheLAHjgVq5nM3R6m5P7NP2SZzK',
-    '系统管理员',
-    'System Admin',
-    'admin@sga.local',
-    '系统管理员',
-    'ADMIN',
-    true
-) ON CONFLICT ON CONSTRAINT "unique_username" DO UPDATE SET
-    password_hash = EXCLUDED.password_hash,
-    role = 'ADMIN',
-    is_active = true;
+
 
 -- ===========================================
 -- 说明
