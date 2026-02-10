@@ -10,6 +10,7 @@ import { UserRole } from '@prisma/client'
 import { withAdminAuth } from '@/lib/auth/middleware'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 
 // CORS headers for cross-origin requests
 const corsHeaders = {
@@ -175,8 +176,20 @@ export const GET = withAdminAuth(async (request) => {
         : undefined,
     }))
 
+    const signedUsers = await Promise.all(
+      normalizedUsers.map(async (u) => {
+        const storedValue = u.avatarUrl
+        return {
+          ...u,
+          avatarUrl: await resolveImageDisplayUrl(storedValue),
+          // NOTE: 这里的 avatarKey 表示“入库的存储值”（可能是 key，也可能是 legacy 的 /uploads 或 dataURL）
+          avatarKey: storedValue ?? null,
+        }
+      })
+    )
+
     return NextResponse.json({
-      data: normalizedUsers,
+      data: signedUsers,
       pagination: {
         page,
         pageSize,
@@ -377,9 +390,15 @@ export const POST = withAdminAuth(async (request) => {
       }
     }
 
+    const storedAvatarValue = newUser.avatarUrl
+    const signedAvatarUrl = await resolveImageDisplayUrl(storedAvatarValue)
+    const avatarKey = storedAvatarValue ?? null
+
     return NextResponse.json({
       data: {
         ...newUser,
+        avatarUrl: signedAvatarUrl,
+        avatarKey,
         department: newUser.department
           ? { ...newUser.department, icon: newUser.department.icon || 'Building' }
           : undefined,

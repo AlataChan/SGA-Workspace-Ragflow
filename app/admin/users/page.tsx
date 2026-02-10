@@ -128,6 +128,7 @@ export default function UsersPage() {
 
   // 头像上传状态
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null)
 
   // 表单数据
   const [formData, setFormData] = useState<UserFormData>({
@@ -306,6 +307,7 @@ export default function UsersPage() {
       password: "",
       avatarUrl: ""
     })
+    setAvatarPreviewUrl(null)
   }
 
   // 处理头像上传
@@ -333,14 +335,16 @@ export default function UsersPage() {
       const uploadFormData = new FormData()
       uploadFormData.append('file', file)
 
-      const response = await fetch('/api/upload', {
+      const response = await fetch('/api/upload/avatar', {
         method: 'POST',
         body: uploadFormData,
       })
 
       if (response.ok) {
         const data = await response.json()
-        setFormData(prev => ({ ...prev, avatarUrl: data.avatarUrl }))
+        // DB 存 key；预览用签名 URL
+        setFormData(prev => ({ ...prev, avatarUrl: data.avatarKey }))
+        setAvatarPreviewUrl(data.avatarUrl)
         setMessage({ type: 'success', text: '头像上传成功' })
         setTimeout(() => setMessage(null), 3000)
       } else {
@@ -597,8 +601,9 @@ export default function UsersPage() {
       position: user.position || "",
       role: user.role,
       password: "", // 编辑时密码为空，表示不修改
-      avatarUrl: user.avatarUrl || ""
+      avatarUrl: user.avatarKey || ""
     })
+    setAvatarPreviewUrl(user.avatarUrl || null)
     setIsEditDialogOpen(true)
   }
 
@@ -1368,7 +1373,7 @@ export default function UsersPage() {
               <div className="flex flex-col items-center space-y-4 p-4 border border-border rounded-lg">
                 <div className="relative">
                   <Avatar className="w-20 h-20">
-                    <AvatarImage src={formData.avatarUrl} />
+                    <AvatarImage src={avatarPreviewUrl || undefined} />
                     <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xl">
                       {formData.chineseName ? formData.chineseName[0] : <User className="w-8 h-8" />}
                     </AvatarFallback>
@@ -1555,7 +1560,7 @@ export default function UsersPage() {
               <div className="flex flex-col items-center space-y-4 p-4 border border-border rounded-lg">
                 <div className="relative">
                   <Avatar className="w-20 h-20">
-                    <AvatarImage src={formData.avatarUrl} />
+                    <AvatarImage src={avatarPreviewUrl || undefined} />
                     <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xl">
                       {formData.chineseName ? formData.chineseName[0] : <User className="w-8 h-8" />}
                     </AvatarFallback>

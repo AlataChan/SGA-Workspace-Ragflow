@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withAuth } from '@/lib/auth/middleware'
 import { getEffectiveAgentIdsForUser } from '@/lib/auth/agent-access'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 
 // CORS headers
 const corsHeaders = {
@@ -50,7 +51,7 @@ export const GET = withAuth(async (request) => {
 
       // 处理Agent数据，提取平台配置到兼容字段
       const processedAgents = allAgents.map(agent => {
-        const processed = { ...agent }
+        const processed: any = { ...agent }
 
         console.log(`[API] 处理Agent ${agent.chineseName}:`, {
           id: agent.id,
@@ -74,6 +75,20 @@ export const GET = withAuth(async (request) => {
 
         return processed
       })
+
+      const signedAgents = await Promise.all(
+        processedAgents.map(async (agent: any) => {
+          const storedAvatarValue = agent.avatarUrl
+          const storedPhotoValue = agent.photoUrl
+          return {
+            ...agent,
+            avatarUrl: await resolveImageDisplayUrl(storedAvatarValue),
+            photoUrl: await resolveImageDisplayUrl(storedPhotoValue),
+            avatarKey: storedAvatarValue ?? null,
+            photoKey: storedPhotoValue ?? null,
+          }
+        })
+      )
 
       // 获取部门列表
       const departments = await prisma.department.findMany({
@@ -100,7 +115,7 @@ export const GET = withAuth(async (request) => {
 
       return NextResponse.json({
         data: {
-          agents: processedAgents,
+          agents: signedAgents,
           departments: departmentsWithStats,
           isAdmin: true
         },
@@ -171,6 +186,20 @@ export const GET = withAuth(async (request) => {
       return processed
     })
 
+    const signedUserAgents = await Promise.all(
+      processedUserAgents.map(async (agent: any) => {
+        const storedAvatarValue = agent.avatarUrl
+        const storedPhotoValue = agent.photoUrl
+        return {
+          ...agent,
+          avatarUrl: await resolveImageDisplayUrl(storedAvatarValue),
+          photoUrl: await resolveImageDisplayUrl(storedPhotoValue),
+          avatarKey: storedAvatarValue ?? null,
+          photoKey: storedPhotoValue ?? null,
+        }
+      })
+    )
+
     // 获取用户有权限的部门（去重）
     const userDepartmentIds = [...new Set(userAgents.map(agent => agent.departmentId))]
     const userDepartments = await prisma.department.findMany({
@@ -203,7 +232,7 @@ export const GET = withAuth(async (request) => {
 
     return NextResponse.json({
       data: {
-        agents: processedUserAgents,
+        agents: signedUserAgents,
         departments: departmentsWithStats,
         isAdmin: false
       },

@@ -11,6 +11,7 @@ import { withAdminAuth } from '@/lib/auth/middleware'
 import type { CurrentUser } from '@/lib/auth/middleware'
 import { z } from 'zod'
 import { getEffectiveAgentIdsForUser } from '@/lib/auth/agent-access'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 
 // CORS headers for cross-origin requests
 const corsHeaders = {
@@ -64,11 +65,17 @@ export const GET = withAdminAuth(async (request, context) => {
       )
     }
 
+    const signedTargetUser = {
+      ...targetUser,
+      avatarUrl: await resolveImageDisplayUrl(targetUser.avatarUrl),
+      avatarKey: targetUser.avatarUrl ?? null,
+    }
+
     // 管理员用户拥有全部权限：无需返回完整列表，避免大 payload
     if (targetUser.role === 'ADMIN') {
       return NextResponse.json({
         data: {
-          user: targetUser,
+          user: signedTargetUser,
           userAgents: [],
           availableAgents: [],
           permissions: [],
@@ -143,6 +150,14 @@ export const GET = withAdminAuth(async (request, context) => {
         })
       : []
 
+    const signedEffectiveAgents = await Promise.all(
+      effectiveAgents.map(async (agent) => ({
+        ...agent,
+        avatarUrl: await resolveImageDisplayUrl(agent.avatarUrl),
+        avatarKey: agent.avatarUrl ?? null,
+      }))
+    )
+
     // 可添加的 Agent = 所有 Agent − 当前已具备访问权限的 Agent（policy/explicit）
     // 说明：被撤销的 Agent 不在 effectiveSet 中，会出现在可添加列表，可用于“显式恢复”（POST 会清除撤销黑名单）。
     const availableAgents = await prisma.agent.findMany({
@@ -173,17 +188,25 @@ export const GET = withAdminAuth(async (request, context) => {
       ],
     })
 
+    const signedAvailableAgents = await Promise.all(
+      availableAgents.map(async (agent) => ({
+        ...agent,
+        avatarUrl: await resolveImageDisplayUrl(agent.avatarUrl),
+        avatarKey: agent.avatarUrl ?? null,
+      }))
+    )
+
     // 将 accessSource 标注到返回的 userAgents
-    const userAgents = effectiveAgents.map((agent) => ({
+    const userAgents = signedEffectiveAgents.map((agent) => ({
       ...agent,
       accessSource: sourcesByAgentId[agent.id] ?? 'policy',
     }))
 
     return NextResponse.json({
       data: {
-        user: targetUser,
+        user: signedTargetUser,
         userAgents,
-        availableAgents: availableAgents,
+        availableAgents: signedAvailableAgents,
         permissions: userAgentPermissions,
         revokedAgentIds,
       },

@@ -10,6 +10,7 @@ import { UserRole } from '@prisma/client'
 import { withAdminAuth } from '@/lib/auth/middleware'
 import { hashPassword } from '@/lib/auth/password'
 import { z } from 'zod'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 
 // CORS headers
 const corsHeaders = {
@@ -203,9 +204,16 @@ export const PUT = withAdminAuth(async (request, context) => {
 
     // 移除敏感信息
     const { passwordHash, ...safeUser } = updatedUser
+    const storedAvatarValue = (safeUser as any).avatarUrl as string | null | undefined
+    const signedAvatarUrl = await resolveImageDisplayUrl(storedAvatarValue)
+    const avatarKey = storedAvatarValue ?? null
 
     return NextResponse.json({
-      data: safeUser,
+      data: {
+        ...safeUser,
+        avatarUrl: signedAvatarUrl,
+        avatarKey,
+      },
       message: '用户更新成功'
     }, { headers: corsHeaders })
 

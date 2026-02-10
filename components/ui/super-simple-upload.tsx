@@ -5,7 +5,12 @@ import { Label } from "@/components/ui/label"
 import { Upload, User, Image as ImageIcon, CheckCircle, AlertCircle, X } from "lucide-react"
 
 interface SuperSimpleUploadProps {
-  onUpload: (photoUrl: string, avatarUrl: string) => void
+  onUpload: (result: {
+    photoKey: string
+    avatarKey: string
+    photoUrl: string
+    avatarUrl: string
+  }) => void
   photoUrl?: string
   avatarUrl?: string
 }
@@ -63,7 +68,13 @@ export function SuperSimpleUpload({ onUpload, photoUrl, avatarUrl }: SuperSimple
       }
 
       const data = await response.json()
-      onUpload(data.photoUrl, data.avatarUrl)
+      // 兼容本地 fallback：若后端未返回 key，则用 url 作为“存储值”
+      onUpload({
+        photoKey: data.photoKey || data.photoUrl,
+        avatarKey: data.avatarKey || data.avatarUrl,
+        photoUrl: data.photoUrl,
+        avatarUrl: data.avatarUrl,
+      })
 
       // 显示成功状态
       setUploadSuccess(true)

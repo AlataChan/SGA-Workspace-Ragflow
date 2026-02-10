@@ -18,6 +18,7 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withAdminAuth } from '@/lib/auth/middleware'
 import { z } from 'zod'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 
 export const dynamic = 'force-dynamic'
 
@@ -97,11 +98,27 @@ export const GET = withAdminAuth(async (request) => {
       select: { id: true, name: true, logoUrl: true },
     })
 
+    const signedCurrentCompany = currentCompany
+      ? {
+          ...currentCompany,
+          logoUrl: await resolveImageDisplayUrl(currentCompany.logoUrl),
+          logoKey: currentCompany.logoUrl ?? null,
+        }
+      : null
+
+    const signedCandidates = await Promise.all(
+      candidates.map(async (c) => ({
+        ...c,
+        logoUrl: await resolveImageDisplayUrl(c.logoUrl),
+        logoKey: c.logoUrl ?? null,
+      }))
+    )
+
     return NextResponse.json({
       data: {
-        currentCompany,
-        recommendedCompany: candidates[0] ?? null,
-        candidates,
+        currentCompany: signedCurrentCompany,
+        recommendedCompany: signedCandidates[0] ?? null,
+        candidates: signedCandidates,
       },
       message: '获取公司绑定建议成功',
     })
@@ -174,10 +191,15 @@ export const POST = withAdminAuth(async (request) => {
     }
 
     if (dbUser.companyId === targetCompanyId) {
+      const signedCompany = {
+        ...targetCompany,
+        logoUrl: await resolveImageDisplayUrl(targetCompany.logoUrl),
+        logoKey: targetCompany.logoUrl ?? null,
+      }
       return NextResponse.json({
         data: {
           changed: false,
-          company: targetCompany,
+          company: signedCompany,
         },
         message: '当前账号已绑定到目标公司',
       })
@@ -268,12 +290,18 @@ export const POST = withAdminAuth(async (request) => {
       },
     })
 
+    const signedCompany = {
+      ...targetCompany,
+      logoUrl: await resolveImageDisplayUrl(targetCompany.logoUrl),
+      logoKey: targetCompany.logoUrl ?? null,
+    }
+
     return NextResponse.json({
       data: {
         changed: true,
         oldCompanyId: dbUser.companyId,
         newCompanyId: targetCompanyId,
-        company: targetCompany,
+        company: signedCompany,
         user: updatedUser,
       },
       message: '已绑定到目标公司（刷新页面即可看到导入部门）',

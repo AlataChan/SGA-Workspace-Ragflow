@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.964.0",
+    "@aws-sdk/s3-request-presigner": "^3.986.0",
     "@fortaine/fetch-event-source": "^3.0.6",
     "@hello-pangea/dnd": "^18.0.1",
     "@hookform/resolvers": "^3.10.0",
@@ -57,6 +58,8 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
+    "cron-parser": "^5.5.0",
+    "cronstrue": "^3.11.0",
     "d3": "^7.9.0",
     "d3-drag": "^3.0.0",
     "d3-force": "^3.0.0",

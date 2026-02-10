@@ -9,6 +9,7 @@ import prisma from '@/lib/prisma'
 import { withAuth } from '@/lib/auth/middleware'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 
 // CORS headers
 const corsHeaders = {
@@ -90,8 +91,16 @@ export const GET = withAuth(async (request) => {
       )
     }
 
+    const storedAvatarValue = userProfile.avatarUrl
+    const signedAvatarUrl = await resolveImageDisplayUrl(storedAvatarValue)
+    const avatarKey = storedAvatarValue ?? null
+
     return NextResponse.json({
-      data: userProfile,
+      data: {
+        ...userProfile,
+        avatarUrl: signedAvatarUrl,
+        avatarKey,
+      },
       message: '获取个人信息成功'
     }, { headers: corsHeaders })
 
@@ -211,8 +220,16 @@ export const PUT = withAuth(async (request) => {
       }
     })
 
+    const storedAvatarValue = updatedUser.avatarUrl
+    const signedAvatarUrl = await resolveImageDisplayUrl(storedAvatarValue)
+    const avatarKey = storedAvatarValue ?? null
+
     return NextResponse.json({
-      data: updatedUser,
+      data: {
+        ...updatedUser,
+        avatarUrl: signedAvatarUrl,
+        avatarKey,
+      },
       message: '个人信息更新成功'
     }, { headers: corsHeaders })
 

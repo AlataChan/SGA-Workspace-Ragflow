@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withAdminAuth } from '@/lib/auth/middleware'
 import { z } from 'zod'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 
 // 更新部门的验证模式
 const updateDepartmentSchema = z.object({
@@ -59,6 +60,13 @@ export const GET = withAdminAuth(async (request, context) => {
 
     const departmentWithStats = {
       ...department,
+      agents: await Promise.all(
+        department.agents.map(async (agent) => ({
+          ...agent,
+          avatarUrl: await resolveImageDisplayUrl(agent.avatarUrl),
+          avatarKey: agent.avatarUrl ?? null,
+        }))
+      ),
       agentCount: department.agents.length,
       onlineAgentCount: department.agents.filter(agent => agent.isOnline).length,
     }

@@ -19,6 +19,7 @@ import {
   GetObjectCommand,
   HeadObjectCommand
 } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { logger } from "@/lib/utils/logger";
 
 type StorageConfig = {
@@ -165,7 +166,7 @@ function getS3Client(): S3Client | null {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
     },
-    forcePathStyle: config.forcePathStyle,
+    forcePathStyle: false,
   });
 
   return cachedClient;
@@ -187,6 +188,129 @@ export function getPublicUrl(key: string): string {
   
   // Path style URL: http://endpoint/bucket/key
   return joinUrl(config.publicUrlBase, config.bucket, encodePathPreservingSlashes(key));
+}
+
+function clampInt(n: number, min: number, max: number): number {
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, Math.trunc(n)));
+}
+
+/**
+ * 获取预签名 URL 过期时间（秒）
+ * - 默认 30 分钟（1800s）
+ * - 可通过 S3_PRESIGN_EXPIRES_SECONDS 配置
+ */
+export function getPresignExpiresInSeconds(): number {
+  const raw = (process.env.S3_PRESIGN_EXPIRES_SECONDS || '').trim();
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  // 安全边界：最短 60s，最长 12h（可按需调整）
+  return clampInt(Number.isNaN(parsed) ? 1800 : parsed, 60, 60 * 60 * 12);
+}
+
+/**
+ * 生成 GET 预签名 URL（展示用）
+ */
+export async function getPresignedGetUrl(key: string, expiresInSeconds?: number): Promise<string> {
+  const config = getStorageConfig();
+  const client = getS3Client();
+
+  if (!config || !client) {
+    throw new Error('存储服务未配置');
+  }
+
+  const command = new GetObjectCommand({
+    Bucket: config.bucket,
+    Key: key,
+  });
+
+  const expiresIn = clampInt(
+    expiresInSeconds ?? getPresignExpiresInSeconds(),
+    60,
+    60 * 60 * 12
+  );
+
+  return await getSignedUrl(client, command, { expiresIn });
+}
+
+/**
+ * 上传对象（不返回公开 URL；建议 DB 存 Key，展示时再生成预签名 URL）
+ */
+export async function putObject(
+  key: string,
+  body: Buffer,
+  contentType: string
+): Promise<void> {
+  const config = getStorageConfig();
+  const client = getS3Client();
+
+  if (!config || !client) {
+    throw new Error('存储服务未配置');
+  }
+
+  const command = new PutObjectCommand({
+    Bucket: config.bucket,
+    Key: key,
+    Body: body,
+    ContentType: contentType,
+  });
+
+  await client.send(command);
+}
+
+function isAbsoluteHttpUrl(value: string): boolean {
+  return value.startsWith('http://') || value.startsWith('https://');
+}
+
+/**
+ * 判断一个图片字段的存储值是否为“对象 key”
+ * - 如果是 legacy URL/dataURL/站内相对路径，则返回 null
+ * - 否则返回 key（trim 后）
+ */
+export function getImageStoredKey(storedValue?: string | null): string | null {
+  const v = (storedValue ?? '').trim();
+  if (!v) return null;
+  if (v.startsWith('data:')) return null;
+  if (isAbsoluteHttpUrl(v)) return null;
+  if (v.startsWith('/')) return null;
+  return v;
+}
+
+/**
+ * 将 DB 中存储的图片字段转换为“可展示 URL”
+ *
+ * 兼容策略：
+ * - 已经是 `data:` / `http(s)://` / `/uploads/...` / `/...`：原样返回
+ * - 否则认为是对象存储 key：如果配置了 S3，则返回 GET 预签名 URL；否则原样返回
+ *
+ * 说明：当前项目历史上会把图片字段存为相对路径或 dataURL；
+ *      改造后建议存为对象 key（仍复用 logoUrl/avatarUrl/photoUrl 字段），由接口层统一签名。
+ */
+export async function resolveImageDisplayUrl(
+  storedValue?: string | null,
+  opts?: { expiresInSeconds?: number }
+): Promise<string | null> {
+  const v = (storedValue ?? '').trim();
+  if (!v) return null;
+
+  // legacy / compatible: dataURL
+  if (v.startsWith('data:')) return v;
+  // already an URL
+  if (isAbsoluteHttpUrl(v)) return v;
+  // same-origin / static path (e.g. /uploads/..., /logo.png)
+  if (v.startsWith('/')) return v;
+
+  // treat as object key
+  if (!isStorageConfigured()) return v;
+
+  try {
+    return await getPresignedGetUrl(v, opts?.expiresInSeconds);
+  } catch (err: any) {
+    if (process.env.S3_DEBUG === "true") {
+      logger.debug("[S3 PresignGet] error", { key: v, name: err?.name, message: err?.message });
+    }
+    // fail open to avoid breaking existing UI
+    return v;
+  }
 }
 
 /**
@@ -354,5 +478,6 @@ export function getStorageConfigInfo(): Record<string, string> {
     region: config.region,
     ssl: config.useSSL ? 'yes' : 'no',
     force_path_style: config.forcePathStyle ? 'yes' : 'no',
+    presign_expires_seconds: String(getPresignExpiresInSeconds()),
   };
 }

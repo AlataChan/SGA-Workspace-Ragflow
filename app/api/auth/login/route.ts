@@ -8,6 +8,7 @@ import prisma from '@/lib/prisma'
 import { verifyPassword } from '@/lib/auth/password'
 import { generateToken } from '@/lib/auth/jwt'
 import { setAuthCookie } from '@/lib/auth/middleware'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 import { z } from "zod"
 
 // 登录请求验证模式
@@ -133,6 +134,11 @@ export async function POST(request: NextRequest) {
     })
 
     // 准备响应数据
+    const [signedAvatarUrl, signedCompanyLogoUrl] = await Promise.all([
+      resolveImageDisplayUrl(user.avatarUrl),
+      resolveImageDisplayUrl(user.company?.logoUrl),
+    ])
+
     const responseData = {
       data: {
         user: {
@@ -140,10 +146,17 @@ export async function POST(request: NextRequest) {
           userId: user.userId,
           phone: user.phone,
           displayName: user.displayName,
-          avatarUrl: user.avatarUrl,
+          avatarUrl: signedAvatarUrl,
+          avatarKey: user.avatarUrl ?? null,
           role: user.role,
           departmentId: user.departmentId,
-          company: user.company,
+          company: user.company
+            ? {
+                ...user.company,
+                logoUrl: signedCompanyLogoUrl,
+                logoKey: user.company.logoUrl ?? null,
+              }
+            : user.company,
         },
         token,
       },
@@ -233,6 +246,11 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    const [signedAvatarUrl, signedCompanyLogoUrl] = await Promise.all([
+      resolveImageDisplayUrl(user.avatarUrl),
+      resolveImageDisplayUrl(user.company?.logoUrl),
+    ])
+
     return NextResponse.json({
       authenticated: true,
       user: {
@@ -240,10 +258,17 @@ export async function GET(request: NextRequest) {
         userId: user.userId,
         phone: user.phone,
         displayName: user.displayName,
-        avatarUrl: user.avatarUrl,
+        avatarUrl: signedAvatarUrl,
+        avatarKey: user.avatarUrl ?? null,
         role: user.role,
         departmentId: user.departmentId,
-        company: user.company,
+        company: user.company
+          ? {
+              ...user.company,
+              logoUrl: signedCompanyLogoUrl,
+              logoKey: user.company.logoUrl ?? null,
+            }
+          : user.company,
       }
     })
 

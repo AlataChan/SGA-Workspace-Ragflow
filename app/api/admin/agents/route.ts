@@ -9,6 +9,7 @@ import prisma from '@/lib/prisma'
 import { withAdminAuth } from '@/lib/auth/middleware'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 
 // CORS headers for cross-origin requests
 const corsHeaders = {
@@ -203,6 +204,21 @@ GROUP BY agent_id
       explicitUserPermissionsCount: _count.userPermissions,
     }))
 
+    const signedAgents = await Promise.all(
+      agentsWithPermissionCounts.map(async (agent) => {
+        const storedAvatarValue = agent.avatarUrl
+        const storedPhotoValue = agent.photoUrl
+        return {
+          ...agent,
+          avatarUrl: await resolveImageDisplayUrl(storedAvatarValue),
+          photoUrl: await resolveImageDisplayUrl(storedPhotoValue),
+          // NOTE: 这里的 *Key 表示“入库的存储值”（可能是 key，也可能是 legacy 的 /uploads 或 http URL）
+          avatarKey: storedAvatarValue ?? null,
+          photoKey: storedPhotoValue ?? null,
+        }
+      })
+    )
+
     // 统计信息
     const stats = {
       total: agentsWithPermissionCounts.length,
@@ -219,7 +235,7 @@ GROUP BY agent_id
     }
 
     return NextResponse.json({
-      data: agentsWithPermissionCounts,
+      data: signedAgents,
       stats,
       message: '获取Agent列表成功'
     }, { headers: corsHeaders })
@@ -369,8 +385,16 @@ export const POST = withAdminAuth(async (request) => {
       }
     })
 
+    const signedAgent = {
+      ...newAgent,
+      avatarUrl: await resolveImageDisplayUrl(newAgent.avatarUrl),
+      photoUrl: await resolveImageDisplayUrl(newAgent.photoUrl),
+      avatarKey: newAgent.avatarUrl ?? null,
+      photoKey: newAgent.photoUrl ?? null,
+    }
+
     return NextResponse.json({
-      data: newAgent,
+      data: signedAgent,
       message: 'Agent创建成功'
     }, { headers: corsHeaders })
 

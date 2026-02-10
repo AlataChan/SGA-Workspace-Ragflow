@@ -6,7 +6,12 @@ import { Button } from "@/components/ui/button"
 import { Upload, User, Image as ImageIcon } from "lucide-react"
 
 interface BasicImageUploadProps {
-  onUpload: (photoUrl: string, avatarUrl: string) => void
+  onUpload: (result: {
+    photoKey: string
+    avatarKey: string
+    photoUrl: string
+    avatarUrl: string
+  }) => void
   photoUrl?: string
   avatarUrl?: string
 }
@@ -49,7 +54,12 @@ export function BasicImageUpload({ onUpload, photoUrl, avatarUrl }: BasicImageUp
       if (!res.ok) throw new Error(`${res.status}`)
       const data = await res.json()
       console.log('上传成功:', data)
-      onUpload(data.photoUrl, data.avatarUrl)
+      onUpload({
+        photoKey: data.photoKey || data.photoUrl,
+        avatarKey: data.avatarKey || data.avatarUrl,
+        photoUrl: data.photoUrl,
+        avatarUrl: data.avatarUrl,
+      })
     } catch (err) {
       console.error("图片上传失败", err)
       alert("图片上传失败，请重试")

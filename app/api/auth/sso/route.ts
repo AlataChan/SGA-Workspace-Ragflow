@@ -9,6 +9,7 @@ import userSyncService from '@/lib/auth/user-sync'
 import tokenCacheService from '@/lib/auth/token-cache'
 import { generateToken } from '@/lib/auth/jwt'
 import { setAuthCookie } from '@/lib/auth/middleware'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 import { z } from 'zod'
 
 // SSO 请求验证模式
@@ -160,6 +161,7 @@ export async function POST(request: NextRequest) {
     })
 
     // 11. 准备响应数据
+    const signedAvatarUrl = await resolveImageDisplayUrl(localUser.avatarUrl)
     const responseData = {
       success: true,
       data: {
@@ -170,7 +172,7 @@ export async function POST(request: NextRequest) {
           phone: localUser.phone,
           email: localUser.email,
           displayName: localUser.displayName,
-          avatarUrl: localUser.avatarUrl,
+          avatarUrl: signedAvatarUrl,
           role: localUser.role,
           company: localUser.companyId,
         },

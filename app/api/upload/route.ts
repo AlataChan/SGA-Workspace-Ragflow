@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { isStorageConfigured, putObject, resolveImageDisplayUrl, generateFileKey } from "@/lib/storage/s3-client"
 
 // CORS headers
 const corsHeaders = {
@@ -42,15 +43,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Convert to base64 for simple storage
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
+
+    // 如果已配置对象存储：上传到 S3，返回 key + 展示用预签名 URL
+    if (isStorageConfigured()) {
+      const key = generateFileKey(file.name, "users/avatars")
+      await putObject(key, buffer, file.type)
+      const displayUrl = await resolveImageDisplayUrl(key)
+
+      return NextResponse.json({
+        success: true,
+        avatarKey: key,
+        avatarUrl: displayUrl,
+        url: displayUrl,
+        fileName: file.name,
+        size: file.size,
+        type: file.type,
+      }, { headers: corsHeaders })
+    }
+
+    // 未配置对象存储：继续用 base64 dataURL（兼容旧逻辑）
     const base64 = buffer.toString("base64")
     const dataUrl = `data:${file.type};base64,${base64}`
 
     return NextResponse.json({
       success: true,
       url: dataUrl,
+      avatarKey: dataUrl,
       avatarUrl: dataUrl, // For compatibility
       fileName: file.name,
       size: file.size,
