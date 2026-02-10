@@ -23,7 +23,8 @@ import {
   ChevronDown,
   Home,
   Network,
-  Palette
+  Palette,
+  Clock
 } from "lucide-react"
 
 interface AdminLayoutProps {
@@ -62,6 +63,12 @@ export default function NewAdminLayout({ children }: AdminLayoutProps) {
       label: "部门管理",
       icon: Users,
       description: "部门结构管理"
+    },
+    {
+      href: "/admin/tasks",
+      label: "定时任务",
+      icon: Clock,
+      description: "定时任务列表与状态"
     },
     {
       href: "/admin/agents",
