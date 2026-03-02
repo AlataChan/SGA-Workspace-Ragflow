@@ -44,9 +44,13 @@ import {
   XCircle,
   AlertCircle,
   Network,
-  ExternalLink
+  ExternalLink,
+  Shield,
+  Ban
 } from "lucide-react"
 import NewAdminLayout from "@/components/admin/new-admin-layout"
+import KnowledgeGraphDepartmentGrantDialog from "@/components/admin/knowledge-graph-department-grant-dialog"
+import BulkRevokeDialog from "@/components/admin/bulk-revoke-dialog"
 
 interface KnowledgeGraph {
   id: string
@@ -87,6 +91,10 @@ export default function KnowledgeGraphsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [isTesting, setIsTesting] = useState<string | null>(null)
   const [selectedKG, setSelectedKG] = useState<KnowledgeGraph | null>(null)
+  const [policyKG, setPolicyKG] = useState<KnowledgeGraph | null>(null)
+  const [isPolicyDialogOpen, setIsPolicyDialogOpen] = useState(false)
+  const [revokeKG, setRevokeKG] = useState<KnowledgeGraph | null>(null)
+  const [isBulkRevokeDialogOpen, setIsBulkRevokeDialogOpen] = useState(false)
   const [message, setMessage] = useState<Message | null>(null)
   const [formTestResult, setFormTestResult] = useState<{ type: 'success' | 'error' | 'testing', text: string } | null>(null)
 
@@ -158,6 +166,16 @@ export default function KnowledgeGraphsPage() {
   const openDeleteDialog = (kg: KnowledgeGraph) => {
     setSelectedKG(kg)
     setIsDeleteDialogOpen(true)
+  }
+
+  const openPolicyDialog = (kg: KnowledgeGraph) => {
+    setPolicyKG(kg)
+    setIsPolicyDialogOpen(true)
+  }
+
+  const openBulkRevokeDialog = (kg: KnowledgeGraph) => {
+    setRevokeKG(kg)
+    setIsBulkRevokeDialogOpen(true)
   }
 
   const handleCreate = async () => {
@@ -611,6 +629,23 @@ export default function KnowledgeGraphsPage() {
                           <Button
                             variant="outline"
                             size="sm"
+                            onClick={() => openPolicyDialog(kg)}
+                            title="部门授权（自动）"
+                          >
+                            <Shield className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openBulkRevokeDialog(kg)}
+                            title="批量撤销（强制）"
+                            className="border-destructive/30 text-destructive hover:bg-destructive/10"
+                          >
+                            <Ban className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => handleTestConnection(kg)}
                             disabled={isTesting === kg.id}
                           >
@@ -772,6 +807,28 @@ export default function KnowledgeGraphsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 部门授权（自动）弹窗 */}
+      <KnowledgeGraphDepartmentGrantDialog
+        open={isPolicyDialogOpen}
+        onOpenChange={(open) => {
+          setIsPolicyDialogOpen(open)
+          if (!open) setPolicyKG(null)
+        }}
+        knowledgeGraph={policyKG ? { id: policyKG.id, name: policyKG.name } : null}
+      />
+
+      {/* 批量撤销（强制）弹窗 */}
+      <BulkRevokeDialog
+        open={isBulkRevokeDialogOpen}
+        onOpenChange={(open) => {
+          setIsBulkRevokeDialogOpen(open)
+          if (!open) setRevokeKG(null)
+        }}
+        resourceType="knowledgeGraph"
+        resourceId={revokeKG?.id ?? null}
+        resourceName={revokeKG?.name ?? null}
+      />
 
       {/* 编辑对话框 */}
       <Dialog open={isEditDialogOpen} onOpenChange={(open) => { setIsEditDialogOpen(open); if (!open) setFormTestResult(null); }}>

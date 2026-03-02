@@ -1,18 +1,18 @@
 /**
- * Agent 部门授权规则（Policy）API
+ * Knowledge Graph 部门授权规则（Policy）API
  *
- * GET    /api/admin/agents/[id]/department-grants   - 获取某个 Agent 的部门授权规则列表
- * POST   /api/admin/agents/[id]/department-grants   - 创建/更新规则（支持 dryRun 预览）
- * DELETE /api/admin/agents/[id]/department-grants   - 停用/删除规则（按 grantId 或 departmentId）
+ * GET    /api/admin/knowledge-graphs/[id]/department-grants   - 获取某个知识图谱的部门授权规则列表
+ * POST   /api/admin/knowledge-graphs/[id]/department-grants   - 创建/更新规则（支持 dryRun 预览，支持 replace 同步）
+ * DELETE /api/admin/knowledge-graphs/[id]/department-grants   - 停用规则（按 grantId 或 departmentId）
  */
 
-import { NextResponse } from 'next/server'
-import prisma from '@/lib/prisma'
-import { withAdminAuth } from '@/lib/auth/middleware'
-import { z } from 'zod'
-import { UserRole } from '@prisma/client'
+import { NextResponse } from "next/server"
+import prisma from "@/lib/prisma"
+import { withAdminAuth } from "@/lib/auth/middleware"
+import { z } from "zod"
+import { UserRole } from "@prisma/client"
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic"
 
 const nowOrNotExpired = () => {
   const now = new Date()
@@ -39,7 +39,7 @@ async function expandDepartmentsWithDescendants(companyId: string, selectedIds: 
 
   const childrenByParent = new Map<string, string[]>()
   for (const dept of departments) {
-    const key = dept.parentId ?? '__root__'
+    const key = dept.parentId ?? "__root__"
     const list = childrenByParent.get(key) ?? []
     list.push(dept.id)
     childrenByParent.set(key, list)
@@ -60,11 +60,11 @@ async function expandDepartmentsWithDescendants(companyId: string, selectedIds: 
 
 async function computeScopeStats(params: {
   companyId: string
-  agentId: string
+  knowledgeGraphId: string
   departmentIds: string[]
   includeSubDepartments: boolean
 }) {
-  const { companyId, agentId, departmentIds, includeSubDepartments } = params
+  const { companyId, knowledgeGraphId, departmentIds, includeSubDepartments } = params
 
   const selected = Array.from(new Set(departmentIds))
   const scopeDepartmentIds = includeSubDepartments
@@ -84,26 +84,26 @@ async function computeScopeStats(params: {
   const usersEligible = await prisma.user.count({
     where: {
       ...baseUserWhere,
-      agentPermissionRevocations: { none: { agentId, ...nowOrNotExpired() } },
+      knowledgeGraphPermissionRevocations: { none: { knowledgeGraphId, ...nowOrNotExpired() } },
     },
   })
   const usersRevoked = Math.max(usersMatched - usersEligible, 0)
 
-  const alreadyExplicitCount = await prisma.userAgentPermission.count({
+  const alreadyExplicitCount = await prisma.userKnowledgeGraphPermission.count({
     where: {
-      agentId,
+      knowledgeGraphId,
       user: {
         ...baseUserWhere,
-        agentPermissionRevocations: { none: { agentId, ...nowOrNotExpired() } },
+        knowledgeGraphPermissionRevocations: { none: { knowledgeGraphId, ...nowOrNotExpired() } },
       },
     },
   })
 
   // 现有 policy 覆盖（用于估算“新增获得权限数”）
-  const existingGrants = await prisma.agentDepartmentGrant.findMany({
+  const existingGrants = await prisma.knowledgeGraphDepartmentGrant.findMany({
     where: {
       companyId,
-      agentId,
+      knowledgeGraphId,
       isActive: true,
     },
     select: {
@@ -138,16 +138,16 @@ async function computeScopeStats(params: {
       alreadyPolicyCount = await prisma.user.count({
         where: {
           ...intersectionUserWhere,
-          agentPermissionRevocations: { none: { agentId, ...nowOrNotExpired() } },
+          knowledgeGraphPermissionRevocations: { none: { knowledgeGraphId, ...nowOrNotExpired() } },
         },
       })
 
-      explicitAndPolicyCount = await prisma.userAgentPermission.count({
+      explicitAndPolicyCount = await prisma.userKnowledgeGraphPermission.count({
         where: {
-          agentId,
+          knowledgeGraphId,
           user: {
             ...intersectionUserWhere,
-            agentPermissionRevocations: { none: { agentId, ...nowOrNotExpired() } },
+            knowledgeGraphPermissionRevocations: { none: { knowledgeGraphId, ...nowOrNotExpired() } },
           },
         },
       })
@@ -174,27 +174,27 @@ const postSchema = z.object({
   departmentIds: z.array(z.string().min(1)),
   includeSubDepartments: z.boolean().optional().default(true),
   dryRun: z.boolean().optional().default(false),
-  syncMode: z.enum(['merge', 'replace']).optional().default('merge'),
+  syncMode: z.enum(["merge", "replace"]).optional().default("merge"),
 })
 
 export const GET = withAdminAuth(async (request, context) => {
   try {
     const user = request.user!
-    const agentId = context.params.id
+    const knowledgeGraphId = context.params.id
 
-    const agent = await prisma.agent.findFirst({
-      where: { id: agentId, companyId: user.companyId },
+    const knowledgeGraph = await prisma.knowledgeGraph.findFirst({
+      where: { id: knowledgeGraphId, companyId: user.companyId },
       select: { id: true },
     })
-    if (!agent) {
+    if (!knowledgeGraph) {
       return NextResponse.json(
-        { error: { code: 'AGENT_NOT_FOUND', message: 'Agent不存在' } },
+        { error: { code: "KNOWLEDGE_GRAPH_NOT_FOUND", message: "知识图谱不存在" } },
         { status: 404 }
       )
     }
 
-    const grants = await prisma.agentDepartmentGrant.findMany({
-      where: { companyId: user.companyId, agentId },
+    const grants = await prisma.knowledgeGraphDepartmentGrant.findMany({
+      where: { companyId: user.companyId, knowledgeGraphId },
       include: {
         department: {
           select: {
@@ -207,16 +207,16 @@ export const GET = withAdminAuth(async (request, context) => {
           },
         },
       },
-      orderBy: [{ isActive: 'desc' }, { updatedAt: 'desc' }],
+      orderBy: [{ isActive: "desc" }, { updatedAt: "desc" }],
     })
 
     return NextResponse.json({
       data: {
-        agentId,
+        knowledgeGraphId,
         grants: grants.map((g) => ({
           id: g.id,
           departmentId: g.departmentId,
-          departmentName: g.department?.name ?? '',
+          departmentName: g.department?.name ?? "",
           department: g.department,
           includeSubDepartments: g.includeSubDepartments,
           isActive: g.isActive,
@@ -225,12 +225,12 @@ export const GET = withAdminAuth(async (request, context) => {
           updatedAt: g.updatedAt,
         })),
       },
-      message: '获取部门授权规则成功',
+      message: "获取部门授权规则成功",
     })
   } catch (error) {
-    console.error('获取部门授权规则失败:', error)
+    console.error("获取知识图谱部门授权规则失败:", error)
     return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: '获取部门授权规则失败' } },
+      { error: { code: "INTERNAL_ERROR", message: "获取部门授权规则失败" } },
       { status: 500 }
     )
   } finally {
@@ -241,7 +241,7 @@ export const GET = withAdminAuth(async (request, context) => {
 export const POST = withAdminAuth(async (request, context) => {
   try {
     const user = request.user!
-    const agentId = context.params.id
+    const knowledgeGraphId = context.params.id
 
     const body = await request.json().catch(() => ({}))
     const parsed = postSchema.safeParse(body)
@@ -249,8 +249,8 @@ export const POST = withAdminAuth(async (request, context) => {
       return NextResponse.json(
         {
           error: {
-            code: 'VALIDATION_ERROR',
-            message: '请求参数错误',
+            code: "VALIDATION_ERROR",
+            message: "请求参数错误",
             details: parsed.error.flatten().fieldErrors,
           },
         },
@@ -259,20 +259,20 @@ export const POST = withAdminAuth(async (request, context) => {
     }
 
     const input = parsed.data
-    if (input.syncMode === 'merge' && input.departmentIds.length === 0) {
+    if (input.syncMode === "merge" && input.departmentIds.length === 0) {
       return NextResponse.json(
-        { error: { code: 'VALIDATION_ERROR', message: '请选择至少一个部门' } },
+        { error: { code: "VALIDATION_ERROR", message: "请选择至少一个部门" } },
         { status: 400 }
       )
     }
 
-    const agent = await prisma.agent.findFirst({
-      where: { id: agentId, companyId: user.companyId },
+    const knowledgeGraph = await prisma.knowledgeGraph.findFirst({
+      where: { id: knowledgeGraphId, companyId: user.companyId },
       select: { id: true },
     })
-    if (!agent) {
+    if (!knowledgeGraph) {
       return NextResponse.json(
-        { error: { code: 'AGENT_NOT_FOUND', message: 'Agent不存在' } },
+        { error: { code: "KNOWLEDGE_GRAPH_NOT_FOUND", message: "知识图谱不存在" } },
         { status: 404 }
       )
     }
@@ -288,8 +288,8 @@ export const POST = withAdminAuth(async (request, context) => {
       return NextResponse.json(
         {
           error: {
-            code: 'DEPARTMENT_NOT_FOUND',
-            message: `部门不存在或不属于当前公司: ${missing.join(', ')}`,
+            code: "DEPARTMENT_NOT_FOUND",
+            message: `部门不存在或不属于当前公司: ${missing.join(", ")}`,
           },
         },
         { status: 400 }
@@ -298,7 +298,7 @@ export const POST = withAdminAuth(async (request, context) => {
 
     const stats = await computeScopeStats({
       companyId: user.companyId,
-      agentId,
+      knowledgeGraphId,
       departmentIds: uniqueDeptIds,
       includeSubDepartments: input.includeSubDepartments,
     })
@@ -317,25 +317,24 @@ export const POST = withAdminAuth(async (request, context) => {
           alreadyEffectiveCount: stats.alreadyEffectiveCount,
           usersWillHaveAccess: stats.usersWillHaveAccess,
         },
-        message: '预览完成',
+        message: "预览完成",
       })
     }
 
-    // 批量 upsert 规则（避免 createMany 无法更新 includeSubDepartments 的限制）
     const batches = chunkArray(uniqueDeptIds, 100)
     let rulesUpserted = 0
     for (const batch of batches) {
       const operations = batch.map((departmentId) =>
-        prisma.agentDepartmentGrant.upsert({
+        prisma.knowledgeGraphDepartmentGrant.upsert({
           where: {
-            unique_agent_department_grant: {
-              agentId,
+            unique_kg_department_grant: {
+              knowledgeGraphId,
               departmentId,
             },
           },
           create: {
             companyId: user.companyId,
-            agentId,
+            knowledgeGraphId,
             departmentId,
             includeSubDepartments: input.includeSubDepartments,
             isActive: true,
@@ -352,11 +351,11 @@ export const POST = withAdminAuth(async (request, context) => {
     }
 
     let rulesDisabled = 0
-    if (input.syncMode === 'replace') {
-      const result = await prisma.agentDepartmentGrant.updateMany({
+    if (input.syncMode === "replace") {
+      const result = await prisma.knowledgeGraphDepartmentGrant.updateMany({
         where: {
           companyId: user.companyId,
-          agentId,
+          knowledgeGraphId,
           isActive: true,
           ...(uniqueDeptIds.length > 0 ? { departmentId: { notIn: uniqueDeptIds } } : {}),
         },
@@ -378,12 +377,12 @@ export const POST = withAdminAuth(async (request, context) => {
         alreadyEffectiveCount: stats.alreadyEffectiveCount,
         usersWillHaveAccess: stats.usersWillHaveAccess,
       },
-      message: '规则已保存',
+      message: "规则已保存",
     })
   } catch (error) {
-    console.error('保存部门授权规则失败:', error)
+    console.error("保存知识图谱部门授权规则失败:", error)
     return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: '保存部门授权规则失败' } },
+      { error: { code: "INTERNAL_ERROR", message: "保存部门授权规则失败" } },
       { status: 500 }
     )
   } finally {
@@ -394,34 +393,34 @@ export const POST = withAdminAuth(async (request, context) => {
 export const DELETE = withAdminAuth(async (request, context) => {
   try {
     const user = request.user!
-    const agentId = context.params.id
+    const knowledgeGraphId = context.params.id
 
-    const agent = await prisma.agent.findFirst({
-      where: { id: agentId, companyId: user.companyId },
+    const knowledgeGraph = await prisma.knowledgeGraph.findFirst({
+      where: { id: knowledgeGraphId, companyId: user.companyId },
       select: { id: true },
     })
-    if (!agent) {
+    if (!knowledgeGraph) {
       return NextResponse.json(
-        { error: { code: 'AGENT_NOT_FOUND', message: 'Agent不存在' } },
+        { error: { code: "KNOWLEDGE_GRAPH_NOT_FOUND", message: "知识图谱不存在" } },
         { status: 404 }
       )
     }
 
     const { searchParams } = new URL(request.url)
-    const grantId = searchParams.get('grantId')
-    const departmentId = searchParams.get('departmentId')
+    const grantId = searchParams.get("grantId")
+    const departmentId = searchParams.get("departmentId")
 
     if (!grantId && !departmentId) {
       return NextResponse.json(
-        { error: { code: 'MISSING_PARAMS', message: '缺少 grantId 或 departmentId' } },
+        { error: { code: "MISSING_PARAMS", message: "缺少 grantId 或 departmentId" } },
         { status: 400 }
       )
     }
 
-    const result = await prisma.agentDepartmentGrant.updateMany({
+    const result = await prisma.knowledgeGraphDepartmentGrant.updateMany({
       where: {
         companyId: user.companyId,
-        agentId,
+        knowledgeGraphId,
         ...(grantId ? { id: grantId } : {}),
         ...(departmentId ? { departmentId } : {}),
         isActive: true,
@@ -431,22 +430,23 @@ export const DELETE = withAdminAuth(async (request, context) => {
 
     if (result.count === 0) {
       return NextResponse.json(
-        { error: { code: 'NOT_FOUND', message: '规则不存在或已停用' } },
+        { error: { code: "NOT_FOUND", message: "规则不存在或已停用" } },
         { status: 404 }
       )
     }
 
     return NextResponse.json({
       data: { disabled: result.count },
-      message: '规则已停用',
+      message: "规则已停用",
     })
   } catch (error) {
-    console.error('停用部门授权规则失败:', error)
+    console.error("停用知识图谱部门授权规则失败:", error)
     return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: '停用部门授权规则失败' } },
+      { error: { code: "INTERNAL_ERROR", message: "停用部门授权规则失败" } },
       { status: 500 }
     )
   } finally {
     await prisma.$disconnect()
   }
 })
+

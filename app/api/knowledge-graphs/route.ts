@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
-import { PrismaClient } from "@prisma/client"
 import { verifyUserAuth } from "@/lib/auth/user"
+import prisma from "@/lib/prisma"
+import { getEffectiveKnowledgeGraphIdsForUser } from "@/lib/auth/knowledge-graph-access"
 
 export const dynamic = 'force-dynamic'
-
-const prisma = new PrismaClient()
 
 // 获取知识图谱列表（普通用户版本）
 export async function GET(request: NextRequest) {
@@ -40,13 +39,19 @@ export async function GET(request: NextRequest) {
         }
       })
     } else {
-      // 普通用户只能看到被分配给他们的知识图谱
-      const userPermissions = await prisma.userKnowledgeGraphPermission.findMany({
-        where: {
-          userId: user.userId,
-        },
-        include: {
-          knowledgeGraph: {
+      const { knowledgeGraphIds } = await getEffectiveKnowledgeGraphIdsForUser(user as any)
+
+      knowledgeGraphs = knowledgeGraphIds.length > 0
+        ? await prisma.knowledgeGraph.findMany({
+            where: {
+              companyId: user.companyId,
+              id: { in: knowledgeGraphIds },
+              isActive: true,
+            },
+            orderBy: [
+              { sortOrder: 'asc' },
+              { createdAt: 'desc' }
+            ],
             select: {
               id: true,
               name: true,
@@ -58,20 +63,8 @@ export async function GET(request: NextRequest) {
               createdAt: true,
               updatedAt: true
             }
-          }
-        }
-      })
-
-      // 只返回活跃的知识图谱
-      knowledgeGraphs = userPermissions
-        .filter(permission => permission.knowledgeGraph.isActive)
-        .map(permission => permission.knowledgeGraph)
-        .sort((a, b) => {
-          if (a.sortOrder !== b.sortOrder) {
-            return a.sortOrder - b.sortOrder
-          }
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        })
+          })
+        : []
     }
 
     return NextResponse.json({

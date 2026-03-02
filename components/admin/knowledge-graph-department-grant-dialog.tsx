@@ -46,7 +46,7 @@ type DepartmentGrantPreview = {
 
 type DepartmentGrantListResponse = {
   data: {
-    agentId: string
+    knowledgeGraphId: string
     grants: Array<{
       id: string
       departmentId: string
@@ -90,20 +90,20 @@ function collectAllDepartments(nodes: DepartmentNode[]) {
   return all
 }
 
-type AgentInfo = {
+type KnowledgeGraphInfo = {
   id: string
-  chineseName: string
+  name: string
 }
 
-export default function AgentBulkGrantDialog({
+export default function KnowledgeGraphDepartmentGrantDialog({
   open,
   onOpenChange,
-  agent,
+  knowledgeGraph,
   onCompleted,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  agent: AgentInfo | null
+  knowledgeGraph: KnowledgeGraphInfo | null
   onCompleted?: () => void
 }) {
   const [departments, setDepartments] = useState<DepartmentNode[] | null>(null)
@@ -142,11 +142,13 @@ export default function AgentBulkGrantDialog({
     }
   }
 
-  const fetchExistingGrants = async (agentId: string) => {
+  const fetchExistingGrants = async (knowledgeGraphId: string) => {
     try {
       setIsLoadingExistingGrants(true)
 
-      const response = await fetch(`/api/admin/agents/${agentId}/department-grants`, { cache: "no-cache" })
+      const response = await fetch(`/api/admin/knowledge-graphs/${knowledgeGraphId}/department-grants`, {
+        cache: "no-cache",
+      })
       const json = (await response.json().catch(() => ({}))) as Partial<DepartmentGrantListResponse> & any
       if (!response.ok) {
         throw new Error(json?.error?.message || `获取已保存规则失败 (HTTP ${response.status})`)
@@ -185,11 +187,11 @@ export default function AgentBulkGrantDialog({
       setExpandedIds(new Set(departments.map((d) => d.id)))
     }
 
-    if (agent) {
-      fetchExistingGrants(agent.id)
+    if (knowledgeGraph) {
+      fetchExistingGrants(knowledgeGraph.id)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, agent?.id])
+  }, [open, knowledgeGraph?.id])
 
   const allDepartments = useMemo(() => {
     if (!departments) return []
@@ -285,7 +287,7 @@ export default function AgentBulkGrantDialog({
   }
 
   const handlePreview = async () => {
-    if (!agent) return
+    if (!knowledgeGraph) return
     if (selectedDepartmentIds.size === 0) {
       setError("请选择至少一个部门")
       return
@@ -297,7 +299,7 @@ export default function AgentBulkGrantDialog({
       setPreview(null)
       setResult(null)
 
-      const response = await fetch(`/api/admin/agents/${agent.id}/department-grants`, {
+      const response = await fetch(`/api/admin/knowledge-graphs/${knowledgeGraph.id}/department-grants`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -322,7 +324,7 @@ export default function AgentBulkGrantDialog({
   }
 
   const handleGrant = async () => {
-    if (!agent) return
+    if (!knowledgeGraph) return
     if (selectedDepartmentIds.size === 0) {
       setError("请选择至少一个部门")
       return
@@ -333,7 +335,7 @@ export default function AgentBulkGrantDialog({
       setError(null)
       setResult(null)
 
-      const response = await fetch(`/api/admin/agents/${agent.id}/department-grants`, {
+      const response = await fetch(`/api/admin/knowledge-graphs/${knowledgeGraph.id}/department-grants`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -362,9 +364,9 @@ export default function AgentBulkGrantDialog({
   }
 
   const handleClearRules = async () => {
-    if (!agent) return
+    if (!knowledgeGraph) return
 
-    const ok = confirm(`确认清空 Agent「${agent.chineseName}」的所有部门授权规则吗？此操作会影响当前与未来的默认授权。`)
+    const ok = confirm(`确认清空知识图谱「${knowledgeGraph.name}」的所有部门授权规则吗？此操作会影响当前与未来的默认授权。`)
     if (!ok) return
 
     try {
@@ -372,7 +374,7 @@ export default function AgentBulkGrantDialog({
       setError(null)
       setResult(null)
 
-      const response = await fetch(`/api/admin/agents/${agent.id}/department-grants`, {
+      const response = await fetch(`/api/admin/knowledge-graphs/${knowledgeGraph.id}/department-grants`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -409,12 +411,12 @@ export default function AgentBulkGrantDialog({
         <DialogHeader>
           <DialogTitle>部门授权（自动）</DialogTitle>
           <DialogDescription>
-            {agent ? (
+            {knowledgeGraph ? (
               <>
-                目标 Agent：<span className="font-medium">{agent.chineseName}</span>（保存规则后，部门内用户将自动获得使用权限）
+                目标 知识图谱：<span className="font-medium">{knowledgeGraph.name}</span>（保存规则后，部门内用户将自动获得使用权限）
               </>
             ) : (
-              "选择一个 Agent 后配置部门授权规则"
+              "选择一个知识图谱后配置部门授权规则"
             )}
           </DialogDescription>
         </DialogHeader>
@@ -426,76 +428,60 @@ export default function AgentBulkGrantDialog({
         )}
 
         <div className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="font-medium">选择部门（支持多选）</div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={expandAll} disabled={!departments}>
-                  展开全部
-                </Button>
-                <Button variant="outline" size="sm" onClick={collapseAll} disabled={!departments}>
-                  折叠全部
-                </Button>
-              </div>
-            </div>
-
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <div className="flex items-center justify-between gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="搜索部门名称…"
+                placeholder="搜索部门..."
                 className="pl-8"
-                disabled={!departments}
               />
             </div>
 
-            <div className="rounded-md border">
-              <ScrollArea className="h-[320px]">
-                <div className="p-2">
-                  {isLoadingDepartments && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground p-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      正在加载部门树…
-                    </div>
-                  )}
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={expandAll} disabled={!departments}>
+                展开全部
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={collapseAll} disabled={!departments}>
+                收起全部
+              </Button>
+            </div>
+          </div>
 
-                  {!isLoadingDepartments && isLoadingExistingGrants && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground p-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      正在加载已保存规则…
-                    </div>
-                  )}
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">已选择：{selectedCount} 个部门</div>
+            <div className="flex items-center gap-2">
+              <Switch checked={includeSubDepartments} onCheckedChange={setIncludeSubDepartments} />
+              <div className="text-sm text-muted-foreground">包含子部门</div>
+            </div>
+          </div>
 
-                  {!isLoadingDepartments && departments && flatRows.length === 0 && (
-                    <div className="text-sm text-muted-foreground p-2">未找到匹配的部门</div>
-                  )}
-
-                  {!isLoadingDepartments &&
-                    departments &&
-                    flatRows.map(({ node, depth }) => {
-                      const isExpanded = effectiveExpandedIds.has(node.id)
+          <div className="border rounded-md">
+            <ScrollArea className="h-[360px]">
+              <div className="p-2">
+                {isLoadingDepartments ? (
+                  <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    加载部门树中...
+                  </div>
+                ) : departments ? (
+                  <div className="space-y-1">
+                    {flatRows.map(({ node, depth }) => {
+                      const isExpanded = expandedIds.has(node.id)
                       const hasChildren = node.children.length > 0
-                      const isSelected = selectedDepartmentIds.has(node.id)
-                      const isDisabled = !node.isActive
+                      const checked = selectedDepartmentIds.has(node.id)
 
                       return (
                         <div
                           key={node.id}
-                          className={cn(
-                            "flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50",
-                            isDisabled && "opacity-60"
-                          )}
-                          style={{ paddingLeft: 8 + depth * 16 }}
+                          className={cn("flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent", !node.isActive && "opacity-60")}
+                          style={{ paddingLeft: 8 + depth * 18 }}
                         >
                           <button
                             type="button"
-                            onClick={() => (hasChildren ? toggleExpanded(node.id) : undefined)}
-                            className={cn(
-                              "h-6 w-6 flex items-center justify-center rounded hover:bg-muted",
-                              !hasChildren && "opacity-0 pointer-events-none"
-                            )}
-                            aria-label={hasChildren ? (isExpanded ? "折叠" : "展开") : undefined}
+                            className={cn("h-6 w-6 flex items-center justify-center rounded hover:bg-muted", !hasChildren && "invisible")}
+                            onClick={() => toggleExpanded(node.id)}
                           >
                             {hasChildren ? (
                               isExpanded ? (
@@ -506,39 +492,37 @@ export default function AgentBulkGrantDialog({
                             ) : null}
                           </button>
 
-                          <Checkbox
-                            checked={isSelected}
-                            onCheckedChange={(checked) => toggleDepartment(node.id, checked === true)}
-                            disabled={isDisabled}
-                          />
+                          <Checkbox checked={checked} onCheckedChange={(v) => toggleDepartment(node.id, Boolean(v))} />
 
-                          <div className="flex-1 min-w-0">
-                            <div className="truncate text-sm">{node.name}</div>
-                            {!node.isActive && <div className="text-xs text-muted-foreground">已停用</div>}
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium truncate" title={node.name}>
+                              {node.name}
+                            </div>
+                            {!node.isActive ? (
+                              <div className="text-[11px] text-muted-foreground">已停用</div>
+                            ) : null}
                           </div>
                         </div>
                       )
                     })}
-                </div>
-              </ScrollArea>
-            </div>
-
-            <div className="text-sm text-muted-foreground">已选部门：{selectedCount}</div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-1">
-            <div className="flex items-center justify-between rounded-md border p-3">
-              <div className="space-y-0.5">
-                <div className="text-sm font-medium">包含子部门</div>
-                <div className="text-xs text-muted-foreground">选中部门将覆盖其后代部门用户</div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                    暂无部门数据
+                  </div>
+                )}
               </div>
-              <Switch checked={includeSubDepartments} onCheckedChange={setIncludeSubDepartments} />
-            </div>
+            </ScrollArea>
           </div>
 
-          {(preview || result) && (
-            <div className="rounded-md border p-3 bg-muted/30">
-              <div className="text-sm font-medium mb-2">结果</div>
+          {(isLoadingExistingGrants || preview || result) && (
+            <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+              {isLoadingExistingGrants ? (
+                <div className="text-sm text-muted-foreground flex items-center">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  加载已保存规则...
+                </div>
+              ) : null}
 
               {preview && (
                 <div className="text-sm text-muted-foreground space-y-1">
@@ -580,20 +564,20 @@ export default function AgentBulkGrantDialog({
           <Button
             variant="destructive"
             onClick={handleClearRules}
-            disabled={!agent || isLoadingDepartments || isPreviewing || isGranting || isClearing}
+            disabled={!knowledgeGraph || isLoadingDepartments || isPreviewing || isGranting || isClearing}
           >
             {isClearing ? <Loader2 className="h-4 w-4 animate-spin" /> : "清空规则"}
           </Button>
           <Button
             variant="outline"
             onClick={handlePreview}
-            disabled={!agent || selectedCount === 0 || isLoadingDepartments || isPreviewing || isGranting || isClearing}
+            disabled={!knowledgeGraph || selectedCount === 0 || isLoadingDepartments || isPreviewing || isGranting || isClearing}
           >
             {isPreviewing ? <Loader2 className="h-4 w-4 animate-spin" /> : "预览"}
           </Button>
           <Button
             onClick={handleGrant}
-            disabled={!agent || selectedCount === 0 || isLoadingDepartments || isPreviewing || isGranting || isClearing}
+            disabled={!knowledgeGraph || selectedCount === 0 || isLoadingDepartments || isPreviewing || isGranting || isClearing}
           >
             {isGranting ? <Loader2 className="h-4 w-4 animate-spin" /> : "保存规则"}
           </Button>
@@ -602,3 +586,4 @@ export default function AgentBulkGrantDialog({
     </Dialog>
   )
 }
+

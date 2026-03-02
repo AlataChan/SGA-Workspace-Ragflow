@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
-import { PrismaClient } from "@prisma/client"
 import { verifyUserAuth } from "@/lib/auth/user"
-
-const prisma = new PrismaClient()
+import prisma from "@/lib/prisma"
+import { canUserAccessKnowledgeGraph } from "@/lib/auth/knowledge-graph-access"
 
 // 搜索请求验证模式
 const searchSchema = z.object({
@@ -42,6 +41,13 @@ export async function POST(
         { error: "知识图谱不存在或已禁用" },
         { status: 404 }
       )
+    }
+
+    if (user.role !== "ADMIN") {
+      const allowed = await canUserAccessKnowledgeGraph(user as any, id)
+      if (!allowed) {
+        return NextResponse.json({ error: "无权限访问该知识图谱" }, { status: 403 })
+      }
     }
 
     // 调用RAGFlow API搜索节点

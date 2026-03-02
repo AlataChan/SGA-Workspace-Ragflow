@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { PrismaClient } from "@prisma/client"
 import { verifyUserAuth } from "@/lib/auth/user"
-
-const prisma = new PrismaClient()
+import prisma from "@/lib/prisma"
+import { canUserAccessKnowledgeGraph } from "@/lib/auth/knowledge-graph-access"
 
 /**
  * 查询知识图谱构建进度
@@ -35,6 +34,13 @@ export async function GET(
         { error: "知识图谱不存在或已禁用" },
         { status: 404 }
       )
+    }
+
+    if (user.role !== "ADMIN") {
+      const allowed = await canUserAccessKnowledgeGraph(user as any, id)
+      if (!allowed) {
+        return NextResponse.json({ error: "无权限访问该知识图谱" }, { status: 403 })
+      }
     }
 
     // 调用 RAGFlow API 查询构建进度
@@ -156,4 +162,3 @@ async function fetchBuildStatus(
     }
   }
 }
-

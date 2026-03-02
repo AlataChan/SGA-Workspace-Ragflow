@@ -63,10 +63,12 @@ import {
   Building,
   TrendingUp,
   Users,
-  Settings
+  Settings,
+  Ban
 } from "lucide-react"
 import NewAdminLayout from "@/components/admin/new-admin-layout"
 import AgentBulkGrantDialog from "@/components/admin/agent-bulk-grant-dialog"
+import BulkRevokeDialog from "@/components/admin/bulk-revoke-dialog"
 import DepartmentPicker, { type DepartmentPickerOption } from "@/components/admin/department-picker"
 
 // 平台类型定义
@@ -220,6 +222,8 @@ export default function AgentsPage() {
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null)
   const [isBulkGrantDialogOpen, setIsBulkGrantDialogOpen] = useState(false)
   const [bulkGrantAgent, setBulkGrantAgent] = useState<Pick<Agent, 'id' | 'chineseName'> | null>(null)
+  const [isBulkRevokeDialogOpen, setIsBulkRevokeDialogOpen] = useState(false)
+  const [bulkRevokeAgent, setBulkRevokeAgent] = useState<Pick<Agent, 'id' | 'chineseName'> | null>(null)
   
   // 表单数据
   const [formData, setFormData] = useState<AgentFormData>({
@@ -394,6 +398,11 @@ export default function AgentsPage() {
   const openBulkGrantDialog = (agent: Agent) => {
     setBulkGrantAgent({ id: agent.id, chineseName: agent.chineseName })
     setIsBulkGrantDialogOpen(true)
+  }
+
+  const openBulkRevokeDialog = (agent: Agent) => {
+    setBulkRevokeAgent({ id: agent.id, chineseName: agent.chineseName })
+    setIsBulkRevokeDialogOpen(true)
   }
 
   // 处理平台变更
@@ -996,6 +1005,25 @@ export default function AgentsPage() {
                                     <Button
                                       variant="outline"
                                       size="sm"
+                                      onClick={() => openBulkRevokeDialog(agent)}
+                                      className="border-red-500/40 text-red-400 hover:bg-red-500/15 hover:border-red-400 transition-all duration-200 shadow-md hover:shadow-red-500/20 px-3 py-2"
+                                    >
+                                      <Ban className="w-4 h-4 mr-1" />
+                                      批量撤销
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>批量撤销用户权限（写黑名单）</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
                                       onClick={() => openEditDialog(agent)}
                                       className="border-blue-500/40 text-blue-400 hover:bg-blue-500/15 hover:border-blue-400 transition-all duration-200 shadow-md hover:shadow-blue-500/20 px-3 py-2"
                                     >
@@ -1413,6 +1441,19 @@ export default function AgentsPage() {
             if (!open) setBulkGrantAgent(null)
           }}
           agent={bulkGrantAgent}
+          onCompleted={() => fetchAgents()}
+        />
+
+        {/* 批量撤销弹窗 */}
+        <BulkRevokeDialog
+          open={isBulkRevokeDialogOpen}
+          onOpenChange={(open) => {
+            setIsBulkRevokeDialogOpen(open)
+            if (!open) setBulkRevokeAgent(null)
+          }}
+          resourceType="agent"
+          resourceId={bulkRevokeAgent?.id ?? null}
+          resourceName={bulkRevokeAgent?.chineseName ?? null}
           onCompleted={() => fetchAgents()}
         />
 

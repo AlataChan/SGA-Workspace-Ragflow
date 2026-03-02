@@ -449,7 +449,7 @@ export default function UsersPage() {
       const response = await fetch(`/api/admin/users/${userId}/knowledge-graphs`)
       if (response.ok) {
         const data = await response.json()
-        setUserKnowledgeGraphs(data.data.permissions || [])
+        setUserKnowledgeGraphs(data.data.userKnowledgeGraphs || [])
         setAvailableKnowledgeGraphs(data.data.availableKnowledgeGraphs || [])
       }
     } catch (error) {
@@ -488,17 +488,17 @@ export default function UsersPage() {
     }
   }
 
-  // 移除知识图谱权限
-  const handleRemoveKnowledgeGraphPermission = async (permissionId: string) => {
+  // 撤销知识图谱权限（写 revocation 黑名单）
+  const handleRemoveKnowledgeGraphPermission = async (knowledgeGraphId: string) => {
     if (!selectedUser) return
 
     try {
-      const response = await fetch(`/api/admin/users/${selectedUser.id}/knowledge-graphs/${permissionId}`, {
+      const response = await fetch(`/api/admin/users/${selectedUser.id}/knowledge-graphs?knowledgeGraphId=${knowledgeGraphId}`, {
         method: 'DELETE',
       })
 
       if (response.ok) {
-        setMessage({ type: 'success', text: '知识图谱权限移除成功' })
+        setMessage({ type: 'success', text: '知识图谱权限撤销成功' })
         setTimeout(() => setMessage(null), 3000)
         // 重新获取权限列表
         await fetchUserKnowledgeGraphPermissions(selectedUser.id)
@@ -1253,9 +1253,9 @@ export default function UsersPage() {
                                 {/* 当前知识图谱权限列表 */}
                                 {userKnowledgeGraphs.length > 0 ? (
                                   <div className="space-y-2">
-                                    {userKnowledgeGraphs.map((permission) => (
+                                    {userKnowledgeGraphs.map((kg) => (
                                       <div
-                                        key={permission.id}
+                                        key={kg.id}
                                         className="flex items-center justify-between p-3 rounded-lg border border-border bg-background"
                                       >
                                         <div className="flex items-center space-x-3">
@@ -1263,11 +1263,19 @@ export default function UsersPage() {
                                             <Network className="w-4 h-4 text-white" />
                                           </div>
                                           <div>
-                                            <div className="text-sm font-medium text-foreground">
-                                              {permission.knowledgeGraph.name}
+                                            <div className="text-sm font-medium text-foreground flex items-center gap-2">
+                                              <span>{kg.name}</span>
+                                              <Badge variant="outline" className="text-[10px] px-2 py-0">
+                                                {kg.accessSource === 'explicit' ? '显式' : '部门规则'}
+                                              </Badge>
+                                              {!kg.isActive && (
+                                                <Badge variant="secondary" className="text-[10px] px-2 py-0">
+                                                  禁用
+                                                </Badge>
+                                              )}
                                             </div>
                                             <div className="text-xs text-muted-foreground">
-                                              {permission.knowledgeGraph.nodeCount} 节点 • {permission.knowledgeGraph.edgeCount} 边
+                                              {kg.nodeCount} 节点 • {kg.edgeCount} 边
                                             </div>
                                           </div>
                                         </div>
@@ -1275,7 +1283,7 @@ export default function UsersPage() {
                                           <Button
                                             size="sm"
                                             variant="outline"
-                                            onClick={() => handleRemoveKnowledgeGraphPermission(permission.id)}
+                                            onClick={() => handleRemoveKnowledgeGraphPermission(kg.id)}
                                             className="border-destructive/30 text-destructive hover:bg-destructive/10"
                                           >
                                             <Minus className="w-3 h-3" />

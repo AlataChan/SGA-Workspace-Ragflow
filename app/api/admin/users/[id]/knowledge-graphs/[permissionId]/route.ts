@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { PrismaClient } from "@prisma/client"
 import { withAdminAuth } from "@/lib/auth/middleware"
-
-const prisma = new PrismaClient()
+import prisma from "@/lib/prisma"
 
 // CORS headers
 const corsHeaders = {
@@ -80,12 +78,33 @@ export const DELETE = withAdminAuth(async (request, context) => {
       )
     }
 
-    // 删除权限
-    await prisma.userKnowledgeGraphPermission.delete({
-      where: {
-        id: permissionId,
-      }
-    })
+    // 删除显式权限 + 写 revocation 黑名单（避免后续 policy 恢复）
+    await prisma.$transaction([
+      prisma.userKnowledgeGraphPermission.delete({
+        where: { id: permissionId },
+      }),
+      prisma.userKnowledgeGraphPermissionRevocation.upsert({
+        where: {
+          unique_user_kg_revocation: {
+            userId: targetUserId,
+            knowledgeGraphId: permission.knowledgeGraph.id,
+          },
+        },
+        create: {
+          userId: targetUserId,
+          knowledgeGraphId: permission.knowledgeGraph.id,
+          revokedBy: user.userId,
+          isActive: true,
+        },
+        update: {
+          revokedBy: user.userId,
+          revokedAt: new Date(),
+          isActive: true,
+          expiresAt: null,
+          reason: null,
+        },
+      }),
+    ])
 
     return NextResponse.json({
       message: '知识图谱权限删除成功'

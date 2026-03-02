@@ -76,6 +76,9 @@ pids
 
 # Local database dumps (customer/org data)
 docs/departments.sql
+backup_*.sql
+backup_*.sql.gz
+backup_*.dump
 
 # Temporary files
 tmp/
