@@ -1,168 +1,245 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-/**
- * 知识库API测试
- * 
- * 测试知识库CRUD操作的API端点
- */
+const { prismaMock, verifyUserAuthMock, verifyAdminAuthMock } = vi.hoisted(() => ({
+  prismaMock: {
+    knowledgeGraph: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+    },
+  },
+  verifyUserAuthMock: vi.fn(),
+  verifyAdminAuthMock: vi.fn(),
+}))
 
-describe('Knowledge Base API', () => {
-  const baseUrl = 'http://localhost:3000'
-  let authToken: string
-  let testKbId: string
+vi.mock('@/lib/prisma', () => ({ default: prismaMock }))
+vi.mock('@/lib/auth', () => ({
+  verifyUserAuth: verifyUserAuthMock,
+  verifyAdminAuth: verifyAdminAuthMock,
+}))
 
-  beforeAll(async () => {
-    // 模拟登录获取token
-    authToken = 'test-token'
+function jsonResponse(body: unknown, init?: ResponseInit) {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+    ...init,
+  })
+}
+
+describe('Knowledge Base API (route handlers)', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    globalThis.fetch = vi.fn()
   })
 
-  afterAll(async () => {
-    // 清理测试数据
-    if (testKbId) {
-      try {
-        await fetch(`${baseUrl}/api/knowledge-bases/${testKbId}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-          },
-        })
-      } catch (error) {
-        console.error('清理测试数据失败:', error)
-      }
-    }
+  it('GET /api/knowledge-bases returns 401 when unauthenticated', async () => {
+    verifyUserAuthMock.mockResolvedValueOnce(null)
+
+    const { GET } = await import('@/app/api/knowledge-bases/route')
+    const response = await GET(new Request('http://test.local/api/knowledge-bases') as any)
+
+    expect(response.status).toBe(401)
+    expect(await response.json()).toEqual({ error: '未授权' })
   })
 
-  describe('POST /api/knowledge-bases', () => {
-    it('应该成功创建知识库', async () => {
-      const response = await fetch(`${baseUrl}/api/knowledge-bases`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          name: 'Test Knowledge Base',
-          description: 'This is a test knowledge base',
-          isActive: true,
-        }),
-      })
-
-      expect(response.status).toBe(200)
-      const data = await response.json()
-      expect(data.success).toBe(true)
-      expect(data.data).toHaveProperty('id')
-      expect(data.data.name).toBe('Test Knowledge Base')
-      
-      testKbId = data.data.id
+  it('GET /api/knowledge-bases returns list when authenticated', async () => {
+    verifyUserAuthMock.mockResolvedValueOnce({
+      id: 'user-1',
+      userId: 'user-1',
+      username: 'test',
+      companyId: 'company-1',
+      role: 'USER',
     })
 
-    it('应该拒绝空名称的知识库', async () => {
-      const response = await fetch(`${baseUrl}/api/knowledge-bases`, {
+    prismaMock.knowledgeGraph.findMany.mockResolvedValueOnce([
+      {
+        id: 'kb-1',
+        name: 'KB One',
+        description: 'desc',
+        kbId: 'ragflow-kb-1',
+        ragflowUrl: 'http://ragflow.test',
+        nodeCount: 1,
+        edgeCount: 2,
+        lastSyncAt: null,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-02T00:00:00Z'),
+      },
+    ])
+
+    const { GET } = await import('@/app/api/knowledge-bases/route')
+    const response = await GET(new Request('http://test.local/api/knowledge-bases') as any)
+
+    expect(response.status).toBe(200)
+    const data = await response.json()
+    expect(data.success).toBe(true)
+    expect(Array.isArray(data.data)).toBe(true)
+    expect(data.data).toHaveLength(1)
+    expect(data.data[0].id).toBe('kb-1')
+  })
+
+  it('POST /api/knowledge-bases returns 401 when not admin', async () => {
+    verifyAdminAuthMock.mockResolvedValueOnce(null)
+
+    const { POST } = await import('@/app/api/knowledge-bases/route')
+    const response = await POST(
+      new Request('http://test.local/api/knowledge-bases', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'KB',
+          ragflowUrl: 'http://ragflow.test',
+          apiKey: 'test-key',
+        }),
+      }) as any
+    )
+
+    expect(response.status).toBe(401)
+    expect(await response.json()).toEqual({ error: '未授权，需要管理员权限' })
+  })
+
+  it('POST /api/knowledge-bases returns 400 for invalid payload', async () => {
+    verifyAdminAuthMock.mockResolvedValueOnce({
+      id: 'admin-1',
+      userId: 'admin-1',
+      username: 'admin',
+      companyId: 'company-1',
+      role: 'ADMIN',
+    })
+
+    const { POST } = await import('@/app/api/knowledge-bases/route')
+    const response = await POST(
+      new Request('http://test.local/api/knowledge-bases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: '',
-          description: 'Invalid knowledge base',
+          ragflowUrl: 'not-a-url',
+          apiKey: '',
         }),
-      })
+      }) as any
+    )
 
-      expect(response.status).toBe(400)
-      const data = await response.json()
-      expect(data.error).toBeDefined()
+    expect(response.status).toBe(400)
+    const data = await response.json()
+    expect(data.error).toBe('数据验证失败')
+    expect(data.details).toBeDefined()
+  })
+
+  it('POST /api/knowledge-bases creates a knowledge base when valid', async () => {
+    verifyAdminAuthMock.mockResolvedValueOnce({
+      id: 'admin-1',
+      userId: 'admin-1',
+      username: 'admin',
+      companyId: 'company-1',
+      role: 'ADMIN',
     })
 
-    it('应该拒绝未授权的请求', async () => {
-      const response = await fetch(`${baseUrl}/api/knowledge-bases`, {
+    prismaMock.knowledgeGraph.findFirst
+      .mockResolvedValueOnce(null) // name uniqueness check
+      .mockResolvedValueOnce({ sortOrder: 5 }) // max sortOrder
+
+    ;(globalThis.fetch as any).mockResolvedValueOnce(
+      jsonResponse({
+        retcode: 0,
+        data: { id: 'ragflow-kb-123' },
+      })
+    )
+
+    prismaMock.knowledgeGraph.create.mockResolvedValueOnce({
+      id: 'kb-1',
+      companyId: 'company-1',
+      name: 'KB One',
+      description: 'desc',
+      ragflowUrl: 'http://ragflow.test',
+      apiKey: 'test-key',
+      kbId: 'ragflow-kb-123',
+      sortOrder: 6,
+      company: { name: 'Test Company' },
+    })
+
+    const { POST } = await import('@/app/api/knowledge-bases/route')
+    const response = await POST(
+      new Request('http://test.local/api/knowledge-bases', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: 'Unauthorized KB',
+          name: 'KB One',
+          description: 'desc',
+          ragflowUrl: 'http://ragflow.test',
+          apiKey: 'test-key',
         }),
-      })
+      }) as any
+    )
 
-      expect(response.status).toBe(401)
-    })
+    expect(response.status).toBe(200)
+    const data = await response.json()
+    expect(data.success).toBe(true)
+    expect(data.data.id).toBe('kb-1')
+    expect(data.data.kbId).toBe('ragflow-kb-123')
+    expect(data.message).toBe('知识库创建成功')
   })
 
-  describe('GET /api/knowledge-bases', () => {
-    it('应该返回知识库列表', async () => {
-      const response = await fetch(`${baseUrl}/api/knowledge-bases`, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-        },
-      })
-
-      expect(response.status).toBe(200)
-      const data = await response.json()
-      expect(data.success).toBe(true)
-      expect(Array.isArray(data.data)).toBe(true)
+  it('GET /api/knowledge-bases/[id] returns 404 when missing', async () => {
+    verifyUserAuthMock.mockResolvedValueOnce({
+      id: 'user-1',
+      userId: 'user-1',
+      username: 'test',
+      companyId: 'company-1',
+      role: 'USER',
     })
 
-    it('应该支持分页', async () => {
-      const response = await fetch(
-        `${baseUrl}/api/knowledge-bases?page=1&pageSize=10`,
-        {
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-          },
-        }
-      )
+    prismaMock.knowledgeGraph.findFirst.mockResolvedValueOnce(null)
 
-      expect(response.status).toBe(200)
-      const data = await response.json()
-      expect(data.pagination).toBeDefined()
-      expect(data.pagination.page).toBe(1)
-      expect(data.pagination.pageSize).toBe(10)
-    })
+    const { GET } = await import('@/app/api/knowledge-bases/[id]/route')
+    const response = await GET(
+      new Request('http://test.local/api/knowledge-bases/kb-missing') as any,
+      { params: Promise.resolve({ id: 'kb-missing' }) } as any
+    )
+
+    expect(response.status).toBe(404)
+    const data = await response.json()
+    expect(data.error).toBe('知识库不存在或已禁用')
   })
 
-  describe('GET /api/knowledge-bases/[id]', () => {
-    it('应该返回知识库详情', async () => {
-      if (!testKbId) {
-        // 如果没有测试ID，先创建一个
-        const createResponse = await fetch(`${baseUrl}/api/knowledge-bases`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`,
-          },
-          body: JSON.stringify({
-            name: 'Test KB for Detail',
-          }),
-        })
-        const createData = await createResponse.json()
-        testKbId = createData.data.id
-      }
+  it('GET /api/knowledge-bases/[id] returns detail when present', async () => {
+    verifyUserAuthMock.mockResolvedValueOnce({
+      id: 'user-1',
+      userId: 'user-1',
+      username: 'test',
+      companyId: 'company-1',
+      role: 'USER',
+    })
 
-      const response = await fetch(`${baseUrl}/api/knowledge-bases/${testKbId}`, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-        },
+    prismaMock.knowledgeGraph.findFirst.mockResolvedValueOnce({
+      id: 'kb-1',
+      companyId: 'company-1',
+      name: 'KB One',
+      description: 'desc',
+      ragflowUrl: 'http://ragflow.test',
+      apiKey: 'test-key',
+      kbId: 'ragflow-kb-123',
+      isActive: true,
+      company: { name: 'Test Company' },
+    })
+
+    ;(globalThis.fetch as any).mockResolvedValueOnce(
+      jsonResponse({
+        retcode: 0,
+        data: { id: 'ragflow-kb-123', name: 'RAGFlow KB' },
       })
+    )
 
-      expect(response.status).toBe(200)
-      const data = await response.json()
-      expect(data.success).toBe(true)
-      expect(data.data.id).toBe(testKbId)
-    })
+    const { GET } = await import('@/app/api/knowledge-bases/[id]/route')
+    const response = await GET(
+      new Request('http://test.local/api/knowledge-bases/kb-1') as any,
+      { params: Promise.resolve({ id: 'kb-1' }) } as any
+    )
 
-    it('应该返回404对于不存在的知识库', async () => {
-      const response = await fetch(
-        `${baseUrl}/api/knowledge-bases/non-existent-id`,
-        {
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-          },
-        }
-      )
-
-      expect(response.status).toBe(404)
-    })
+    expect(response.status).toBe(200)
+    const data = await response.json()
+    expect(data.success).toBe(true)
+    expect(data.data.id).toBe('kb-1')
+    expect(data.data.ragflowDetail.id).toBe('ragflow-kb-123')
   })
 })
 

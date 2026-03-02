@@ -106,6 +106,7 @@ export function KnowledgeBaseCard({
                 variant="ghost" 
                 size="sm"
                 className="opacity-0 group-hover:opacity-100 transition-opacity"
+                aria-label="更多操作"
               >
                 <MoreVertical className="h-4 w-4" />
               </Button>
@@ -171,4 +172,3 @@ export function KnowledgeBaseCard({
     </Card>
   )
 }
-

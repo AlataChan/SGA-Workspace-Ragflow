@@ -4,9 +4,14 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
  * 知识库管理完整工作流集成测试
  * 
  * 测试从创建知识库到上传文档、解析、删除的完整流程
+ *
+ * 注意：该用例依赖本地服务（默认 http://localhost:3000）和可用的认证/数据源。
+ * 默认不在单元测试套件中执行；如需运行请设置环境变量 RUN_INTEGRATION_TESTS=1。
  */
 
-describe('Knowledge Base Workflow Integration Test', () => {
+const describeIf = (condition: boolean) => (condition ? describe : describe.skip)
+
+describeIf(process.env.RUN_INTEGRATION_TESTS === '1')('Knowledge Base Workflow Integration Test', () => {
   const baseUrl = 'http://localhost:3000'
   let authToken: string
   let kbId: string
@@ -179,4 +184,3 @@ describe('Knowledge Base Workflow Integration Test', () => {
     console.log('🎉 完整工作流测试通过！')
   })
 })
-

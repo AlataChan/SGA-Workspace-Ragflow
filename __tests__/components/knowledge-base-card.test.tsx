@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { KnowledgeBaseCard } from '@/components/knowledge-base/knowledge-base-card'
 
 /**
@@ -64,14 +65,15 @@ describe('KnowledgeBaseCard', () => {
   it('应该在点击编辑时调用onEdit回调', async () => {
     const onEdit = vi.fn()
     render(<KnowledgeBaseCard {...mockProps} onEdit={onEdit} />)
+    const user = userEvent.setup()
     
     // 找到更多操作按钮
-    const moreButton = screen.getByRole('button', { name: /more/i })
-    fireEvent.click(moreButton)
+    const moreButton = screen.getByRole('button', { name: /更多操作/i })
+    await user.click(moreButton)
     
     // 找到编辑按钮
-    const editButton = await screen.findByText('编辑')
-    fireEvent.click(editButton)
+    const editButton = await screen.findByRole('menuitem', { name: '编辑' })
+    await user.click(editButton)
     
     expect(onEdit).toHaveBeenCalledTimes(1)
   })
@@ -79,14 +81,15 @@ describe('KnowledgeBaseCard', () => {
   it('应该在点击删除时调用onDelete回调', async () => {
     const onDelete = vi.fn()
     render(<KnowledgeBaseCard {...mockProps} onDelete={onDelete} />)
+    const user = userEvent.setup()
     
     // 找到更多操作按钮
-    const moreButton = screen.getByRole('button', { name: /more/i })
-    fireEvent.click(moreButton)
+    const moreButton = screen.getByRole('button', { name: /更多操作/i })
+    await user.click(moreButton)
     
     // 找到删除按钮
-    const deleteButton = await screen.findByText('删除')
-    fireEvent.click(deleteButton)
+    const deleteButton = await screen.findByRole('menuitem', { name: '删除' })
+    await user.click(deleteButton)
     
     expect(onDelete).toHaveBeenCalledTimes(1)
   })
@@ -128,8 +131,7 @@ describe('KnowledgeBaseCard', () => {
     fireEvent.mouseEnter(card)
     
     // 检查按钮是否可见（通过检查opacity类）
-    const moreButton = screen.getByRole('button', { name: /more/i })
+    const moreButton = screen.getByRole('button', { name: /更多操作/i })
     expect(moreButton).toBeInTheDocument()
   })
 })
-
