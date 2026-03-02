@@ -4,7 +4,6 @@
 
 -- 启用必要的扩展
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 CREATE EXTENSION IF NOT EXISTS "btree_gin";
 
@@ -39,14 +38,14 @@ CREATE TABLE departments (
     id TEXT PRIMARY KEY,
     company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
+    parent_id TEXT REFERENCES departments(id) ON DELETE SET NULL,
     description TEXT,
     icon VARCHAR(100),
     sort_order INTEGER NOT NULL DEFAULT 0,
     is_active BOOLEAN NOT NULL DEFAULT true,
-    parent_id TEXT,
-    parent_sids TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    
 );
 
 -- 用户表
@@ -201,7 +200,7 @@ CREATE TABLE uploaded_files (
 
 -- 公司相关索引
 CREATE INDEX idx_departments_company_id ON departments(company_id);
-CREATE INDEX idx_department_company_parent ON departments(company_id, parent_id);
+CREATE INDEX idx_departments_company_parent ON departments(company_id, parent_id);
 
 -- 用户相关索引
 CREATE INDEX idx_users_company_id ON users(company_id);
@@ -277,7 +276,7 @@ INSERT INTO departments (id, company_id, name, description, icon, sort_order) VA
 ('cldept00000002', 'cldefault00001', 'AI Consultant 中心', '人工智能咨询服务团队', 'Bot', 2),
 ('cldept00000003', 'cldefault00001', '财务及风控中心', '财务管理和风险控制团队', 'Shield', 3),
 ('cldept00000004', 'cldefault00001', '市场营销部', '市场推广和营销团队', 'Megaphone', 4)
-ON CONFLICT DO NOTHING;
+ON CONFLICT ON CONSTRAINT "companyId_parentId_name" DO NOTHING;
 
 -- 插入固定的管理员账号
 -- 密码: sga0303 (使用bcrypt加密)

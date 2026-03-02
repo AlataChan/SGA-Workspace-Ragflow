@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useDebounce } from "use-debounce"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -47,12 +47,14 @@ import {
   Ban
 } from "lucide-react"
 import NewAdminLayout from "@/components/admin/new-admin-layout"
+import { DepartmentCombobox } from "@/components/admin/department-combobox"
 
 // 类型定义
 interface Department {
   id: string
   name: string
   icon: string
+  parentId?: string | null
 }
 
 interface Agent {
@@ -112,7 +114,6 @@ export default function UsersPage() {
   // 状态管理
   const [users, setUsers] = useState<UserData[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
-  const [departments, setDepartments] = useState<Department[]>([])
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -147,6 +148,7 @@ export default function UsersPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filterDepartment, setFilterDepartment] = useState<string>("all")
   const [filterRole, setFilterRole] = useState<string>("all")
+  const [includeChildren, setIncludeChildren] = useState(true)
 
   // 分页状态
   const [page, setPage] = useState(1)
@@ -179,7 +181,6 @@ export default function UsersPage() {
   // 获取数据
   useEffect(() => {
     fetchAgents()
-    fetchDepartments()
     fetchCurrentAdmin()
   }, [])
 
@@ -192,6 +193,9 @@ export default function UsersPage() {
         pageSize: String(pageSize),
         ...(debouncedSearchTerm ? { q: debouncedSearchTerm } : {}),
         ...(filterDepartment !== "all" ? { departmentId: filterDepartment } : {}),
+        ...(filterDepartment !== "all" && filterDepartment !== "none"
+          ? { includeChildren: includeChildren ? "true" : "false" }
+          : {}),
         ...(filterRole !== "all" ? { role: filterRole } : {}),
       })
 
@@ -219,7 +223,7 @@ export default function UsersPage() {
 
   useEffect(() => {
     fetchUsers()
-  }, [page, pageSize, debouncedSearchTerm, filterDepartment, filterRole])
+  }, [page, pageSize, debouncedSearchTerm, filterDepartment, filterRole, includeChildren])
 
   const fetchAgents = async () => {
     try {
@@ -230,18 +234,6 @@ export default function UsersPage() {
       }
     } catch (error) {
       console.error('获取Agent列表失败:', error)
-    }
-  }
-
-  const fetchDepartments = async () => {
-    try {
-      const response = await fetch('/api/admin/departments')
-      if (response.ok) {
-        const data = await response.json()
-        setDepartments(data.data || [])
-      }
-    } catch (error) {
-      console.error('获取部门列表失败:', error)
     }
   }
 
@@ -793,22 +785,35 @@ export default function UsersPage() {
                       className="pl-10"
                     />
                   </div>
-                  <Select value={filterDepartment} onValueChange={(value) => {
-                    setFilterDepartment(value)
-                    setPage(1)
-                  }}>
-                    <SelectTrigger className="w-full sm:w-40">
-                      <SelectValue placeholder="部门" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">全部部门</SelectItem>
-                      {departments.map((dept) => (
-                        <SelectItem key={dept.id} value={dept.id}>
-                          {dept.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <DepartmentCombobox
+                    value={filterDepartment}
+                    onValueChange={(value) => {
+                      setFilterDepartment(value)
+                      setPage(1)
+                    }}
+                    placeholder="部门"
+                    title="筛选部门"
+                    fixedOptions={[
+                      { value: "all", label: "全部部门" },
+                      { value: "none", label: "未分配部门" },
+                    ]}
+                    className="w-full sm:w-40 justify-start"
+                  />
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={includeChildren}
+                      onChange={(e) => {
+                        setIncludeChildren(e.target.checked)
+                        setPage(1)
+                      }}
+                      disabled={filterDepartment === "all" || filterDepartment === "none"}
+                      className="h-4 w-4 accent-primary disabled:opacity-50"
+                    />
+                    <span className={`text-sm ${filterDepartment === 'all' || filterDepartment === 'none' ? 'opacity-50' : ''}`}>
+                      包含子部门
+                    </span>
+                  </div>
                   <Select value={filterRole} onValueChange={(value) => {
                     setFilterRole(value)
                     setPage(1)
@@ -1470,19 +1475,14 @@ export default function UsersPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="create-department">部门</Label>
-                  <select
-                    id="create-department"
+                  <DepartmentCombobox
                     value={formData.departmentId || ""}
-                    onChange={(e) => setFormData(prev => ({ ...prev, departmentId: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                  >
-                    <option value="">不选择部门</option>
-                    {departments.map((dept) => (
-                      <option key={dept.id} value={dept.id}>
-                        {dept.name}
-                      </option>
-                    ))}
-                  </select>
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, departmentId: value }))}
+                    placeholder="不选择部门"
+                    title="选择部门"
+                    fixedOptions={[{ value: "", label: "不选择部门" }]}
+                    className="w-full justify-start"
+                  />
 	                </div>
 	                <div className="space-y-2">
 	                  <Label htmlFor="create-position">职位 *</Label>
@@ -1662,19 +1662,14 @@ export default function UsersPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="edit-department">部门</Label>
-                  <select
-                    id="edit-department"
+                  <DepartmentCombobox
                     value={formData.departmentId || ""}
-                    onChange={(e) => setFormData(prev => ({ ...prev, departmentId: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                  >
-                    <option value="">不选择部门</option>
-                    {departments.map((dept) => (
-                      <option key={dept.id} value={dept.id}>
-                        {dept.name}
-                      </option>
-                    ))}
-                  </select>
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, departmentId: value }))}
+                    placeholder="不选择部门"
+                    title="选择部门"
+                    fixedOptions={[{ value: "", label: "不选择部门" }]}
+                    className="w-full justify-start"
+                  />
 	                </div>
 	                <div className="space-y-2">
 	                  <Label htmlFor="edit-position">职位 *</Label>

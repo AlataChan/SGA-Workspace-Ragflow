@@ -52,13 +52,13 @@ export class UserSyncService {
       if (existingUser) {
         logger.info('用户已存在，更新信息', {
           userId: existingUser.id,
-          yunzhijiaUserId: yunzhijiaUser.userid
+          yunzhijiaUserId: yunzhijiaUser.openid
         })
 
         const updatedUser = await prisma.user.update({
           where: { id: existingUser.id },
           data: {
-            userId: yunzhijiaUser.userid,
+            userId: yunzhijiaUser.openid,
             username: yunzhijiaUser.username || existingUser.username,
             yunzhijiaUserId: yunzhijiaUser.userid, // 关联i国贸用户ID
             displayName: yunzhijiaUser.username,
@@ -103,7 +103,7 @@ export class UserSyncService {
 
       const newUser = await prisma.user.create({
         data: {
-          userId: yunzhijiaUser.userid,
+          userId: yunzhijiaUser.openid,
           yunzhijiaUserId: yunzhijiaUser.userid,
           username: yunzhijiaUser.username || yunzhijiaUser.userid,
           displayName: yunzhijiaUser.username,

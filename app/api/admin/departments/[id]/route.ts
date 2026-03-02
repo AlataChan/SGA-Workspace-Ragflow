@@ -13,10 +13,10 @@ import { z } from 'zod'
 // 更新部门的验证模式
 const updateDepartmentSchema = z.object({
   name: z.string().min(1, "部门名称不能为空").max(50, "部门名称过长").optional(),
+  parentId: z.string().min(1, "parentId 不能为空").nullable().optional(),
   description: z.string().max(200, "部门描述过长").optional(),
   icon: z.string().max(50, "图标名称过长").optional(),
   sortOrder: z.number().int().min(0).optional(),
-  isActive: z.boolean().optional(),
 })
 
 // GET /api/admin/departments/[id] - 获取部门详情
@@ -128,12 +128,53 @@ export const PUT = withAdminAuth(async (request, context) => {
       )
     }
 
-    // 如果更新名称，检查是否与其他部门重名
-    if (updateData.name && updateData.name !== existingDepartment.name) {
+    // parentId 基础校验（避免自指；上级部门必须同公司）
+    if (updateData.parentId !== undefined) {
+      if (updateData.parentId === departmentId) {
+        return NextResponse.json(
+          {
+            error: {
+              code: 'INVALID_PARENT_DEPARTMENT',
+              message: '上级部门不能是自己'
+            }
+          },
+          { status: 400 }
+        )
+      }
+
+      if (updateData.parentId) {
+        const parentDepartment = await prisma.department.findFirst({
+          where: { id: updateData.parentId, companyId: user.companyId },
+          select: { id: true }
+        })
+        if (!parentDepartment) {
+          return NextResponse.json(
+            {
+              error: {
+                code: 'PARENT_DEPARTMENT_NOT_FOUND',
+                message: '上级部门不存在'
+              }
+            },
+            { status: 400 }
+          )
+        }
+      }
+    }
+
+    // 如果更新名称或 parentId，检查是否与其他部门重名（同一上级部门下不允许重名）
+    if (
+      (updateData.name && updateData.name !== existingDepartment.name) ||
+      updateData.parentId !== undefined
+    ) {
+      const candidateName = updateData.name ?? existingDepartment.name
+      const candidateParentId =
+        updateData.parentId !== undefined ? updateData.parentId : existingDepartment.parentId
+
       const duplicateDepartment = await prisma.department.findFirst({
         where: {
           companyId: user.companyId,
-          name: updateData.name,
+          parentId: candidateParentId ?? null,
+          name: candidateName,
           id: { not: departmentId }
         }
       })
@@ -209,16 +250,9 @@ export const DELETE = withAdminAuth(async (request, context) => {
         id: departmentId,
         companyId: user.companyId,
       },
-      select: {
-        id: true,
-        name: true,
-        _count: {
-          select: {
-            agents: true,
-            users: true,
-          }
-        }
-      },
+      include: {
+        agents: { select: { id: true } }
+      }
     })
 
     if (!existingDepartment) {
@@ -234,25 +268,28 @@ export const DELETE = withAdminAuth(async (request, context) => {
     }
 
     // 检查部门下是否有Agent
-    if (existingDepartment._count.agents > 0) {
+    if (existingDepartment.agents.length > 0) {
       return NextResponse.json(
         {
           error: {
             code: 'DEPARTMENT_HAS_AGENTS',
-            message: `部门下还有 ${existingDepartment._count.agents} 个Agent，请先移除或转移这些Agent`
+            message: `部门下还有 ${existingDepartment.agents.length} 个Agent，请先移除或转移这些Agent`
           }
         },
         { status: 400 }
       )
     }
 
-    // 检查部门下是否有用户（避免删除导致用户 departmentId 置空或产生歧义）
-    if (existingDepartment._count.users > 0) {
+    // 检查部门下是否有子部门（避免删除后子部门被自动提升为顶级）
+    const childCount = await prisma.department.count({
+      where: { companyId: user.companyId, parentId: departmentId }
+    })
+    if (childCount > 0) {
       return NextResponse.json(
         {
           error: {
-            code: 'DEPARTMENT_HAS_USERS',
-            message: `部门下还有 ${existingDepartment._count.users} 个用户，请先转移或移除这些用户`
+            code: 'DEPARTMENT_HAS_CHILDREN',
+            message: `部门下还有 ${childCount} 个子部门，请先调整其归属后再删除`
           }
         },
         { status: 400 }

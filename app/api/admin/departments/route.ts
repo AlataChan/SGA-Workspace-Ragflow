@@ -9,9 +9,18 @@ import prisma from '@/lib/prisma'
 import { withAdminAuth } from '@/lib/auth/middleware'
 import { z } from 'zod'
 
+const listQuerySchema = z.object({
+  lite: z
+    .string()
+    .optional()
+    .transform((v) => (v ?? '').toLowerCase())
+    .transform((v) => v === '1' || v === 'true' || v === 'yes'),
+})
+
 // 创建部门的验证模式
 const createDepartmentSchema = z.object({
   name: z.string().min(1, "部门名称不能为空").max(50, "部门名称过长"),
+  parentId: z.string().min(1, "parentId 不能为空").nullable().optional(),
   description: z.string().max(200, "部门描述过长").optional(),
   icon: z.string().max(50, "图标名称过长").optional(),
   sortOrder: z.number().int().min(0).optional(),
@@ -21,124 +30,61 @@ const createDepartmentSchema = z.object({
 export const GET = withAdminAuth(async (request) => {
   try {
     const user = request.user!
-    const { searchParams } = new URL(request.url)
-    const pageParam = searchParams.get('page')
-    const pageSizeParam = searchParams.get('pageSize') ?? searchParams.get('limit')
-    const qParam = searchParams.get('q') ?? searchParams.get('search')
-
-    const hasPaginationParams = pageParam !== null || pageSizeParam !== null || qParam !== null
-
-    // 兼容下拉框/旧调用：未传分页参数时返回全量（瘦身字段）
-    if (!hasPaginationParams) {
+    const url = new URL(request.url)
+    const parsedQuery = listQuerySchema.safeParse({
+      lite: url.searchParams.get('lite') ?? undefined,
+    })
+    const lite = parsedQuery.success ? parsedQuery.data.lite : false
+    
+    // lite=true：用于部门树/下拉等场景，避免 include agents/统计导致 payload 过大
+    if (lite) {
       const departments = await prisma.department.findMany({
         where: { companyId: user.companyId },
         select: {
           id: true,
+          companyId: true,
           name: true,
-          icon: true,
-          sortOrder: true,
-          isActive: true,
-        },
-        orderBy: [
-          { sortOrder: 'asc' },
-          { createdAt: 'desc' },
-          { id: 'asc' },
-        ],
-      })
-
-      return NextResponse.json({
-        data: departments.map((dept) => ({
-          ...dept,
-          icon: dept.icon || 'Building',
-        })),
-        message: '获取部门列表成功'
-      })
-    }
-
-    const page = Math.max(1, Number.parseInt(pageParam || '1', 10) || 1)
-    const pageSize = Math.min(100, Math.max(1, Number.parseInt(pageSizeParam || '50', 10) || 50))
-    const q = (qParam || '').trim()
-
-    const whereClause: any = {
-      companyId: user.companyId,
-    }
-
-    if (q) {
-      whereClause.OR = [
-        { name: { contains: q, mode: 'insensitive' } },
-        { description: { contains: q, mode: 'insensitive' } },
-      ]
-    }
-
-    const [total, departments] = await Promise.all([
-      prisma.department.count({ where: whereClause }),
-      prisma.department.findMany({
-        where: whereClause,
-        select: {
-          id: true,
-          name: true,
+          parentId: true,
           description: true,
           icon: true,
           sortOrder: true,
           isActive: true,
           createdAt: true,
           updatedAt: true,
-          _count: {
-            select: {
-              agents: true,
-              users: true,
-            }
-          }
         },
-        orderBy: [
-          { sortOrder: 'asc' },
-          { createdAt: 'desc' },
-          { id: 'asc' },
-        ],
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-    ])
-
-    const departmentIds = departments.map((dept) => dept.id)
-    const onlineAgentCounts = departmentIds.length === 0
-      ? []
-      : await prisma.agent.groupBy({
-        by: ['departmentId'],
-        where: {
-          companyId: user.companyId,
-          isOnline: true,
-          departmentId: { in: departmentIds },
-        },
-        _count: { _all: true },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       })
-    const onlineAgentCountByDepartmentId = new Map(
-      onlineAgentCounts.map((row) => [row.departmentId, row._count._all])
-    )
 
-    const departmentsWithStats = departments.map((dept) => ({
-      id: dept.id,
-      name: dept.name,
-      description: dept.description,
-      icon: dept.icon || 'Building',
-      sortOrder: dept.sortOrder,
-      isActive: dept.isActive,
-      createdAt: dept.createdAt,
-      updatedAt: dept.updatedAt,
-      agentCount: dept._count.agents,
-      onlineAgentCount: onlineAgentCountByDepartmentId.get(dept.id) ?? 0,
-      userCount: dept._count.users,
+      return NextResponse.json({
+        data: departments,
+        message: '获取部门列表成功'
+      })
+    }
+
+    const departments = await prisma.department.findMany({
+      where: { companyId: user.companyId },
+      include: {
+        agents: {
+          select: {
+            id: true,
+            chineseName: true,
+            position: true,
+            isOnline: true,
+          }
+        }
+      },
+      orderBy: { sortOrder: 'asc' }
+    })
+
+    // 统计每个部门的Agent数量（仅非 lite 模式）
+    const departmentsWithStats = departments.map(dept => ({
+      ...dept,
+      agentCount: dept.agents.length,
+      onlineAgentCount: dept.agents.filter(agent => agent.isOnline).length,
     }))
 
     return NextResponse.json({
       data: departmentsWithStats,
-      pagination: {
-        page,
-        pageSize,
-        limit: pageSize,
-        total,
-        totalPages: Math.ceil(total / pageSize),
-      },
       message: '获取部门列表成功'
     })
 
@@ -179,12 +125,32 @@ export const POST = withAdminAuth(async (request) => {
       )
     }
 
-    const { name, description, icon, sortOrder } = validationResult.data
+    const { name, parentId, description, icon, sortOrder } = validationResult.data
+
+    // 校验上级部门（若提供）
+    if (parentId) {
+      const parentDepartment = await prisma.department.findFirst({
+        where: { id: parentId, companyId: user.companyId },
+        select: { id: true }
+      })
+      if (!parentDepartment) {
+        return NextResponse.json(
+          {
+            error: {
+              code: 'PARENT_DEPARTMENT_NOT_FOUND',
+              message: '上级部门不存在'
+            }
+          },
+          { status: 400 }
+        )
+      }
+    }
 
     // 检查部门名称是否已存在
     const existingDepartment = await prisma.department.findFirst({
       where: {
         companyId: user.companyId,
+        parentId: parentId ?? null,
         name: name
       }
     })
@@ -217,27 +183,27 @@ export const POST = withAdminAuth(async (request) => {
       data: {
         companyId: user.companyId,
         name,
+        parentId: parentId ?? null,
         description,
         icon: icon || 'Building',
         sortOrder: finalSortOrder,
       },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        icon: true,
-        sortOrder: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      include: {
+        agents: {
+          select: {
+            id: true,
+            chineseName: true,
+            position: true,
+            isOnline: true,
+          }
+        }
+      }
     })
 
     const departmentWithStats = {
       ...newDepartment,
-      agentCount: 0,
-      onlineAgentCount: 0,
-      userCount: 0,
+      agentCount: newDepartment.agents.length,
+      onlineAgentCount: newDepartment.agents.filter(agent => agent.isOnline).length,
     }
 
     return NextResponse.json({

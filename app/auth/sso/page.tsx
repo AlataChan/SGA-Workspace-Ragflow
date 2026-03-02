@@ -20,7 +20,22 @@ function SSOAuthContent() {
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)
   const isAuthenticatingRef = useRef(false)
+function getSafeRedirect(raw: string | null): string | null {
+  if (!raw) return null
+  // 只允许站内相对路径，避免开放重定向（例如 https://evil.com 或 //evil.com）
+  if (!raw.startsWith('/')) return null
+  if (raw.startsWith('//')) return null
+  return raw
+}
 
+function isMobileViewport(): boolean {
+  if (typeof window === 'undefined') return false
+  // matchMedia 优先，避免只靠 innerWidth
+  if (typeof window.matchMedia === 'function') {
+    return window.matchMedia('(max-width: 768px)').matches
+  }
+  return window.innerWidth <= 768
+}
   useEffect(() => {
     // 防止重复认证（使用 ref 确保在 React 严格模式下也有效）
     if (isAuthenticatingRef.current) {
@@ -96,9 +111,14 @@ function SSOAuthContent() {
 
       // 延迟跳转，让用户看到成功提示
       setTimeout(() => {
-        const redirectTo = searchParams.get('redirect') || '/workspace'
+
+        const safeRedirect = getSafeRedirect(searchParams.get('redirect'))
+        const fallback = isMobileViewport() ? '/h5' : '/workspace'
+        const redirectTo = safeRedirect || fallback
+
         console.log('[SSO Page] 跳转到', redirectTo)
         router.push(redirectTo)
+
       }, 1000)
     } catch (error) {
       console.error('[SSO Page] SSO 认证异常:', error)
