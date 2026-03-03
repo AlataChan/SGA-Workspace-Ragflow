@@ -1,12 +1,12 @@
 import { NextRequest } from "next/server"
-import { PrismaClient } from "@prisma/client"
-import jwt from "jsonwebtoken"
-
-const prisma = new PrismaClient()
+import { UserRole } from "@prisma/client"
+import prisma from "@/lib/prisma"
+import { extractTokenFromHeader, verifyToken } from "./jwt"
+import { validateAuthSessionForJwtPayload } from "./auth-session"
 
 export interface AdminUser {
   id: string
-  userId: string  // 别名，与 id 相同
+  userId: string // 别名，与 id 相同
   username: string
   companyId: string
   role: string
@@ -14,52 +14,47 @@ export interface AdminUser {
 
 export async function verifyAdminAuth(request: NextRequest): Promise<AdminUser | null> {
   try {
-    // 从Cookie或Authorization头获取token
-    const cookieToken = request.cookies.get('auth-token')?.value
-    const authHeader = request.headers.get('authorization')
-    const headerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null
-    
+    const cookieToken = request.cookies.get("auth-token")?.value
+    const headerToken = extractTokenFromHeader(request.headers.get("authorization"))
     const token = cookieToken || headerToken
-    
-    if (!token) {
-      return null
-    }
 
-    // 验证JWT token
-    let decoded: any
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key')
-    } catch (error) {
-      console.error('JWT验证失败:', error)
-      return null
-    }
+    if (!token) return null
 
-    // 从数据库获取用户信息
+    const payload = verifyToken(token)
+    if (!payload || !payload.sessionId) return null
+
+    const session = await validateAuthSessionForJwtPayload({
+      sessionId: payload.sessionId,
+      userId: payload.userId,
+      companyId: payload.companyId,
+    })
+
+    if (!session) return null
+
     const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
+      where: { id: payload.userId },
       select: {
         id: true,
         username: true,
         companyId: true,
         role: true,
-        isActive: true
-      }
+        isActive: true,
+      },
     })
 
-    if (!user || !user.isActive || user.role !== 'ADMIN') {
-      return null
-    }
+    if (!user || !user.isActive || user.role !== UserRole.ADMIN) return null
+    if (user.companyId !== payload.companyId) return null
 
     return {
       id: user.id,
-      userId: user.id,  // 别名
+      userId: user.id,
       username: user.username,
       companyId: user.companyId,
-      role: user.role
+      role: user.role,
     }
-
   } catch (error) {
-    console.error('管理员认证失败:', error)
+    console.error("管理员认证失败:", error)
     return null
   }
 }
+

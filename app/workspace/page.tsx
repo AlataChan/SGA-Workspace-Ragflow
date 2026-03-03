@@ -31,71 +31,36 @@ export default function WorkspacePage() {
   useEffect(() => {
     async function loadUserData() {
       try {
-        // 检查是否有认证token
-        const token = localStorage.getItem('auth-token')
-        if (!token) {
-          router.push('/auth/login')
+        // 从 API 获取当前用户信息（cookie-only 会话）
+        const userResponse = await fetch("/api/user/profile", {
+          headers: { "Content-Type": "application/json" },
+          cache: "no-cache",
+        })
+
+        if (!userResponse.ok) {
+          router.push("/auth/login")
           return
         }
 
-        // 从API获取真实的用户信息
-        try {
-          const userResponse = await fetch('/api/user/profile', {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          })
+        const userData = await userResponse.json()
+        const realUser = userData.data
 
-          if (userResponse.ok) {
-            const userData = await userResponse.json()
-            const realUser = userData.data
-
-            // 创建用户数据
-            const userProfile: UserProfile = {
-              id: realUser.userId || realUser.id,
-              username: realUser.username,
-              email: realUser.email || '',
-              display_name: realUser.chineseName || realUser.username,
-              avatar_url: realUser.avatarUrl || '',
-              role: realUser.role
-            }
-
-            setUser(userProfile)
-          } else {
-            // 如果API失败，回退到localStorage
-            const userData = localStorage.getItem('user')
-            if (userData) {
-              const parsedUser = JSON.parse(userData)
-              console.log('从localStorage获取的用户数据:', parsedUser)
-              const userProfile: UserProfile = {
-                id: parsedUser.userId || parsedUser.id || 'demo-user-id',
-                username: parsedUser.username || 'admin',
-                email: parsedUser.email || 'admin@demo.com',
-                display_name: parsedUser.displayName || parsedUser.display_name || parsedUser.username || 'linli',
-                avatar_url: parsedUser.avatarUrl || parsedUser.avatar_url || '',
-                role: parsedUser.role || 'admin'
-              }
-              console.log('创建的用户Profile:', userProfile)
-              setUser(userProfile)
-            } else {
-              router.push('/auth/login')
-              return
-            }
-          }
-        } catch (error) {
-          console.error('获取用户信息失败:', error)
-          router.push('/auth/login')
-          return
+        const userProfile: UserProfile = {
+          id: realUser.userId || realUser.id,
+          username: realUser.username,
+          email: realUser.email || "",
+          display_name: realUser.chineseName || realUser.username,
+          avatar_url: realUser.avatarUrl || "",
+          role: realUser.role,
         }
+
+        setUser(userProfile)
 
         // 获取公司信息
         try {
           const companyResponse = await fetch('/api/company/info', {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('auth-token')}`,
-              'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
+            cache: 'no-cache'
           })
 
           if (companyResponse.ok) {
@@ -108,10 +73,7 @@ export default function WorkspacePage() {
 
         // 从API获取用户有权限的Agent列表
         const response = await fetch('/api/user/agents', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth-token')}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           // 添加缓存控制，确保获取最新数据
           cache: 'no-cache'
         })
@@ -125,23 +87,12 @@ export default function WorkspacePage() {
           setAgents(agentList)
 
           // 检查是否有可用的Agent，如果没有且用户是管理员，跳转到管理后台
-          if (agentList.length === 0) {
-            // 获取当前用户信息
-            const token = localStorage.getItem('auth-token')
-            const userData = localStorage.getItem('user')
-            let currentUser = null
-
-            if (userData) {
-              currentUser = JSON.parse(userData)
-            }
-
-            if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'ADMIN')) {
-              console.log('没有可用的Agent，管理员用户跳转到管理后台')
-              setTimeout(() => {
-                router.push('/admin/agents?message=请先创建AI智能体')
-              }, 1000)
-              return
-            }
+          if (agentList.length === 0 && (userProfile.role === "admin" || userProfile.role === "ADMIN")) {
+            console.log("没有可用的Agent，管理员用户跳转到管理后台")
+            setTimeout(() => {
+              router.push("/admin/agents?message=请先创建AI智能体")
+            }, 1000)
+            return
           }
 
           // 设置演示会话数据（暂时保留）

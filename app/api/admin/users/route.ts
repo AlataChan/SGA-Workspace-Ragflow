@@ -8,6 +8,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { UserRole } from '@prisma/client'
 import { withAdminAuth } from '@/lib/auth/middleware'
+import { validatePasswordStrength } from '@/lib/auth/password'
+import { enforceSameOrigin } from '@/lib/security/origin-check'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 
@@ -36,7 +38,7 @@ const createUserSchema = z.object({
   departmentId: z.string().optional(),
   position: z.string().min(1, "职位不能为空").max(100, "职位过长"),
   role: z.nativeEnum(UserRole).default(UserRole.USER),
-  password: z.string().min(6, "密码至少6位"),
+  password: z.string().min(8, "密码至少8位"),
   avatarUrl: z.string().optional(),
 })
 
@@ -206,6 +208,9 @@ export const GET = withAdminAuth(async (request) => {
 // POST /api/admin/users - 创建用户
 export const POST = withAdminAuth(async (request) => {
   try {
+    const originBlocked = enforceSameOrigin(request)
+    if (originBlocked) return originBlocked
+
     const user = request.user!
     const body = await request.json()
 
@@ -225,6 +230,22 @@ export const POST = withAdminAuth(async (request) => {
     }
 
     const userData = validationResult.data
+
+    const passwordStrength = validatePasswordStrength(userData.password)
+    if (!passwordStrength.isValid) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: '请求参数错误',
+            details: {
+              password: passwordStrength.errors,
+            }
+          }
+        },
+        { status: 400, headers: corsHeaders }
+      )
+    }
 
     // 检查用户名是否已存在
     const existingUsername = await prisma.user.findFirst({

@@ -33,16 +33,6 @@ export class RAGFlowProxyClient {
     this.config = config
   }
 
-  private getAuthHeaders(): Record<string, string> {
-    if (typeof window === 'undefined') return {}
-    try {
-      const token = localStorage.getItem('auth-token')
-      return token ? { Authorization: `Bearer ${token}` } : {}
-    } catch {
-      return {}
-    }
-  }
-
   /**
    * 取消当前请求
    */
@@ -65,7 +55,6 @@ export class RAGFlowProxyClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...this.getAuthHeaders(),
         },
         body: JSON.stringify({
           action: 'createSession',
@@ -127,7 +116,6 @@ export class RAGFlowProxyClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...this.getAuthHeaders(),
         },
         body: JSON.stringify({
           action: 'sendMessage',
@@ -368,7 +356,6 @@ export class RAGFlowProxyClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...this.getAuthHeaders(),
         },
         body: JSON.stringify({
           action: 'listSessions',
@@ -399,7 +386,6 @@ export class RAGFlowProxyClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...this.getAuthHeaders(),
         },
         body: JSON.stringify({
           action: 'getHistory',
@@ -429,7 +415,6 @@ export class RAGFlowProxyClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...this.getAuthHeaders(),
         },
         body: JSON.stringify({
           action: 'deleteSession',
@@ -455,7 +440,6 @@ export class RAGFlowProxyClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...this.getAuthHeaders(),
         },
         body: JSON.stringify({
           action: 'renameSession',

@@ -151,12 +151,8 @@ export default function KnowledgeGraphView({ className, height = 300 }: Knowledg
 
   const fetchGraphStatus = useCallback(async () => {
     try {
-      const token = localStorage.getItem('auth-token')
-      if (!token) return null
-
-      const response = await fetch('/api/temp-kb/graph/status', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
+      const response = await fetch('/api/temp-kb/graph/status', { cache: 'no-cache' })
+      if (response.status === 401) return null
 
       const result = await response.json().catch(() => ({}))
       if (result?.success && result?.data?.status) {
@@ -177,14 +173,10 @@ export default function KnowledgeGraphView({ className, height = 300 }: Knowledg
     try {
       if (showLoading) setIsLoading(true)
 
-      const token = localStorage.getItem('auth-token')
-      if (!token) {
+      const response = await fetch('/api/temp-kb/graph', { cache: 'no-cache' })
+      if (response.status === 401) {
         return { ok: false, error: '未登录', nodeCount: 0, edgeCount: 0 }
       }
-
-      const response = await fetch('/api/temp-kb/graph', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
 
       const result = await response.json().catch(() => ({}))
 

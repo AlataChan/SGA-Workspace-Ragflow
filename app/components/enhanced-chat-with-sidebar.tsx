@@ -1478,12 +1478,10 @@ export default function EnhancedChatWithSidebar({
   const upsertLocalChatSession = async (sessionId: string, sessionName: string) => {
     if (!agentConfig?.localAgentId) return
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null
       await fetch('/api/chat-sessions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
           id: sessionId,
@@ -1504,12 +1502,10 @@ export default function EnhancedChatWithSidebar({
   ) => {
     if (!agentConfig?.localAgentId) return
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null
       await fetch(`/api/chat-sessions/${encodeURIComponent(sessionId)}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
         body: JSON.stringify({ role, content, metadata })
       })
@@ -1520,13 +1516,9 @@ export default function EnhancedChatWithSidebar({
 
   const loadLocalAssistantReferences = async (sessionId: string): Promise<Map<string, any>> => {
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null
       const resp = await fetch(`/api/chat-sessions/${encodeURIComponent(sessionId)}/messages`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
+        headers: { 'Content-Type': 'application/json' }
       })
       if (!resp.ok) return new Map()
       const data = await resp.json().catch(() => ({}))

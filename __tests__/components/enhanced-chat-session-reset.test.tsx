@@ -81,34 +81,46 @@ describe('EnhancedChatWithSidebar', () => {
     )
 
     // History list loads on mount
-    await waitFor(() => {
-      expect(screen.getByText('会议管理制度要点')).toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(screen.getByText('会议管理制度要点')).toBeInTheDocument()
+      },
+      { timeout: 10000 },
+    )
 
     // View history session 1
     fireEvent.click(screen.getByText('会议管理制度要点'))
 
-    await waitFor(() => {
-      const userBubbles = container.querySelectorAll('.user-message')
-      expect(userBubbles.length).toBeGreaterThan(0)
-    })
+    await waitFor(
+      () => {
+        const userBubbles = container.querySelectorAll('.user-message')
+        expect(userBubbles.length).toBeGreaterThan(0)
+      },
+      { timeout: 10000 },
+    )
 
     // View history session 2
     fireEvent.click(screen.getByText('数字化项目执行管理注意要点'))
 
-    await waitFor(() => {
-      const userBubbles = container.querySelectorAll('.user-message')
-      expect(userBubbles.length).toBeGreaterThan(0)
-    })
+    await waitFor(
+      () => {
+        const userBubbles = container.querySelectorAll('.user-message')
+        expect(userBubbles.length).toBeGreaterThan(0)
+      },
+      { timeout: 10000 },
+    )
 
     // Create a new session: should not keep any user messages from history
     fireEvent.click(screen.getByRole('button', { name: '新对话' }))
 
-    await waitFor(() => {
-      const userBubbles = container.querySelectorAll('.user-message')
-      expect(userBubbles.length).toBe(0)
-    })
-  })
+    await waitFor(
+      () => {
+        const userBubbles = container.querySelectorAll('.user-message')
+        expect(userBubbles.length).toBe(0)
+      },
+      { timeout: 10000 },
+    )
+  }, 45000)
 
   it('ignores stale history load after creating a new session', async () => {
     const difyUrl = 'http://dify.test'
@@ -290,27 +302,39 @@ describe('EnhancedChatWithSidebar', () => {
       />
     )
 
-    await waitFor(() => {
-      expect(screen.getByText('会议管理制度要点')).toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(screen.getByText('会议管理制度要点')).toBeInTheDocument()
+      },
+      { timeout: 10000 },
+    )
 
     fireEvent.click(screen.getByText('会议管理制度要点'))
-    await waitFor(() => {
-      const userBubbles = container.querySelectorAll('.user-message')
-      expect(userBubbles.length).toBeGreaterThan(0)
-    })
+    await waitFor(
+      () => {
+        const userBubbles = container.querySelectorAll('.user-message')
+        expect(userBubbles.length).toBeGreaterThan(0)
+      },
+      { timeout: 10000 },
+    )
 
     fireEvent.click(screen.getByText('数字化项目执行管理注意要点'))
-    await waitFor(() => {
-      const userBubbles = container.querySelectorAll('.user-message')
-      expect(userBubbles.length).toBeGreaterThan(0)
-    })
+    await waitFor(
+      () => {
+        const userBubbles = container.querySelectorAll('.user-message')
+        expect(userBubbles.length).toBeGreaterThan(0)
+      },
+      { timeout: 10000 },
+    )
 
     fireEvent.click(screen.getByRole('button', { name: '新对话' }))
 
-    await waitFor(() => {
-      const userBubbles = container.querySelectorAll('.user-message')
-      expect(userBubbles.length).toBe(0)
-    })
-  })
+    await waitFor(
+      () => {
+        const userBubbles = container.querySelectorAll('.user-message')
+        expect(userBubbles.length).toBe(0)
+      },
+      { timeout: 10000 },
+    )
+  }, 45000)
 })

@@ -59,6 +59,11 @@ model User {
   role             UserRole              @default(USER)
   isActive         Boolean               @default(true) @map("is_active")
   lastLoginAt      DateTime?             @map("last_login_at")
+  loginFailedCount24h      Int      @default(0) @map("login_failed_count_24h")
+  loginFailedWindowStartAt DateTime? @map("login_failed_window_start_at")
+  loginLockedUntil         DateTime? @map("login_locked_until")
+  loginLockLevel           String?   @map("login_lock_level")
+  loginLockNeedsAdmin      Boolean   @default(false) @map("login_lock_needs_admin")
   createdAt        DateTime              @default(now()) @map("created_at")
   updatedAt        DateTime              @updatedAt @map("updated_at")
   
@@ -71,6 +76,7 @@ model User {
   
   messages                      ChatMessage[]
   sessions                      ChatSession[]
+  authSessions                  AuthSession[]
   uploadedFiles                 UploadedFile[]
   agentPermissions              UserAgentPermission[]
   knowledgeGraphPermissions     UserKnowledgeGraphPermission[]
@@ -82,6 +88,54 @@ model User {
   @@unique([companyId, userId], name: "unique_user_id")
   @@unique([companyId, phone], name: "unique_phone")
   @@map("users")
+}
+
+model AuthSession {
+  id        String @id @default(cuid())
+  userId    String @map("user_id")
+  companyId String @map("company_id")
+
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  expiresAt  DateTime @map("expires_at")
+
+  revokedAt       DateTime? @map("revoked_at")
+  revokedByUserId String?   @map("revoked_by_user_id")
+  revokeReason    String?   @map("revoke_reason")
+
+  ip        String? @map("ip")
+  userAgent String? @map("user_agent")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, userId, revokedAt], name: "idx_auth_session_company_user_revoked")
+  @@index([companyId, expiresAt], name: "idx_auth_session_company_expires")
+  @@index([companyId, lastSeenAt], name: "idx_auth_session_company_last_seen")
+  @@map("auth_sessions")
+}
+
+model SecurityAuditEvent {
+  id         String   @id @default(cuid())
+  occurredAt DateTime @default(now()) @map("occurred_at")
+  companyId  String   @map("company_id")
+
+  actorUserId  String? @map("actor_user_id")
+  targetUserId String? @map("target_user_id")
+
+  eventType String @map("event_type")
+  result    String @map("result")
+  reason    String? @map("reason")
+
+  ip        String? @map("ip")
+  userAgent String? @map("user_agent")
+  requestId String? @map("request_id")
+
+  details Json? @map("details")
+
+  @@index([companyId, occurredAt], name: "idx_audit_company_time")
+  @@index([companyId, targetUserId, occurredAt], name: "idx_audit_company_target_time")
+  @@index([companyId, eventType, occurredAt], name: "idx_audit_company_type_time")
+  @@map("security_audit_events")
 }
 
 model Agent {

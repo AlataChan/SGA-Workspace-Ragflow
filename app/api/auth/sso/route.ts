@@ -9,11 +9,19 @@ import userSyncService from '@/lib/auth/user-sync'
 import tokenCacheService from '@/lib/auth/token-cache'
 import { generateToken } from '@/lib/auth/jwt'
 import { setAuthCookie } from '@/lib/auth/middleware'
+import {
+  createAuthSession,
+  getActiveAuthSessionForUser,
+  replaceAuthSessionForUser,
+} from "@/lib/auth/auth-session"
+import { writeAuditEvent } from "@/lib/security/audit-events"
+import { enforceSameOrigin } from "@/lib/security/origin-check"
 import { z } from 'zod'
 
 // SSO 请求验证模式
 const ssoSchema = z.object({
   ticket: z.string().min(1, 'ticket 不能为空'),
+  confirmReplace: z.boolean().optional(),
 })
 
 // Ticket 使用记录（防止重放攻击）
@@ -32,12 +40,26 @@ function isTicketUsed(ticket: string): boolean {
   return usedTickets.has(ticket)
 }
 
+function getRequestIp(request: NextRequest): string | undefined {
+  const forwardedFor = request.headers.get("x-forwarded-for")
+  if (forwardedFor) return forwardedFor.split(",")[0]?.trim()
+  const realIp = request.headers.get("x-real-ip")
+  return realIp ?? undefined
+}
+
+function getRequestId(request: NextRequest): string | undefined {
+  return request.headers.get("x-request-id") ?? undefined
+}
+
 /**
  * POST /api/auth/sso
  * i国贸 SSO 登录
  */
 export async function POST(request: NextRequest) {
   try {
+    const originBlocked = enforceSameOrigin(request)
+    if (originBlocked) return originBlocked
+
     console.log('[SSO] 收到 SSO 认证请求')
 
     // 1. 验证请求参数
@@ -58,7 +80,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { ticket } = validationResult.data
+    const { ticket, confirmReplace } = validationResult.data
 
     console.log('[SSO] Ticket:', ticket.substring(0, 8) + '...')
 
@@ -137,6 +159,51 @@ export async function POST(request: NextRequest) {
 
     const localUser = await userSyncService.syncUser(yunzhijiaUser)
 
+    const ip = getRequestIp(request)
+    const userAgent = request.headers.get("user-agent") ?? undefined
+    const requestId = getRequestId(request)
+
+    const activeSession = await getActiveAuthSessionForUser({
+      userId: localUser.id,
+      companyId: localUser.companyId,
+    })
+
+    if (activeSession && confirmReplace !== true) {
+      await writeAuditEvent({
+        companyId: localUser.companyId,
+        targetUserId: localUser.id,
+        eventType: "AUTH_SESSION_EXISTS_PROMPTED",
+        result: "BLOCKED",
+        reason: "ACTIVE_SESSION",
+        ip,
+        userAgent,
+        requestId,
+        details: {
+          lastSeenAt: activeSession.lastSeenAt,
+          ip: activeSession.ip,
+          userAgent: activeSession.userAgent,
+        },
+      })
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "SESSION_EXISTS",
+            message: "已有会话在用，新登录将让旧登录登出，是否继续？",
+          },
+          data: {
+            activeSession: {
+              lastSeenAt: activeSession.lastSeenAt,
+              ip: activeSession.ip,
+              userAgent: activeSession.userAgent,
+            },
+          },
+        },
+        { status: 409 },
+      )
+    }
+
     // 9. 缓存 accessToken 和 refreshToken
     console.log('[SSO] 缓存 Token...', { userId: localUser.id })
     await tokenCacheService.cacheTokens(localUser.id, {
@@ -145,11 +212,58 @@ export async function POST(request: NextRequest) {
       expiresIn: tokens.expiresIn,
     })
 
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    const session = confirmReplace
+      ? await replaceAuthSessionForUser({
+          userId: localUser.id,
+          companyId: localUser.companyId,
+          expiresAt,
+          ip,
+          userAgent,
+          reason: "NEW_LOGIN",
+          revokedByUserId: localUser.id,
+        })
+      : await createAuthSession({
+          userId: localUser.id,
+          companyId: localUser.companyId,
+          expiresAt,
+          ip,
+          userAgent,
+        })
+
+    if (confirmReplace && activeSession) {
+      await writeAuditEvent({
+        companyId: localUser.companyId,
+        actorUserId: localUser.id,
+        targetUserId: localUser.id,
+        eventType: "AUTH_SESSION_REVOKED",
+        result: "SUCCESS",
+        reason: "NEW_LOGIN",
+        ip,
+        userAgent,
+        requestId,
+        details: { replacedSessionId: activeSession.id },
+      })
+    }
+
     // 10. 生成本地 JWT Token
     const localToken = generateToken({
       userId: localUser.id,
       companyId: localUser.companyId,
       role: localUser.role,
+      sessionId: session.id,
+    })
+
+    await writeAuditEvent({
+      companyId: localUser.companyId,
+      targetUserId: localUser.id,
+      eventType: "AUTH_LOGIN_SUCCESS",
+      result: "SUCCESS",
+      reason: confirmReplace ? "NEW_LOGIN" : undefined,
+      ip,
+      userAgent,
+      requestId,
+      details: { replacedExistingSession: Boolean(activeSession) && confirmReplace === true },
     })
 
     console.log('[SSO] SSO 认证成功', {
@@ -234,7 +348,4 @@ export async function GET() {
     provider: 'yunzhijia',
   })
 }
-
-
-
 

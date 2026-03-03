@@ -122,7 +122,6 @@ export default function NewAdminLayout({ children }: AdminLayoutProps) {
     try {
       await fetch('/api/auth/logout', { method: 'POST' })
       localStorage.removeItem('user')
-      localStorage.removeItem('auth-token') // 修复token名称
       router.push('/auth/login')
     } catch (error) {
       console.error('登出失败:', error)

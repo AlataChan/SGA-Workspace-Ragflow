@@ -86,7 +86,6 @@ export default function UserProfileDialog({ open, onOpenChange }: UserProfileDia
       setIsLoading(true)
       const response = await fetch('/api/user/profile', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`,
           'Content-Type': 'application/json',
         },
       })
@@ -138,8 +137,15 @@ export default function UserProfileDialog({ open, onOpenChange }: UserProfileDia
           setMessage({ type: 'error', text: '新密码和确认密码不一致' })
           return
         }
-        if (formData.newPassword.length < 6) {
-          setMessage({ type: 'error', text: '新密码至少6位' })
+        const passwordErrors: string[] = []
+        if (formData.newPassword.length < 8) passwordErrors.push('新密码至少8位')
+        if (!/[A-Z]/.test(formData.newPassword)) passwordErrors.push('新密码必须包含大写字母')
+        if (!/[a-z]/.test(formData.newPassword)) passwordErrors.push('新密码必须包含小写字母')
+        if (!/[0-9]/.test(formData.newPassword)) passwordErrors.push('新密码必须包含数字')
+        if (!/[^A-Za-z0-9]/.test(formData.newPassword)) passwordErrors.push('新密码必须包含符号')
+
+        if (passwordErrors.length > 0) {
+          setMessage({ type: 'error', text: passwordErrors[0] })
           return
         }
       }
@@ -162,7 +168,6 @@ export default function UserProfileDialog({ open, onOpenChange }: UserProfileDia
       const response = await fetch('/api/user/profile', {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(updateData),
@@ -185,9 +190,10 @@ export default function UserProfileDialog({ open, onOpenChange }: UserProfileDia
         setTimeout(() => setMessage(null), 3000)
       } else {
         const errorData = await response.json()
+        const passwordErrorText = errorData?.error?.details?.newPassword?.join?.("；")
         setMessage({
           type: 'error',
-          text: errorData.error?.message || '更新失败'
+          text: passwordErrorText || errorData.error?.message || '更新失败'
         })
       }
     } catch (error) {
@@ -390,7 +396,7 @@ export default function UserProfileDialog({ open, onOpenChange }: UserProfileDia
                   <Input
                     id="newPassword"
                     type={showNewPassword ? "text" : "password"}
-                    placeholder="请输入新密码（至少6位）"
+                    placeholder="请输入新密码（至少8位，含大写/小写/数字/符号）"
                     value={formData.newPassword}
                     onChange={(e) => setFormData(prev => ({ ...prev, newPassword: e.target.value }))}
                     className="pr-10"
@@ -425,9 +431,11 @@ export default function UserProfileDialog({ open, onOpenChange }: UserProfileDia
               <div className="text-sm text-muted-foreground bg-muted p-3 rounded-lg">
                 <p className="font-medium mb-1">密码要求：</p>
                 <ul className="list-disc list-inside space-y-1">
-                  <li>至少6个字符</li>
-                  <li>建议包含字母、数字和特殊字符</li>
-                  <li>不要使用过于简单的密码</li>
+                  <li>至少8个字符</li>
+                  <li>必须包含大写字母</li>
+                  <li>必须包含小写字母</li>
+                  <li>必须包含数字</li>
+                  <li>必须包含符号</li>
                 </ul>
               </div>
             </div>

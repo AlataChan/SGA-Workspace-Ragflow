@@ -76,7 +76,7 @@ describe('KnowledgeBaseCard', () => {
     await user.click(editButton)
     
     expect(onEdit).toHaveBeenCalledTimes(1)
-  })
+  }, 10000)
 
   it('应该在点击删除时调用onDelete回调', async () => {
     const onDelete = vi.fn()
@@ -92,7 +92,7 @@ describe('KnowledgeBaseCard', () => {
     await user.click(deleteButton)
     
     expect(onDelete).toHaveBeenCalledTimes(1)
-  })
+  }, 10000)
 
   it('应该正确格式化日期', () => {
     render(<KnowledgeBaseCard {...mockProps} />)

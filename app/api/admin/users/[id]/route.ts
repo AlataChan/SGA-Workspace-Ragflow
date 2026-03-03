@@ -8,7 +8,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { UserRole } from '@prisma/client'
 import { withAdminAuth } from '@/lib/auth/middleware'
-import { hashPassword } from '@/lib/auth/password'
+import { hashPassword, validatePasswordStrength } from '@/lib/auth/password'
+import { writeAuditEvent } from '@/lib/security/audit-events'
+import { enforceSameOrigin } from '@/lib/security/origin-check'
 import { z } from 'zod'
 
 // CORS headers
@@ -34,7 +36,7 @@ const updateUserSchema = z.object({
   departmentId: z.string().optional(),
   position: z.string().min(1, "职位不能为空").max(100, "职位过长").optional(),
   role: z.nativeEnum(UserRole).optional(),
-  password: z.string().min(6, "密码至少6位").optional(),
+  password: z.string().min(8, "密码至少8位").optional(),
   avatarUrl: z.string().optional(),
   isActive: z.boolean().optional(),
 })
@@ -42,6 +44,9 @@ const updateUserSchema = z.object({
 // PUT /api/admin/users/[id] - 更新用户
 export const PUT = withAdminAuth(async (request, context) => {
   try {
+    const originBlocked = enforceSameOrigin(request)
+    if (originBlocked) return originBlocked
+
     const user = request.user!
     const userId = context.params.id
     const body = await request.json()
@@ -62,6 +67,24 @@ export const PUT = withAdminAuth(async (request, context) => {
     }
 
     const userData = validationResult.data
+
+    if (userData.password) {
+      const passwordStrength = validatePasswordStrength(userData.password)
+      if (!passwordStrength.isValid) {
+        return NextResponse.json(
+          {
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: '请求参数错误',
+              details: {
+                password: passwordStrength.errors,
+              }
+            }
+          },
+          { status: 400, headers: corsHeaders }
+        )
+      }
+    }
 
     // 检查目标用户是否存在
     const targetUser = await prisma.user.findFirst({
@@ -204,6 +227,16 @@ export const PUT = withAdminAuth(async (request, context) => {
     // 移除敏感信息
     const { passwordHash, ...safeUser } = updatedUser
 
+    if (userData.password) {
+      await writeAuditEvent({
+        companyId: user.companyId,
+        actorUserId: user.userId,
+        targetUserId: userId,
+        eventType: 'AUTH_PASSWORD_RESET_ADMIN',
+        result: 'SUCCESS',
+      })
+    }
+
     return NextResponse.json({
       data: safeUser,
       message: '用户更新成功'
@@ -226,6 +259,9 @@ export const PUT = withAdminAuth(async (request, context) => {
 // DELETE /api/admin/users/[id] - 删除用户
 export const DELETE = withAdminAuth(async (request, context) => {
   try {
+    const originBlocked = enforceSameOrigin(request)
+    if (originBlocked) return originBlocked
+
     const user = request.user!
     const userId = context.params.id
 

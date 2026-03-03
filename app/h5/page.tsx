@@ -33,22 +33,11 @@ interface H5ChatSession {
   messages?: Array<{ id: string }>
 }
 
-function getStoredToken(): string | null {
-  if (typeof window === "undefined") return null
-  return localStorage.getItem("auth-token")
-}
-
-function storeToken(token: string) {
-  if (typeof window === "undefined") return
-  localStorage.setItem("auth-token", token)
-}
-
 function H5HomePageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const activeTab = searchParams.get("tab") === "history" ? "history" : "agents"
 
-  const [token, setToken] = useState<string | null>(null)
   const [agents, setAgents] = useState<H5Agent[]>([])
   const [sessions, setSessions] = useState<H5ChatSession[]>([])
   const [query, setQuery] = useState("")
@@ -56,25 +45,6 @@ function H5HomePageContent() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const urlToken = searchParams.get("token") || searchParams.get("authToken")
-    const existing = getStoredToken()
-
-    if (urlToken && urlToken !== existing) {
-      storeToken(urlToken)
-      setToken(urlToken)
-      return
-    }
-
-    setToken(existing)
-  }, [searchParams])
-
-  useEffect(() => {
-    if (!token) {
-      setIsLoading(false)
-      setError("缺少登录信息：请从已登录的工作台打开，或通过 URL 传入 token 参数。")
-      return
-    }
-
     let cancelled = false
 
     const load = async () => {
@@ -82,9 +52,13 @@ function H5HomePageContent() {
       setError(null)
       try {
         const [agentsResp, sessionsResp] = await Promise.all([
-          fetch("/api/user/agents", { headers: { Authorization: `Bearer ${token}` }, cache: "no-cache" }),
-          fetch("/api/chat-sessions", { headers: { Authorization: `Bearer ${token}` }, cache: "no-cache" }),
+          fetch("/api/user/agents", { cache: "no-cache" }),
+          fetch("/api/chat-sessions", { cache: "no-cache" }),
         ])
+
+        if (agentsResp.status === 401 || sessionsResp.status === 401) {
+          throw new Error("未登录：请先在工作台登录后再打开此页面。")
+        }
 
         if (!agentsResp.ok) {
           throw new Error(`加载智能体失败: ${agentsResp.status}`)
@@ -115,7 +89,7 @@ function H5HomePageContent() {
     return () => {
       cancelled = true
     }
-  }, [token])
+  }, [])
 
   const ragflowAgents = useMemo(() => agents.filter((a) => a.platform === "RAGFLOW"), [agents])
   const agentsById = useMemo(() => new Map(ragflowAgents.map((a) => [a.id, a])), [ragflowAgents])

@@ -21,49 +21,22 @@ interface UserProfile {
   avatarUrl?: string | null
 }
 
-function getStoredToken(): string | null {
-  if (typeof window === "undefined") return null
-  return localStorage.getItem("auth-token")
-}
-
-function storeToken(token: string) {
-  if (typeof window === "undefined") return
-  localStorage.setItem("auth-token", token)
-}
-
 function H5ChatPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
   const agentId = searchParams.get("agent_id") || ""
   const sessionId = searchParams.get("session_id") || undefined
-  const urlToken = searchParams.get("token") || searchParams.get("authToken") || undefined
 
-  const [token, setToken] = useState<string | null>(null)
   const [agent, setAgent] = useState<H5Agent | null>(null)
   const [user, setUser] = useState<UserProfile | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const existing = getStoredToken()
-    if (urlToken && urlToken !== existing) {
-      storeToken(urlToken)
-      setToken(urlToken)
-      return
-    }
-    setToken(existing)
-  }, [urlToken])
-
-  useEffect(() => {
     if (!agentId) {
       setIsLoading(false)
       setError("缺少 agent_id 参数")
-      return
-    }
-    if (!token) {
-      setIsLoading(false)
-      setError("缺少登录信息：请从已登录的工作台打开，或通过 URL 传入 token 参数。")
       return
     }
 
@@ -74,8 +47,8 @@ function H5ChatPageContent() {
       setError(null)
       try {
         const [profileResp, agentsResp] = await Promise.all([
-          fetch("/api/user/profile", { headers: { Authorization: `Bearer ${token}` }, cache: "no-cache" }),
-          fetch("/api/user/agents", { headers: { Authorization: `Bearer ${token}` }, cache: "no-cache" }),
+          fetch("/api/user/profile", { cache: "no-cache" }),
+          fetch("/api/user/agents", { cache: "no-cache" }),
         ])
 
         if (!profileResp.ok) throw new Error(`加载用户信息失败: ${profileResp.status}`)
@@ -111,7 +84,7 @@ function H5ChatPageContent() {
     return () => {
       cancelled = true
     }
-  }, [agentId, token])
+  }, [agentId])
 
   const agentAvatar = agent?.photoUrl || agent?.avatarUrl || undefined
 

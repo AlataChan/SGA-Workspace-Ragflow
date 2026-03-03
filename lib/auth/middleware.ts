@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken, extractTokenFromHeader, JWTPayload } from './jwt'
 import { UserRole } from '@prisma/client'
 import prisma from '@/lib/prisma'
+import { validateAuthSessionForJwtPayload } from '@/lib/auth/auth-session'
 
 export type CurrentUser = JWTPayload & {
   departmentId?: string
@@ -51,6 +52,27 @@ export function withAuth(handler: (req: AuthenticatedRequest) => Promise<NextRes
       if (!payload) {
         return NextResponse.json(
           { error: { code: 'INVALID_TOKEN', message: '无效的认证令牌' } },
+          { status: 401 }
+        )
+      }
+
+      // 校验服务端会话（AuthSession）是否仍有效
+      if (!payload.sessionId) {
+        return NextResponse.json(
+          { error: { code: 'INVALID_SESSION', message: '无效的会话' } },
+          { status: 401 }
+        )
+      }
+
+      const session = await validateAuthSessionForJwtPayload({
+        sessionId: payload.sessionId,
+        userId: payload.userId,
+        companyId: payload.companyId,
+      })
+
+      if (!session) {
+        return NextResponse.json(
+          { error: { code: 'INVALID_SESSION', message: '无效的会话' } },
           { status: 401 }
         )
       }
@@ -143,6 +165,20 @@ export function withOptionalAuth(handler: (req: AuthenticatedRequest) => Promise
       if (token) {
         const payload = verifyToken(token)
         if (payload) {
+          if (payload.sessionId) {
+            const session = await validateAuthSessionForJwtPayload({
+              sessionId: payload.sessionId,
+              userId: payload.userId,
+              companyId: payload.companyId,
+            })
+
+            if (!session) {
+              return handler(req as AuthenticatedRequest)
+            }
+          } else {
+            return handler(req as AuthenticatedRequest)
+          }
+
           const dbUser = await prisma.user.findUnique({
             where: { id: payload.userId },
             select: {
