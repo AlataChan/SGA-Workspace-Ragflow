@@ -118,7 +118,7 @@ export class TempKbService {
       // 如果已存在知识库，直接复用（无论状态）
       if (tempKb) {
         const updateData: Record<string, any> = {
-          lastActiveAt: new Date()
+          lastActiveAt: new Date(),
         }
 
         // 仅当已过期时才恢复为 ACTIVE；构建中(BUILDING)/已持久化(PERSISTENT)不应被写回 ACTIVE
@@ -126,24 +126,132 @@ export class TempKbService {
           updateData.status = 'ACTIVE'
         }
 
-        // 如果传入了可用的 RAGFlow 配置，允许覆盖存储配置（修复环境变量/旧配置导致的不可用）
-        if (overrideConfig) {
-          if (overrideConfig.baseUrl && overrideConfig.baseUrl !== tempKb.ragflowUrl) {
-            updateData.ragflowUrl = this.normalizeRagflowBaseUrl(overrideConfig.baseUrl)
-          }
-          if (overrideConfig.apiKey && overrideConfig.apiKey !== tempKb.apiKey) {
-            updateData.apiKey = overrideConfig.apiKey
+        // 重要：当配置被覆盖/切换后，原 ragflowKbId 可能不属于新的 API Key，会导致 109/102 “No authorization / You don't own…”
+        // 因此这里先检查 dataset 归属；若不可访问则重建 dataset 并尽量回灌已保存的 chunks。
+        const storedClient = this.createClientForTempKb(tempKb)
+        const accessResult = await storedClient.checkDatasetAccess(tempKb.ragflowKbId)
+
+        if (accessResult.success && accessResult.data?.owned) {
+          tempKb = await prisma.userTempKnowledgeBase.update({
+            where: { id: tempKb.id },
+            data: updateData,
+          })
+
+          return {
+            success: true,
+            data: this.mapToTempKbInfo(tempKb),
           }
         }
 
+        // dataset 不可访问：优先使用当前记录的配置重建；如果记录配置本身不可用，则回退到 override/env 配置
+        let rebuildConfig: TempKbRagflowConfig | null = {
+          baseUrl: this.normalizeRagflowBaseUrl(tempKb.ragflowUrl),
+          apiKey: String(tempKb.apiKey || '').trim(),
+        }
+
+        if (!accessResult.success) {
+          rebuildConfig = this.getEffectiveRagflowConfig(overrideConfig)
+        }
+
+        if (!rebuildConfig) {
+          return {
+            success: false,
+            error: 'RAGFlow 配置缺失，请检查 RAGFLOW_URL / RAGFLOW_API_KEY 或传入可用的 Agent 配置',
+          }
+        }
+
+        const client = this.createClient(rebuildConfig)
+
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { username: true, chineseName: true },
+        })
+
+        const now = new Date()
+        const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+        const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
+        const userName = user?.chineseName || user?.username || 'user'
+        const kbName = `${userName}_${dateStr}_${timeStr}_temp_kb`
+
+        const createResult = await client.createDataset({
+          name: kbName,
+          description: `用户 ${user?.chineseName || user?.username || userId} 的临时知识图谱 (创建于 ${now.toLocaleString('zh-CN')})`,
+          enableGraphRAG: true,
+          graphRAGMethod: 'light',
+          entityTypes: ['organization', 'person', 'geo', 'event', 'category', 'concept'],
+        })
+
+        if (!createResult.success || !createResult.data) {
+          return {
+            success: false,
+            error: createResult.error || '创建RAGFlow知识库失败',
+          }
+        }
+
+        const docResult = await client.createVirtualDocument(createResult.data.id, 'user_saved_knowledge')
+
+        if (!docResult.success || !docResult.data?.documentId) {
+          return {
+            success: false,
+            error: docResult.error || '创建虚拟文档失败',
+          }
+        }
+
+        // 回灌已保存 chunks（最佳努力）
+        const existingChunks = await prisma.userSavedChunk.findMany({
+          where: { tempKbId: tempKb.id },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, content: true, keywords: true },
+        })
+
+        for (const chunk of existingChunks) {
+          try {
+            const addResult = await client.addChunk({
+              datasetId: createResult.data.id,
+              documentId: docResult.data.documentId,
+              content: chunk.content,
+              keywords: chunk.keywords || [],
+            })
+
+            if (addResult.success && addResult.data?.chunkId) {
+              await prisma.userSavedChunk.update({
+                where: { id: chunk.id },
+                data: { ragflowChunkId: addResult.data.chunkId },
+              })
+            }
+          } catch (error) {
+            console.warn('[TempKbService] 回灌 chunk 失败，已跳过:', {
+              chunkId: chunk.id,
+              error: error instanceof Error ? error.message : String(error),
+            })
+          }
+        }
+
+        const previousKbId = tempKb.ragflowKbId
         tempKb = await prisma.userTempKnowledgeBase.update({
           where: { id: tempKb.id },
-          data: updateData,
+          data: {
+            ...updateData,
+            ragflowKbId: createResult.data.id,
+            ragflowDocId: docResult.data.documentId,
+            ragflowUrl: this.normalizeRagflowBaseUrl(rebuildConfig.baseUrl),
+            apiKey: rebuildConfig.apiKey,
+            status: 'ACTIVE',
+            chunkCount: existingChunks.length,
+            nodeCount: 0,
+            edgeCount: 0,
+          },
+        })
+
+        console.log('[TempKbService] 临时知识库已重建:', {
+          userId,
+          oldKbId: previousKbId,
+          newKbId: createResult.data.id,
         })
 
         return {
           success: true,
-          data: this.mapToTempKbInfo(tempKb)
+          data: this.mapToTempKbInfo(tempKb),
         }
       }
 
