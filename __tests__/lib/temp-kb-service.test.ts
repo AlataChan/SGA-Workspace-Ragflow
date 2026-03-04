@@ -18,6 +18,9 @@ const { prismaMock, clientState, RAGFlowTempKbClientMock } = vi.hoisted(() => {
     createDataset: any
     createVirtualDocument: any
     addChunk: any
+    getGraphRAGStatus: any
+    runGraphRAG: any
+    getKnowledgeGraph: any
 
     constructor(config: any) {
       this.config = config
@@ -30,6 +33,20 @@ const { prismaMock, clientState, RAGFlowTempKbClientMock } = vi.hoisted(() => {
       this.createDataset = vi.fn().mockResolvedValue(behavior.createDataset)
       this.createVirtualDocument = vi.fn().mockResolvedValue(behavior.createVirtualDocument)
       this.addChunk = vi.fn().mockResolvedValue(behavior.addChunk)
+      this.getGraphRAGStatus = vi
+        .fn()
+        .mockResolvedValue(
+          behavior.getGraphRAGStatus ?? { success: true, data: { status: "completed", progress: 1 } },
+        )
+      this.runGraphRAG = vi
+        .fn()
+        .mockResolvedValue(behavior.runGraphRAG ?? { success: true, data: { taskId: "t1" } })
+      this.getKnowledgeGraph = vi.fn().mockResolvedValue(
+        behavior.getKnowledgeGraph ?? {
+          success: true,
+          data: { graph: { nodes: [], edges: [] }, nodeCount: 0, edgeCount: 0 },
+        },
+      )
     }
   }
 
@@ -144,3 +161,140 @@ describe("TempKbService.getOrCreateTempKb", () => {
   })
 })
 
+describe("TempKbService.buildGraph", () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.clearAllMocks()
+    clientState.instances.length = 0
+    clientState.behaviors.length = 0
+  })
+
+  it("triggers run_graphrag when local status is BUILDING but remote task is missing", async () => {
+    const now = new Date("2026-03-04T00:00:00Z")
+    const tempKb = {
+      id: "tkb1",
+      userId: "u1",
+      ragflowKbId: "kb1",
+      ragflowDocId: "doc1",
+      ragflowUrl: "http://ragflow:9380",
+      apiKey: "rk",
+      status: "BUILDING",
+      chunkCount: 1,
+      nodeCount: 0,
+      edgeCount: 0,
+      lastActiveAt: now,
+      createdAt: now,
+    }
+
+    prismaMock.userTempKnowledgeBase.findUnique.mockResolvedValue(tempKb)
+    prismaMock.userTempKnowledgeBase.update.mockImplementation(async ({ data }: any) => ({
+      ...tempKb,
+      ...data,
+    }))
+
+    clientState.behaviors.push({
+      getGraphRAGStatus: { success: false, error: "GraphRAG 构建任务尚未创建" },
+      runGraphRAG: { success: true, data: { taskId: "t2" } },
+    })
+
+    const { TempKbService } = await import("@/lib/services/temp-kb-service")
+    const service = new TempKbService()
+
+    const res = await service.buildGraph("u1")
+
+    expect(res.success).toBe(true)
+    expect(clientState.instances).toHaveLength(1)
+    expect(clientState.instances[0].getGraphRAGStatus).toHaveBeenCalledTimes(1)
+    expect(clientState.instances[0].runGraphRAG).toHaveBeenCalledTimes(1)
+  })
+
+  it("returns idempotent success when remote status is building", async () => {
+    const now = new Date("2026-03-04T00:00:00Z")
+    const tempKb = {
+      id: "tkb1",
+      userId: "u1",
+      ragflowKbId: "kb1",
+      ragflowDocId: "doc1",
+      ragflowUrl: "http://ragflow:9380",
+      apiKey: "rk",
+      status: "ACTIVE",
+      chunkCount: 1,
+      nodeCount: 0,
+      edgeCount: 0,
+      lastActiveAt: now,
+      createdAt: now,
+    }
+
+    prismaMock.userTempKnowledgeBase.findUnique.mockResolvedValue(tempKb)
+    prismaMock.userTempKnowledgeBase.update.mockImplementation(async ({ data }: any) => ({
+      ...tempKb,
+      ...data,
+    }))
+
+    clientState.behaviors.push({
+      getGraphRAGStatus: { success: true, data: { status: "building", progress: 0.2 } },
+    })
+
+    const { TempKbService } = await import("@/lib/services/temp-kb-service")
+    const service = new TempKbService()
+
+    const res = await service.buildGraph("u1")
+
+    expect(res.success).toBe(true)
+    expect(clientState.instances).toHaveLength(1)
+    expect(clientState.instances[0].runGraphRAG).not.toHaveBeenCalled()
+    expect(prismaMock.userTempKnowledgeBase.update).toHaveBeenCalled()
+    const lastUpdate = prismaMock.userTempKnowledgeBase.update.mock.calls.at(-1)?.[0]
+    expect(lastUpdate.data.status).toBe("BUILDING")
+  })
+})
+
+describe("TempKbService.getGraphStatus", () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.clearAllMocks()
+    clientState.instances.length = 0
+    clientState.behaviors.length = 0
+  })
+
+  it("falls back to knowledge_graph when trace task is missing during BUILDING", async () => {
+    const now = new Date("2026-03-04T00:00:00Z")
+    const tempKb = {
+      id: "tkb1",
+      userId: "u1",
+      ragflowKbId: "kb1",
+      ragflowDocId: "doc1",
+      ragflowUrl: "http://ragflow:9380",
+      apiKey: "rk",
+      status: "BUILDING",
+      chunkCount: 1,
+      nodeCount: 0,
+      edgeCount: 0,
+      lastActiveAt: now,
+      createdAt: now,
+    }
+
+    prismaMock.userTempKnowledgeBase.findUnique.mockResolvedValue(tempKb)
+    prismaMock.userTempKnowledgeBase.update.mockImplementation(async ({ data }: any) => ({
+      ...tempKb,
+      ...data,
+    }))
+
+    clientState.behaviors.push({
+      getGraphRAGStatus: { success: false, error: "GraphRAG 构建任务尚未创建" },
+      getKnowledgeGraph: {
+        success: true,
+        data: { graph: { nodes: [{ id: "n1" }], edges: [] }, nodeCount: 1, edgeCount: 0 },
+      },
+    })
+
+    const { TempKbService } = await import("@/lib/services/temp-kb-service")
+    const service = new TempKbService()
+
+    const res = await service.getGraphStatus("u1")
+
+    expect(res.success).toBe(true)
+    expect(res.data?.status).toBe("completed")
+    expect(prismaMock.userTempKnowledgeBase.update).toHaveBeenCalled()
+  })
+})

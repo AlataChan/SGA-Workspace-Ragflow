@@ -500,20 +500,31 @@ export class TempKbService {
 
       const client = this.createClientForTempKb(tempKb)
 
-      // 如果本地已标记为 BUILDING，直接视为幂等成功（避免重复触发导致 RAGFlow 返回 “Graph Task is already running”）
-      if (tempKb.status === 'BUILDING') {
-        return { success: true, data: { taskId: '' } }
-      }
-
-      // 额外兜底：即使本地状态不是 BUILDING，也先探测一次远端任务状态，避免状态不同步导致重复触发
+      // 先探测一次远端任务状态，避免本地状态（尤其是 BUILDING）与远端不同步导致：
+      // - 本地误以为在构建 → 提前返回，不触发 run_graphrag → 前端一直 loading
+      // - 远端其实在构建 → 重复触发导致返回 “Graph Task is already running”
       try {
         const statusResult = await client.getGraphRAGStatus(tempKb.ragflowKbId)
-        if (statusResult.success && statusResult.data?.status === 'building') {
-          await prisma.userTempKnowledgeBase.update({
-            where: { id: tempKb.id },
-            data: { status: 'BUILDING' },
-          })
-          return { success: true, data: { taskId: '' } }
+        if (statusResult.success) {
+          if (statusResult.data?.status === 'building') {
+            if (tempKb.status !== 'BUILDING') {
+              await prisma.userTempKnowledgeBase.update({
+                where: { id: tempKb.id },
+                data: { status: 'BUILDING' },
+              })
+            }
+            return { success: true, data: { taskId: '' } }
+          }
+
+          if (statusResult.data?.status === 'completed') {
+            if (tempKb.status === 'BUILDING') {
+              await prisma.userTempKnowledgeBase.update({
+                where: { id: tempKb.id },
+                data: { status: 'ACTIVE' },
+              })
+            }
+            return { success: true, data: { taskId: '' } }
+          }
         }
       } catch {
         // ignore probe failure and continue to trigger
@@ -569,6 +580,29 @@ export class TempKbService {
 
       const client = this.createClientForTempKb(tempKb)
       const result = await client.getGraphRAGStatus(tempKb.ragflowKbId)
+
+      // RAGFlow trace_graphrag 有时会返回 `{code:0,data:{}}`（在客户端会被解析为“任务尚未创建”）。
+      // 但此时知识图谱可能已经存在（例如：之前已生成、或任务记录缺失）。为避免前端一直转圈，
+      // 当本地处于 BUILDING 且远端提示“未创建任务”时，尝试用 knowledge_graph 可用性兜底判定完成。
+      if (
+        !result.success
+        && tempKb.status === 'BUILDING'
+        && result.error
+        && result.error.includes('尚未创建')
+      ) {
+        const graphResult = await client.getKnowledgeGraph(tempKb.ragflowKbId)
+        if (graphResult.success) {
+          await prisma.userTempKnowledgeBase.update({
+            where: { id: tempKb.id },
+            data: {
+              status: 'ACTIVE',
+              nodeCount: graphResult.data?.nodeCount ?? 0,
+              edgeCount: graphResult.data?.edgeCount ?? 0,
+            },
+          })
+          return { success: true, data: { status: 'completed', progress: 1 } }
+        }
+      }
 
       // 如果构建完成，更新状态
       if (result.success && result.data?.status === 'completed') {

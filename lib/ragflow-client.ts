@@ -11,6 +11,7 @@
 
 import { RAGFlowDialogClient, RAGFlowDialogMessage } from './ragflow-dialog-client'
 import { RAGFlowAgentClient, RAGFlowAgentMessage } from './ragflow-agent-client'
+import { mergeRagflowStreamingText } from './ragflow-streaming'
 
 export type RAGFlowEndpointType = 'legacy' | 'dialog' | 'agent' | 'auto'
 
@@ -516,14 +517,8 @@ export class RAGFlowClient {
 
             const answer = data.data.answer
             if (typeof answer === 'string' && answer.length > 0) {
-              // 兼容两种模式：
-              // 1) 增量 delta：answer 变短/非累积，需拼接
-              // 2) 累积 full：answer 逐步变长，直接覆盖
-              if (answer.length >= fullContent.length) {
-                fullContent = answer
-              } else {
-                fullContent += answer
-              }
+              // 兼容两种模式：增量 delta / 累积 full，统一做一次去重合并
+              fullContent = mergeRagflowStreamingText(fullContent, answer)
 
               if (data.data.reference) {
                 reference = data.data.reference

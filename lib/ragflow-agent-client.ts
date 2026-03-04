@@ -16,6 +16,8 @@
  * }
  */
 
+import { mergeRagflowStreamingText } from './ragflow-streaming'
+
 export interface RAGFlowAgentConfig {
   baseUrl: string
   apiToken: string  // 使用 API Token
@@ -240,7 +242,7 @@ export class RAGFlowAgentClient {
 
                 // 处理 answer 字段（主要内容）
                 if (data.data.answer) {
-                  fullContent = data.data.answer
+                  fullContent = mergeRagflowStreamingText(fullContent, String(data.data.answer))
                   onMessage({
                     type: 'content',
                     content: fullContent,
@@ -332,4 +334,3 @@ export class RAGFlowAgentClient {
     this.clearSession()
   }
 }
-
