@@ -20,6 +20,20 @@ describe("enforceSameOrigin", () => {
     expect(res).toBeNull()
   })
 
+  it("allows requests where Origin matches Host header (proxy-safe)", async () => {
+    const { enforceSameOrigin } = await import("@/lib/security/origin-check")
+    const res = enforceSameOrigin(
+      new Request("http://internal.local/api/test", {
+        method: "POST",
+        headers: {
+          origin: "http://localhost:3000",
+          host: "localhost:3000",
+        },
+      }),
+    )
+    expect(res).toBeNull()
+  })
+
   it("blocks requests with mismatched Origin", async () => {
     const { enforceSameOrigin } = await import("@/lib/security/origin-check")
     const res = enforceSameOrigin(
@@ -34,4 +48,3 @@ describe("enforceSameOrigin", () => {
     expect(json.error.code).toBe("INVALID_ORIGIN")
   })
 })
-

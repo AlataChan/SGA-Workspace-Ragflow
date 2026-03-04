@@ -10,6 +10,47 @@ function normalizeOrigin(value: string): string | null {
   }
 }
 
+function firstHeaderValue(headers: Headers, name: string): string | null {
+  const value = headers.get(name)
+  if (!value) return null
+  const first = value.split(",")[0]?.trim()
+  return first ? first : null
+}
+
+function getExpectedOriginFromRequest(request: Request): string | null {
+  const headers = request.headers
+
+  const forwardedProto = firstHeaderValue(headers, "x-forwarded-proto")
+  let proto: string | null =
+    forwardedProto === "http" || forwardedProto === "https" ? forwardedProto : null
+
+  const forwardedHost = firstHeaderValue(headers, "x-forwarded-host")
+  let host: string | null = forwardedHost ?? firstHeaderValue(headers, "host")
+
+  let requestUrlOrigin: string | null = null
+  try {
+    const url = new URL(request.url)
+    requestUrlOrigin = url.origin
+    if (!proto) {
+      const derivedProto = url.protocol.replace(":", "")
+      if (derivedProto === "http" || derivedProto === "https") proto = derivedProto
+    }
+    if (!host) host = url.host
+  } catch {
+    requestUrlOrigin = null
+  }
+
+  if (proto && host) {
+    try {
+      return new URL(`${proto}://${host}`).origin
+    } catch {
+      // fall through
+    }
+  }
+
+  return requestUrlOrigin
+}
+
 function getAllowedOrigins(): Set<string> {
   const allowed = new Set<string>()
 
@@ -46,17 +87,12 @@ export function enforceSameOrigin(request: Request): NextResponse | null {
   const origin = normalizeOrigin(originHeader)
   if (!origin) {
     return NextResponse.json(
-      { error: { code: "INVALID_ORIGIN", message: "Invalid Origin header" } },
+      { error: { code: "INVALID_ORIGIN", message: "Origin 请求头无效" } },
       { status: 403 },
     )
   }
 
-  let expectedOrigin: string | null = null
-  try {
-    expectedOrigin = new URL(request.url).origin
-  } catch {
-    expectedOrigin = null
-  }
+  const expectedOrigin = getExpectedOriginFromRequest(request)
 
   if (expectedOrigin && origin === expectedOrigin) return null
 
@@ -64,8 +100,7 @@ export function enforceSameOrigin(request: Request): NextResponse | null {
   if (allowedOrigins.has(origin)) return null
 
   return NextResponse.json(
-    { error: { code: "INVALID_ORIGIN", message: "Origin not allowed" } },
+    { error: { code: "INVALID_ORIGIN", message: "请求来源不被允许" } },
     { status: 403 },
   )
 }
-

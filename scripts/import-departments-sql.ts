@@ -145,7 +145,7 @@ function transformDepartmentsInserts(sqlText: string): string[] {
     const rewritten = line
       .replace(
         insertPrefix,
-        'INSERT INTO departments (id, company_id, name, description, icon, sort_order, created_at, updated_at, is_active, parent_id, parent_sids) VALUES ('
+        'INSERT INTO departments_import (id, company_id, name, description, icon, sort_order, created_at, updated_at, is_active, parent_id, parent_sids) VALUES ('
       )
       .replace(
         /\);\s*$/,
@@ -160,6 +160,60 @@ function transformDepartmentsInserts(sqlText: string): string[] {
   }
 
   return inserts
+}
+
+async function ensureDepartmentsImportTable(client: Client) {
+  await client.query(`
+CREATE TEMP TABLE IF NOT EXISTS departments_import (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  icon TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ,
+  is_active BOOLEAN,
+  parent_id TEXT,
+  parent_sids TEXT
+) ON COMMIT DROP;
+`)
+}
+
+async function applyDepartmentsImport(client: Client) {
+  // Insert all departments without parent_id first to avoid FK ordering issues.
+  await client.query(`
+INSERT INTO departments (
+  id, company_id, name, description, icon, sort_order, created_at, updated_at, is_active, parent_sids
+)
+SELECT
+  id, company_id, name, description, icon, sort_order, created_at, updated_at, COALESCE(is_active, true), parent_sids
+FROM departments_import
+ON CONFLICT (id) DO UPDATE SET
+  company_id=EXCLUDED.company_id,
+  name=EXCLUDED.name,
+  description=EXCLUDED.description,
+  icon=EXCLUDED.icon,
+  sort_order=EXCLUDED.sort_order,
+  created_at=EXCLUDED.created_at,
+  updated_at=EXCLUDED.updated_at,
+  is_active=EXCLUDED.is_active,
+  parent_sids=EXCLUDED.parent_sids;
+`)
+
+  // Second pass: set parent_id only after all ids exist.
+  await client.query(`
+UPDATE departments d
+SET parent_id = i.parent_id
+FROM departments_import i
+WHERE d.id = i.id
+  AND i.parent_id IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM departments p
+    WHERE p.id = i.parent_id
+      AND p.company_id = d.company_id
+  );
+`)
 }
 
 async function ensureSchemaCompat(client: Client) {
@@ -280,11 +334,14 @@ async function main() {
       admin = await ensureAdminUser(client, companyId, args)
     }
 
+    await ensureDepartmentsImportTable(client)
+    await client.query(inserts.join('\n'))
+
     if (args.replaceCompanyDepartments) {
       await client.query(`DELETE FROM departments WHERE company_id = $1`, [companyId])
     }
 
-    await client.query(inserts.join('\n'))
+    await applyDepartmentsImport(client)
 
     const count = await client.query(
       `SELECT COUNT(*)::int AS count FROM departments WHERE company_id = $1`,
