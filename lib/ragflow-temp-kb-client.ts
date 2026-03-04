@@ -414,6 +414,19 @@ export class RAGFlowTempKbClient {
 
       if (this.isSuccess(result) && result.data) {
         const data = result.data
+        // RAGFlow 有时会返回 `{code:0,data:{}}` 表示尚未创建 GraphRAG 任务
+        // 这种情况如果误判为 building，会导致服务端 buildGraph 提前返回（不触发 run_graphrag），前端一直 loading。
+        if (
+          data
+          && typeof data === 'object'
+          && !Array.isArray(data)
+          && Object.keys(data).length === 0
+        ) {
+          return {
+            success: false,
+            error: 'GraphRAG 构建任务尚未创建',
+          }
+        }
         let status: 'building' | 'completed' | 'failed' | 'unknown' = 'unknown'
 
         const progressRaw = data.progress ?? 0
