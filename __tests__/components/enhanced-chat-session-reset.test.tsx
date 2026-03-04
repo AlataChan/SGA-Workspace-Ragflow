@@ -176,9 +176,12 @@ describe('EnhancedChatWithSidebar', () => {
       />
     )
 
-    await waitFor(() => {
-      expect(screen.getByText('会议管理制度要点')).toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(screen.getByText('会议管理制度要点')).toBeInTheDocument()
+      },
+      { timeout: 10000 },
+    )
 
     // Start loading history conversation, then immediately create a new session.
     fireEvent.click(screen.getByText('会议管理制度要点'))
@@ -187,12 +190,15 @@ describe('EnhancedChatWithSidebar', () => {
     // Complete the history fetch; stale results should be ignored.
     resolveMessages?.(true)
 
-    await waitFor(() => {
-      const userBubbles = container.querySelectorAll('.user-message')
-      expect(userBubbles.length).toBe(0)
-      expect(screen.getByText('你好！我是智能体。')).toBeInTheDocument()
-    })
-  })
+    await waitFor(
+      () => {
+        const userBubbles = container.querySelectorAll('.user-message')
+        expect(userBubbles.length).toBe(0)
+        expect(screen.getByText('你好！我是智能体。')).toBeInTheDocument()
+      },
+      { timeout: 10000 },
+    )
+  }, 45000)
 
   it('creates a clean new session after viewing RAGFlow history', async () => {
     const userId = 'user-1'

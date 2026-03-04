@@ -3060,7 +3060,11 @@ export default function EnhancedChatWithSidebar({
                                   content: message.content,
                                   safeContent: rawContent
                                 })}
-                                <TypewriterEffect content={streamingAnswer} speed={20} />
+                                {agentConfig?.platform === 'RAGFLOW' ? (
+                                  <SimpleContentRenderer content={streamingAnswer} />
+                                ) : (
+                                  <TypewriterEffect content={streamingAnswer} speed={20} />
+                                )}
                               </>
                             )
                           ) : (
