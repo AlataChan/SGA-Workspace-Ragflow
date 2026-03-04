@@ -93,9 +93,16 @@ export default function KnowledgeGraphActions(props: {
   };
 
   const triggerBuildGraph = async () => {
-    const response = await fetch("/api/temp-kb/graph", {
-      method: "POST",
-    });
+    const response = await fetch(
+      "/api/temp-kb/graph",
+      agentId
+        ? {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ agentId }),
+          }
+        : { method: "POST" },
+    );
 
     if (response.status === 401) {
       throw new Error("未登录");
@@ -217,7 +224,12 @@ export default function KnowledgeGraphActions(props: {
             {dialogMode === "preview" ? (
               <KnowledgeGraphView height={560} />
             ) : (
-              <TempKbPanel className="border-0 shadow-none h-full" compact defaultTab="graph" />
+              <TempKbPanel
+                className="border-0 shadow-none h-full"
+                compact
+                defaultTab="graph"
+                agentId={agentId}
+              />
             )}
           </div>
         </DialogContent>

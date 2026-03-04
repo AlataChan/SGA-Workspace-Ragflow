@@ -45,6 +45,8 @@ interface TempKbPanelProps {
   compact?: boolean
   /** 默认展示的标签页 */
   defaultTab?: 'chunks' | 'graph'
+  /** 可选：用于使用当前聊天 Agent 的 RAGFlow 配置 */
+  agentId?: string
   onGraphReady?: () => void
   onKbChange?: (info: { chunkCount: number; nodeCount: number; edgeCount: number }) => void
 }
@@ -57,6 +59,7 @@ export default function TempKbPanel({
   className,
   compact = false,
   defaultTab = 'chunks',
+  agentId,
   onGraphReady,
   onKbChange
 }: TempKbPanelProps) {
@@ -108,9 +111,16 @@ export default function TempKbPanel({
     setError(null)
 
     try {
-      const response = await fetch('/api/temp-kb/graph', {
-        method: 'POST',
-      })
+      const response = await fetch(
+        '/api/temp-kb/graph',
+        agentId
+          ? {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ agentId }),
+            }
+          : { method: 'POST' },
+      )
 
       if (response.status === 401) throw new Error('未登录')
 

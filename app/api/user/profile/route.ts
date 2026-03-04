@@ -141,23 +141,25 @@ export const PUT = withAuth(async (request) => {
 
     const updateData = validationResult.data
 
-    const wantsPasswordChange =
-      updateData.currentPassword !== undefined || updateData.newPassword !== undefined
+    const currentPassword = updateData.currentPassword === '' ? undefined : updateData.currentPassword
+    const newPassword = updateData.newPassword === '' ? undefined : updateData.newPassword
+
+    const wantsPasswordChange = currentPassword !== undefined || newPassword !== undefined
 
     if (wantsPasswordChange) {
-      if (!updateData.currentPassword || !updateData.newPassword) {
+      if (!newPassword) {
         return NextResponse.json(
           {
             error: {
               code: 'VALIDATION_ERROR',
-              message: '修改密码需要同时提供 currentPassword 与 newPassword',
+              message: '修改密码需要提供 newPassword',
             }
           },
           { status: 400, headers: corsHeaders }
         )
       }
 
-      const passwordStrength = validatePasswordStrength(updateData.newPassword)
+      const passwordStrength = validatePasswordStrength(newPassword)
       if (!passwordStrength.isValid) {
         return NextResponse.json(
           {
@@ -201,23 +203,36 @@ export const PUT = withAuth(async (request) => {
         )
       }
 
-      const isCurrentPasswordValid = await verifyPassword(
-        updateData.currentPassword!,
-        currentUser.passwordHash,
-      )
-      if (!isCurrentPasswordValid) {
-        return NextResponse.json(
-          {
-            error: {
-              code: 'INVALID_PASSWORD',
-              message: '当前密码不正确'
-            }
-          },
-          { status: 400, headers: corsHeaders }
-        )
+      const hasPassword = Boolean(currentUser.passwordHash)
+
+      if (hasPassword) {
+        if (!currentPassword) {
+          return NextResponse.json(
+            {
+              error: {
+                code: 'VALIDATION_ERROR',
+                message: '修改密码需要提供 currentPassword',
+              }
+            },
+            { status: 400, headers: corsHeaders }
+          )
+        }
+
+        const isCurrentPasswordValid = await verifyPassword(currentPassword, currentUser.passwordHash)
+        if (!isCurrentPasswordValid) {
+          return NextResponse.json(
+            {
+              error: {
+                code: 'INVALID_PASSWORD',
+                message: '当前密码不正确'
+              }
+            },
+            { status: 400, headers: corsHeaders }
+          )
+        }
       }
 
-      updateFields.passwordHash = await hashPassword(updateData.newPassword!)
+      updateFields.passwordHash = await hashPassword(newPassword!)
     }
 
     // 更新用户信息

@@ -47,11 +47,6 @@ export default function ChangePasswordDialog({ open, onOpenChange }: ChangePassw
       setMessage(null)
 
       // 验证必填字段
-      if (!formData.currentPassword.trim()) {
-        setMessage({ type: 'error', text: '请输入当前密码' })
-        return
-      }
-
       if (!formData.newPassword.trim()) {
         setMessage({ type: 'error', text: '请输入新密码' })
         return
@@ -74,9 +69,12 @@ export default function ChangePasswordDialog({ open, onOpenChange }: ChangePassw
         return
       }
 
-      const updateData = {
-        currentPassword: formData.currentPassword,
+      const updateData: any = {
         newPassword: formData.newPassword
+      }
+
+      if (formData.currentPassword.trim()) {
+        updateData.currentPassword = formData.currentPassword
       }
 
       const response = await fetch('/api/user/profile', {

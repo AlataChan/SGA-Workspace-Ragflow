@@ -42,7 +42,44 @@ async function fixRAGFlowConnections() {
     }
     
     console.log('🎉 RAGFlow知识图谱连接修复完成！')
-    console.log('💡 提示：如需修复智能体配置，请在管理界面手动将localhost改为host.docker.internal')
+
+    // 修复智能体（RAGFLOW 平台）的 baseUrl 配置
+    const agents = await prisma.agent.findMany({
+      where: { platform: 'RAGFLOW' },
+      select: { id: true, chineseName: true, englishName: true, platformConfig: true, lastError: true },
+    })
+
+    let fixedAgents = 0
+    for (const agent of agents) {
+      const cfg = agent.platformConfig
+      if (!cfg || typeof cfg !== 'object') continue
+
+      const baseUrl = cfg.baseUrl
+      if (typeof baseUrl !== 'string' || (!baseUrl.includes('localhost') && !baseUrl.includes('127.0.0.1'))) {
+        continue
+      }
+
+      const newBaseUrl = baseUrl
+        .replace('127.0.0.1', 'host.docker.internal')
+        .replace('localhost', 'host.docker.internal')
+
+      const newConfig = { ...cfg, baseUrl: newBaseUrl }
+
+      await prisma.agent.update({
+        where: { id: agent.id },
+        data: {
+          platformConfig: newConfig,
+          lastError: null,
+        },
+      })
+
+      fixedAgents++
+      console.log(`✅ 修复智能体: ${agent.chineseName || agent.englishName || agent.id}`)
+      console.log(`   旧URL: ${baseUrl}`)
+      console.log(`   新URL: ${newBaseUrl}`)
+    }
+
+    console.log(`🎉 RAGFlow智能体连接修复完成！共修复 ${fixedAgents} 个智能体`)
     
   } catch (error) {
     console.error('❌ 修复失败:', error)

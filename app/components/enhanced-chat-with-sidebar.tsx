@@ -39,6 +39,7 @@ import {
   normalizeRagflowContent,
   stripRagflowInlineReferenceMarkers
 } from '@/lib/ragflow-utils'
+import { formatChatTimestamp } from "@/lib/utils/format-chat-timestamp"
 import TempKbDialog from '@/components/temp-kb/temp-kb-dialog'
 import KnowledgeGraphActions from '@/components/chat/knowledge-graph-actions'
 import { useRouter } from "next/navigation"
@@ -3159,14 +3160,7 @@ export default function EnhancedChatWithSidebar({
 
                         {/* 时间戳 */}
                         <div className={`text-xs text-muted-foreground/70 mt-2 ${isUser ? 'text-right' : 'text-left'}`}>
-                          {message.timestamp && !isNaN(message.timestamp)
-                            ? new Date(message.timestamp).toLocaleTimeString('zh-CN', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: false
-                            })
-                            : '刚刚'
-                          }
+                          {formatChatTimestamp(message.timestamp)}
                         </div>
                         {/* RAGFlow 引用卡片 */}
                         {message.reference && agentConfig?.platform === 'RAGFLOW' && (

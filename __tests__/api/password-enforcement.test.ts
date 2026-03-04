@@ -179,4 +179,34 @@ describe("Password enforcement (API routes)", () => {
       }),
     )
   })
+
+  it("PUT /api/user/profile allows setting password when user has no passwordHash", async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ passwordHash: "" })
+    prismaMock.user.update.mockResolvedValue({ id: "u1" })
+
+    const { PUT } = await import("@/app/api/user/profile/route")
+    const res = await PUT(
+      makeReq({ newPassword: "Abcd1234!" }, { userId: "u1", companyId: "c1", role: UserRole.USER }),
+    )
+
+    expect(res.status).toBe(200)
+    expect(bcryptMock.compare).not.toHaveBeenCalled()
+    expect(prismaMock.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "u1" },
+        data: expect.objectContaining({
+          passwordHash: "bcrypt-hash",
+        }),
+      }),
+    )
+    expect(writeAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        companyId: "c1",
+        actorUserId: "u1",
+        targetUserId: "u1",
+        eventType: "AUTH_PASSWORD_CHANGED_SELF",
+        result: "SUCCESS",
+      }),
+    )
+  })
 })
