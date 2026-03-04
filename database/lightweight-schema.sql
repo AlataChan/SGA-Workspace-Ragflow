@@ -4,7 +4,6 @@
 
 -- 启用必要的扩展
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 CREATE EXTENSION IF NOT EXISTS "btree_gin";
 
@@ -42,7 +41,7 @@ CREATE TABLE departments (
     id TEXT PRIMARY KEY,
     company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
-    parent_id TEXT,
+    parent_id TEXT REFERENCES departments(id) ON DELETE SET NULL,
     description TEXT,
     icon VARCHAR(100),
     sort_order INTEGER NOT NULL DEFAULT 0,
@@ -273,7 +272,7 @@ CREATE TABLE uploaded_files (
 
 -- 公司相关索引
 CREATE INDEX idx_departments_company_id ON departments(company_id);
-CREATE INDEX idx_department_company_parent ON departments(company_id, parent_id);
+CREATE INDEX idx_departments_company_parent ON departments(company_id, parent_id);
 
 -- 用户相关索引
 CREATE INDEX idx_users_company_id ON users(company_id);
@@ -345,9 +344,6 @@ BEGIN
     RETURN 'c' || encode(gen_random_bytes(12), 'hex');
 END;
 $$ LANGUAGE plpgsql;
-
-
-
 
 
 -- ===========================================

@@ -166,7 +166,7 @@ function getS3Client(): S3Client | null {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
     },
-    forcePathStyle: false,
+    forcePathStyle: config.forcePathStyle,
   });
 
   return cachedClient;
@@ -312,7 +312,6 @@ export async function resolveImageDisplayUrl(
     return v;
   }
 }
-
 /**
  * 上传文件
  */

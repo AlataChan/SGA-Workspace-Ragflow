@@ -1,0 +1,2540 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SGA Workspace 使用培训</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   CLEAN PROFESSIONAL DESIGN SYSTEM
+   Pure white base · Black typography · Terracotta + Navy accent
+   ============================================================ */
+
+:root {
+  --cream:       #FFFFFF;
+  --cream-dark:  #F5F5F5;
+  --sand:        #EBEBEB;
+  --sand-mid:    #D0D0D0;
+  --brown-light: #767676;
+  --brown:       #404040;
+  --brown-deep:  #111111;
+  --orange:      #D4522A;
+  --orange-light:#E06B42;
+  --orange-pale: #FBF0EC;
+  --green:       #2E7D5A;
+  --blue:        #3B5B8C;
+  --red:         #B03A2E;
+
+  --font-display: 'Noto Serif SC', serif;
+  --font-body:    'Noto Sans SC', sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
+
+  --slide-w: 1280px;
+  --slide-h: 720px;
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: #D8D8D8;
+  font-family: var(--font-body);
+  color: var(--brown-deep);
+  overflow: hidden;
+  height: 100%;
+}
+
+/* ============================================================
+   PRESENTATION SHELL
+   ============================================================ */
+
+#presentation {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* ── Slide viewport scaling ── */
+#slide-viewport {
+  width: var(--slide-w);
+  height: var(--slide-h);
+  position: relative;
+  transform-origin: center center;
+}
+
+/* ── Individual slides ── */
+.slide {
+  position: absolute;
+  inset: 0;
+  width: var(--slide-w);
+  height: var(--slide-h);
+  background: var(--cream);
+  overflow: hidden;
+  display: none;
+  flex-direction: column;
+}
+.slide.active { display: flex; }
+
+/* ── Slide shadow ── */
+#slide-viewport {
+  box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+}
+
+/* ============================================================
+   NAVIGATION
+   ============================================================ */
+
+#nav {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(30, 30, 30, 0.88);
+  backdrop-filter: blur(12px);
+  border-radius: 40px;
+  padding: 10px 20px;
+  z-index: 9999;
+  color: #FAF8F5;
+  font-family: var(--font-body);
+  font-size:15.6px;
+}
+
+.nav-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: transparent;
+  color: #FAF8F5;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  font-size:16.8px;
+}
+.nav-btn:hover { background: rgba(212,82,42,0.6); }
+
+#slide-counter {
+  min-width: 80px;
+  text-align: center;
+  opacity: 0.7;
+  letter-spacing: 0.05em;
+}
+
+#progress-bar {
+  position: fixed;
+  top: 0; left: 0;
+  height: 3px;
+  background: var(--orange);
+  transition: width 0.3s ease;
+  z-index: 9999;
+}
+
+/* ============================================================
+   SHARED SLIDE COMPONENTS
+   ============================================================ */
+
+/* ── Orange left border accent ── */
+.accent-bar {
+  width: 6px;
+  flex-shrink: 0;
+  background: var(--orange);
+}
+
+/* ── Section pill tag ── */
+.section-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--orange-pale);
+  color: var(--orange);
+  border: 1px solid rgba(212,82,42,0.25);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size:14.4px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ── Slide ID badge ── */
+.slide-id {
+  font-family: var(--font-mono);
+  font-size:13.2px;
+  color: var(--brown-light);
+  background: var(--sand);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+
+/* ── Header bar ── */
+.slide-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 48px 0;
+  flex-shrink: 0;
+}
+
+.slide-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── Main title styles ── */
+.slide-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--brown-deep);
+  line-height: 1.2;
+}
+
+.slide-subtitle {
+  font-family: var(--font-body);
+  font-weight: 300;
+  color: var(--brown-light);
+  line-height: 1.5;
+}
+
+/* ── Content body ── */
+.slide-body {
+  flex: 1;
+  padding: 20px 48px 24px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Bullet list ── */
+.bullet-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bullet-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size:18px;
+  color: var(--brown-deep);
+  line-height: 1.55;
+}
+
+.bullet-list li::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--orange);
+  flex-shrink: 0;
+  margin-top: 8px;
+}
+
+.bullet-list li strong {
+  color: var(--brown);
+  font-weight: 600;
+}
+
+/* ── Step list ── */
+.step-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.step-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size:16.8px;
+  color: var(--brown-deep);
+  line-height: 1.55;
+}
+
+.step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--brown-deep);
+  color: var(--cream);
+  font-size:13.2px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  margin-top: 1px;
+}
+
+/* ── Callout block ── */
+.callout {
+  background: var(--orange-pale);
+  border-left: 4px solid var(--orange);
+  border-radius: 0 8px 8px 0;
+  padding: 12px 16px;
+  font-size:16.8px;
+  color: var(--brown);
+  line-height: 1.6;
+  font-style: italic;
+}
+
+.callout.warning {
+  background: #FEF3F0;
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.callout.tip {
+  background: #EFF6F1;
+  border-color: var(--green);
+  color: var(--green);
+}
+
+/* ── Table ── */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size:16.2px;
+}
+
+.data-table th {
+  background: var(--brown-deep);
+  color: var(--cream);
+  font-weight: 500;
+  padding: 9px 14px;
+  text-align: left;
+  font-family: var(--font-body);
+}
+
+.data-table th:first-child { border-radius: 6px 0 0 0; }
+.data-table th:last-child  { border-radius: 0 6px 0 0; }
+
+.data-table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--sand);
+  color: var(--brown-deep);
+  line-height: 1.5;
+}
+
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:nth-child(even) td { background: var(--cream-dark); }
+
+/* ── Code inline ── */
+code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--sand);
+  color: var(--orange);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+/* ── Two-column layout ── */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  flex: 1;
+}
+
+.three-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 20px;
+}
+
+/* ── Card ── */
+.card {
+  background: white;
+  border: 1px solid var(--sand);
+  border-radius: 10px;
+  padding: 18px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.card-title {
+  font-size:15.6px;
+  font-weight: 600;
+  color: var(--brown);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-title::before {
+  content: '';
+  width: 3px;
+  height: 14px;
+  background: var(--orange);
+  border-radius: 2px;
+}
+
+/* ── Divider ── */
+.divider {
+  width: 100%;
+  height: 1px;
+  background: var(--sand);
+  margin: 12px 0;
+}
+
+/* ── Checkbox item ── */
+.check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size:16.8px;
+  color: var(--brown-deep);
+  line-height: 1.5;
+  border: 1px solid var(--sand);
+  background: white;
+  margin-bottom: 6px;
+}
+
+.check-box {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--sand-mid);
+  border-radius: 4px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ── Badge ── */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size:13.2px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.badge.admin { background: #FFF0E8; color: var(--orange); border: 1px solid rgba(212,82,42,0.3); }
+.badge.user  { background: #EBF3F0; color: var(--green);  border: 1px solid rgba(74,124,89,0.3); }
+.badge.warn  { background: #FFF0F0; color: var(--red);    border: 1px solid rgba(160,57,43,0.3); }
+
+/* ── Footer bar ── */
+.slide-footer {
+  height: 36px;
+  background: var(--cream-dark);
+  border-top: 1px solid var(--sand);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 48px;
+  flex-shrink: 0;
+}
+
+.footer-logo {
+  font-family: var(--font-display);
+  font-size:14.4px;
+  font-weight: 500;
+  color: var(--brown-light);
+  letter-spacing: 0.08em;
+}
+
+.footer-chapter {
+  font-size:13.2px;
+  color: var(--brown-light);
+  font-family: var(--font-mono);
+}
+
+/* ============================================================
+   SLIDE TYPE: COVER
+   ============================================================ */
+
+.slide-cover {
+  background: #FAF8F5;
+  position: relative;
+  overflow: hidden;
+}
+
+.slide-cover::before {
+  content: '';
+  position: absolute;
+  top: -100px; right: -100px;
+  width: 500px; height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(212,82,42,0.1) 0%, transparent 70%);
+}
+
+.slide-cover::after {
+  content: '';
+  position: absolute;
+  bottom: -80px; left: -80px;
+  width: 350px; height: 350px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(59,91,140,0.08) 0%, transparent 70%);
+  z-index: 0;
+}
+
+.cover-inner {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 80px;
+}
+
+.cover-eyebrow {
+  font-family: var(--font-mono);
+  font-size:14.4px;
+  letter-spacing: 0.15em;
+  color: var(--orange);
+  text-transform: uppercase;
+  margin-bottom: 24px;
+}
+
+.cover-title {
+  font-family: var(--font-display);
+  font-size:69.6px;
+  font-weight: 700;
+  color: var(--brown-deep);
+  line-height: 1.15;
+  margin-bottom: 16px;
+}
+
+.cover-subtitle {
+  font-family: var(--font-body);
+  font-size:24px;
+  font-weight: 300;
+  color: var(--brown-light);
+  line-height: 1.5;
+  border-left: 3px solid var(--orange);
+  padding-left: 16px;
+}
+
+.cover-meta {
+  margin-top: 48px;
+  display: flex;
+  gap: 32px;
+}
+
+.meta-item {
+  font-size:14.4px;
+  color: var(--sand-mid);
+  font-family: var(--font-mono);
+  letter-spacing: 0.05em;
+}
+
+.meta-item span {
+  display: block;
+  color: var(--brown);
+  font-size:15.6px;
+  margin-top: 2px;
+}
+
+/* ── Decorative grid lines on cover ── */
+.cover-grid {
+  position: absolute;
+  right: 0; top: 0;
+  width: 480px; height: 100%;
+  opacity: 0.5;
+  background-image:
+    linear-gradient(rgba(0,0,0,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.06) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ============================================================
+   SLIDE TYPE: CHAPTER DIVIDER
+   ============================================================ */
+
+.slide-chapter {
+  background: var(--cream-dark);
+  position: relative;
+}
+
+.chapter-number {
+  position: absolute;
+  right: 60px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-display);
+  font-size: 200px;
+  font-weight: 700;
+  color: var(--sand);
+  line-height: 1;
+  user-select: none;
+}
+
+.chapter-inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 80px;
+  position: relative;
+  z-index: 1;
+}
+
+.chapter-eyebrow {
+  font-family: var(--font-mono);
+  font-size:13.2px;
+  letter-spacing: 0.15em;
+  color: var(--orange);
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.chapter-title {
+  font-family: var(--font-display);
+  font-size:57.6px;
+  font-weight: 600;
+  color: var(--brown-deep);
+  line-height: 1.2;
+  margin-bottom: 16px;
+}
+
+.chapter-desc {
+  font-size:19.2px;
+  color: var(--brown-light);
+  line-height: 1.6;
+  max-width: 560px;
+}
+
+/* ============================================================
+   PRINT STYLES
+   ============================================================ */
+@page {
+  size: A4 landscape;
+  margin: 0;
+}
+
+@media print {
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+  html, body {
+    background: white;
+    overflow: visible;
+    width: 297mm;
+    height: auto;
+    margin: 0;
+    padding: 0;
+  }
+
+  #presentation {
+    display: block;
+    width: 297mm;
+    height: auto;
+    background: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  #nav, #progress-bar { display: none !important; }
+
+  #slide-viewport {
+    transform: none !important;
+    width: 297mm;
+    height: auto;
+    position: static;
+    margin: 0;
+    padding: 0;
+  }
+
+  .slide {
+    display: flex !important;
+    position: relative !important;
+    width: 297mm;
+    height: 210mm;
+    page-break-after: always;
+    break-after: page;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    box-shadow: none !important;
+  }
+
+  .slide:last-child { page-break-after: avoid; break-after: avoid; }
+  .slide::after { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div id="progress-bar"></div>
+
+<div id="presentation">
+  <div id="slide-viewport">
+
+    <!-- ============================================================
+         SLIDE 1: COVER
+         ============================================================ -->
+    <section class="slide slide-cover active" data-index="1">
+      <div class="cover-grid"></div>
+      <div class="cover-inner">
+        <div class="cover-eyebrow"> 使用培训</div>
+        <h1 class="cover-title">智能体工作空间<br>操作指南</h1>
+        <p class="cover-subtitle">从权限分配到企业知识库接入的完整实操流程</p>
+        <div class="cover-meta">
+          <div class="meta-item">适用对象<span>管理员 · 普通用户</span></div>
+          <div class="meta-item">版本<span>2026-03-02</span></div>
+          <div class="meta-item">课时<span>管理员 ~3h · 用户 ~1h</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 2: 课程目录
+         ============================================================ -->
+    <section class="slide" data-index="2">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag">课程概览</span>
+        </div>
+        <span class="slide-id">COMMON-00</span>
+      </div>
+      <div class="slide-body">
+        <h2 class="slide-title" style="font-size:38.4px;margin-bottom:24px;">内容大纲</h2>
+        <div class="three-col" style="gap:24px;">
+          <div class="card">
+            <div class="card-title">共用开场</div>
+            <ul class="bullet-list" style="font-size:15.6px;gap:7px;">
+              <li>系统是什么</li>
+              <li>两类角色分工</li>
+              <li>名词解释</li>
+              <li>上线全流程</li>
+            </ul>
+            <div style="margin-top:12px;font-size:14.4px;color:var(--brown-light);">约 20 分钟</div>
+          </div>
+          <div class="card" style="border-top:3px solid var(--orange);">
+            <div class="card-title">课件 A：管理员</div>
+            <ul class="bullet-list" style="font-size:15.6px;gap:7px;">
+              <li>初始化与登录</li>
+              <li>公司·部门·用户管理</li>
+              <li>AI 助手配置</li>
+              <li>授权管理</li>
+              <li>知识图谱配置</li>
+              <li>上线验收清单</li>
+            </ul>
+            <div style="margin-top:12px;font-size:14.4px;color:var(--brown-light);">约 2.5–3 小时</div>
+          </div>
+          <div class="card" style="border-top:3px solid var(--green);">
+            <div class="card-title">课件 B：普通用户</div>
+            <ul class="bullet-list" style="font-size:15.6px;gap:7px;">
+              <li>首次登录</li>
+              <li>认识工作台</li>
+              <li>使用 AI 助手对话</li>
+              <li>知识图谱使用</li>
+              <li>常用操作速查</li>
+            </ul>
+            <div style="margin-top:12px;font-size:14.4px;color:var(--brown-light);">约 30–60 分钟</div>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:20px;">
+          📌 管理员需要参加<strong>全部课程</strong>；普通用户只需参加<strong>共用开场 + 课件 B</strong>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">课程概览</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 3: 系统是什么
+         ============================================================ -->
+    <section class="slide" data-index="3">
+      <div class="accent-bar"></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="slide-header">
+          <div class="slide-header-left">
+            <span class="section-tag">共用开场</span>
+          </div>
+          <span class="slide-id">COMMON-02</span>
+        </div>
+        <div class="slide-body">
+          <h2 class="slide-title" style="font-size:40.8px;margin-bottom:8px;">这个系统是干什么的</h2>
+          <p style="font-size:26.4px;color:var(--orange);font-family:var(--font-display);font-weight:500;margin-bottom:20px;">企业统一的 AI 助手平台</p>
+          <div class="two-col" style="gap:32px;">
+            <div>
+              <ul class="bullet-list">
+                <li>公司部署多个 AI 助手（Agent），按<strong>部门分组</strong>管理</li>
+                <li>员工登录后，只看到自己<strong>有权限的助手</strong></li>
+                <li>管理员负责<strong>配置</strong>，普通用户负责<strong>使用</strong></li>
+                <li>对话、知识库、权限，<strong>全部集中在一个系统</strong>里管理</li>
+              </ul>
+              <div class="callout" style="margin-top:20px;">
+                就像公司的「AI 助手门户」。管理员是后台配置人员，负责把 AI 助手上架、分配权限；普通用户打开工作台就能找到自己的助手开始对话。
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px;">
+              <div class="card" style="flex:1;">
+                <div class="card-title">管理员视角</div>
+                <p style="font-size:15.6px;color:var(--brown-light);line-height:1.6;">后台配置各种资源，决定谁能用什么</p>
+                <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+                  <span class="badge admin">创建部门</span>
+                  <span class="badge admin">添加用户</span>
+                  <span class="badge admin">配置助手</span>
+                  <span class="badge admin">分配权限</span>
+                </div>
+              </div>
+              <div class="card" style="flex:1;">
+                <div class="card-title">用户视角</div>
+                <p style="font-size:15.6px;color:var(--brown-light);line-height:1.6;">登录工作台，直接使用被授权的 AI 助手</p>
+                <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+                  <span class="badge user">选择助手</span>
+                  <span class="badge user">发起对话</span>
+                  <span class="badge user">查阅知识库</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">共用开场</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 4: 两类角色分工
+         ============================================================ -->
+    <section class="slide" data-index="4">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag">共用开场</span>
+        </div>
+        <span class="slide-id">COMMON-03</span>
+      </div>
+      <div class="slide-body">
+        <h2 class="slide-title" style="font-size:38.4px;margin-bottom:20px;">两类角色分工</h2>
+        <div class="two-col" style="gap:28px;margin-bottom:16px;">
+          <div class="card" style="border-top:4px solid var(--orange);padding:24px;">
+            <h3 style="font-family:var(--font-display);font-size:26.4px;color:var(--orange);margin-bottom:6px;">管理员 ADMIN</h3>
+            <p style="font-size:15.6px;color:var(--brown-light);margin-bottom:14px;">IT 负责人、系统管理员</p>
+            <ul class="bullet-list" style="font-size:16.8px;">
+              <li>创建部门、管理组织架构</li>
+              <li>添加用户账号，设置角色</li>
+              <li>配置 AI 助手（Agent）</li>
+              <li>给用户分配使用权限</li>
+              <li>管理知识图谱</li>
+            </ul>
+            <div class="callout" style="margin-top:14px;font-size:15.6px;">
+              入口：<code>/admin/*</code> 管理后台
+            </div>
+          </div>
+          <div class="card" style="border-top:4px solid var(--green);padding:24px;">
+            <h3 style="font-family:var(--font-display);font-size:26.4px;color:var(--green);margin-bottom:6px;">普通用户 USER</h3>
+            <p style="font-size:15.6px;color:var(--brown-light);margin-bottom:14px;">全体员工</p>
+            <ul class="bullet-list" style="font-size:16.8px;">
+              <li>登录系统，进入工作台</li>
+              <li>选择 AI 助手开始对话</li>
+              <li>使用授权的知识图谱</li>
+              <li>查看历史对话记录</li>
+            </ul>
+            <div class="callout tip" style="margin-top:14px;font-size:15.6px;">
+              入口：<code>/workspace</code> 工作台
+            </div>
+          </div>
+        </div>
+        <div class="callout warning" style="font-size:15.6px;">
+          ⚠️ 关键规则：普通用户看不到管理后台。用户能用哪个助手，完全由管理员授权决定。
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">共用开场</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 5: 名词解释
+         ============================================================ -->
+    <section class="slide" data-index="5">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag">共用开场</span>
+        </div>
+        <span class="slide-id">COMMON-04</span>
+      </div>
+      <div class="slide-body">
+        <h2 class="slide-title" style="font-size:38.4px;margin-bottom:16px;">名词解释 <span style="font-size:19.2px;font-weight:300;color:var(--brown-light);"></span></h2>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:160px;">系统名词</th>
+              <th style="width:120px;">通俗说法</th>
+              <th>简单解释</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Agent / AI 助手</strong></td><td>AI 机器人</td><td>一个可以对话的 AI 角色，背后连接 Dify / RAGFlow 等 AI 平台</td></tr>
+            <tr><td><strong>部门</strong></td><td>AI 助手的分组</td><td>用于给 Agent 分组展示（如「销售部助手」「技术部助手」）</td></tr>
+            <tr><td><strong>知识图谱</strong></td><td>公司知识库</td><td>企业知识库，AI 助手可以从中查找信息来回答问题</td></tr>
+            <tr><td><strong>授权</strong></td><td>开通使用权限</td><td>管理员设置「某用户可以用某个 Agent 或知识图谱」</td></tr>
+            <tr><td><strong>工作台</strong></td><td>用户的主页</td><td><code>/workspace</code> 普通用户日常使用的主页面</td></tr>
+            <tr><td><strong>管理后台</strong></td><td>管理员配置页</td><td><code>/admin/*</code> 管理员专属的配置页面，普通用户看不到</td></tr>
+            <tr><td><strong>连接测试</strong></td><td>检查能不能用</td><td>验证 Agent 背后的 AI 平台是否正常连通</td></tr>
+            <tr><td><strong>停用</strong></td><td>临时关闭</td><td>数据不删，随时可以重新启用</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">共用开场</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 6: 完整上线流程
+         ============================================================ -->
+    <section class="slide" data-index="6">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag">共用开场</span>
+        </div>
+        <span class="slide-id">COMMON-05</span>
+      </div>
+      <div class="slide-body">
+        <h2 class="slide-title" style="font-size:38.4px;margin-bottom:20px;">完整上线流程 <span style="font-size:18px;font-weight:300;color:var(--brown-light);">每一步都有前后依赖，顺序不能乱</span></h2>
+        <div style="display:flex;align-items:stretch;gap:0;flex:1;">
+          <div style="display:flex;flex-direction:column;justify-content:space-between;flex:1;gap:8px;">
+            <!-- Steps -->
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;flex:1;">
+              <div class="card" style="text-align:center;padding:16px 12px;position:relative;">
+                <div style="width:28px;height:28px;background:var(--sand-mid);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15.6px;margin:0 auto 10px;font-family:var(--font-mono);">1</div>
+                <div style="font-size:15.6px;font-weight:600;color:var(--brown);margin-bottom:4px;">运维部署完成</div>
+                <div style="font-size:13.2px;color:var(--brown-light);">Docker 服务健康</div>
+              </div>
+              <div class="card" style="text-align:center;padding:16px 12px;border-top:3px solid var(--orange);">
+                <div style="width:28px;height:28px;background:var(--orange);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15.6px;color:white;margin:0 auto 10px;font-family:var(--font-mono);">2</div>
+                <div style="font-size:15.6px;font-weight:600;color:var(--brown);margin-bottom:4px;">管理员初始化</div>
+                <div style="font-size:13.2px;color:var(--brown-light);"><code>/setup</code> 创建首个管理员</div>
+              </div>
+              <div class="card" style="text-align:center;padding:16px 12px;border-top:3px solid var(--orange);">
+                <div style="width:28px;height:28px;background:var(--orange);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15.6px;color:white;margin:0 auto 10px;font-family:var(--font-mono);">3</div>
+                <div style="font-size:15.6px;font-weight:600;color:var(--brown);margin-bottom:4px;">配置公司信息</div>
+                <div style="font-size:13.2px;color:var(--brown-light);">名称、Logo</div>
+              </div>
+              <div class="card" style="text-align:center;padding:16px 12px;border-top:3px solid var(--orange);">
+                <div style="width:28px;height:28px;background:var(--orange);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15.6px;color:white;margin:0 auto 10px;font-family:var(--font-mono);">4</div>
+                <div style="font-size:15.6px;font-weight:600;color:var(--brown);margin-bottom:4px;">创建部门</div>
+                <div style="font-size:13.2px;color:var(--brown-light);">必须在 Agent 之前</div>
+              </div>
+              <div class="card" style="text-align:center;padding:16px 12px;border-top:3px solid var(--orange);">
+                <div style="width:28px;height:28px;background:var(--orange);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15.6px;color:white;margin:0 auto 10px;font-family:var(--font-mono);">5</div>
+                <div style="font-size:15.6px;font-weight:600;color:var(--brown);margin-bottom:4px;">创建 Agent</div>
+                <div style="font-size:13.2px;color:var(--brown-light);">配置平台并测试连接</div>
+              </div>
+              <div class="card" style="text-align:center;padding:16px 12px;border-top:3px solid var(--orange);">
+                <div style="width:28px;height:28px;background:var(--orange);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15.6px;color:white;margin:0 auto 10px;font-family:var(--font-mono);">6</div>
+                <div style="font-size:15.6px;font-weight:600;color:var(--brown);margin-bottom:4px;">创建用户账号</div>
+                <div style="font-size:13.2px;color:var(--brown-light);">分配部门与角色</div>
+              </div>
+              <div class="card" style="text-align:center;padding:16px 12px;border-top:3px solid var(--orange);">
+                <div style="width:28px;height:28px;background:var(--orange);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15.6px;color:white;margin:0 auto 10px;font-family:var(--font-mono);">7</div>
+                <div style="font-size:15.6px;font-weight:600;color:var(--brown);margin-bottom:4px;">给用户授权</div>
+                <div style="font-size:13.2px;color:var(--brown-light);">Agent + 知识图谱</div>
+              </div>
+              <div class="card" style="text-align:center;padding:16px 12px;border-top:3px solid var(--green);">
+                <div style="width:28px;height:28px;background:var(--green);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15.6px;color:white;margin:0 auto 10px;font-family:var(--font-mono);">8</div>
+                <div style="font-size:15.6px;font-weight:600;color:var(--brown);margin-bottom:4px;">用户开始使用</div>
+                <div style="font-size:13.2px;color:var(--brown-light);"><code>/workspace</code> 工作台</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:12px;font-size:15.6px;">
+          ⚡ 先有部门，才能把 Agent 归到部门；先有 Agent，才能给用户授权。每步都依赖上一步。
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">共用开场</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 7: CHAPTER A — 管理员操作手册
+         ============================================================ -->
+    <section class="slide slide-chapter" data-index="7">
+      <div class="chapter-number">A</div>
+      <div class="chapter-inner">
+        <div class="chapter-eyebrow">课件 A · 管理员专场</div>
+        <h2 class="chapter-title">管理员操作手册</h2>
+        <p class="chapter-desc">从系统初始化到用户上线，每一步操作详解。<br>目标：让管理员独立完成从零配置系统的全流程。</p>
+        <div style="margin-top:28px;display:flex;gap:12px;flex-wrap:wrap;">
+          <span class="badge admin">初始化</span>
+          <span class="badge admin">公司设置</span>
+          <span class="badge admin">部门管理</span>
+          <span class="badge admin">用户管理</span>
+          <span class="badge admin">Agent 配置</span>
+          <span class="badge admin">授权管理</span>
+          <span class="badge admin">知识图谱</span>
+          <span class="badge admin">上线验收</span>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">课件 A · 管理员</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 8: 系统初始化
+         ============================================================ -->
+    <section class="slide" data-index="8">
+      <div class="accent-bar"></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="slide-header">
+          <div class="slide-header-left">
+            <span class="section-tag">初始化</span>
+          </div>
+          <span class="slide-id">ADM-01</span>
+        </div>
+        <div class="slide-body">
+          <h2 class="slide-title" style="font-size:36px;margin-bottom:6px;">系统初始化（只做一次）</h2>
+          <p style="font-size:16.8px;color:var(--brown-light);margin-bottom:16px;">🎯 用户知道初始化是什么、什么时候做、做完就不用再做</p>
+          <div class="two-col" style="margin-bottom:16px;">
+            <div>
+              <div class="card-title">页内要点</div>
+              <ul class="bullet-list" style="font-size:16.8px;">
+                <li>系统首次部署后，需要创建<strong>第一个管理员账号</strong></li>
+                <li>入口：浏览器访问 <code>http://&lt;地址&gt;/setup</code></li>
+                <li>初始化<strong>只能做一次</strong>，之后页面自动失效</li>
+                <li>初始化后跳转到登录页，用刚创建的账号登录</li>
+              </ul>
+              <div class="callout warning" style="margin-top:14px;font-size:15.6px;">
+                ⚠️ 用户名和密码一定要记住！<strong></strong>。
+              </div>
+            </div>
+            <div>
+              <div class="card-title">演示步骤</div>
+              <ol class="step-list" style="font-size:16.8px;">
+                <li><span class="step-num">1</span>打开浏览器，输入系统地址，看到初始化页面</li>
+                <li><span class="step-num">2</span>填写：用户名（登录用）、员工号、手机号、邮箱、显示姓名、职位、密码</li>
+                <li><span class="step-num">3</span>点击「初始化」按钮</li>
+                <li><span class="step-num">4</span>跳转到登录页，用刚填的账号密码登录</li>
+                <li><span class="step-num">5</span>成功进入 <code>/admin/company</code></li>
+              </ol>
+              <div class="callout tip" style="margin-top:14px;font-size:15.6px;">
+                ✅ 验收：能用自己创建的账号成功登录，并看到管理后台菜单
+              </div>
+            </div>
+          </div>
+
+          <!-- 登录页截图 -->
+          <div style="display:flex;justify-content:center;margin-top:12px;">
+            <img src="sga-training-slides-pic/slide8.png" alt="系统登录页" style="height:260px;width:auto;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,0.13);">
+          </div>
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">A-M0 · 初始化</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 9: 管理后台导航
+         ============================================================ -->
+    <section class="slide" data-index="9">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag">初始化</span>
+        </div>
+        <span class="slide-id">ADM-02</span>
+      </div>
+      <div class="slide-body">
+        <h2 class="slide-title" style="font-size:36px;margin-bottom:16px;">管理后台导航</h2>
+        <div class="two-col">
+          <div>
+            <div class="card-title">菜单结构</div>
+            <div style="background:#1C2B45;border-radius:10px;padding:16px;color:var(--cream);">
+              <div style="font-size:13.2px;opacity:0.5;font-family:var(--font-mono);margin-bottom:12px;letter-spacing:0.1em;">LEFT SIDEBAR</div>
+              <div style="display:flex;flex-direction:column;gap:4px;">
+                <div style="padding:8px 12px;background:rgba(212,82,42,0.3);border-radius:6px;font-size:15.6px;border-left:3px solid var(--orange);">🏢 公司设置</div>
+                <div style="padding:8px 12px;border-radius:6px;font-size:15.6px;opacity:0.7;">🎨 主题</div>
+                <div style="padding:8px 12px;border-radius:6px;font-size:15.6px;opacity:0.7;">🏬 部门管理</div>
+                <div style="padding:8px 12px;border-radius:6px;font-size:15.6px;opacity:0.7;">🌲 组织架构</div>
+                <div style="padding:8px 12px;border-radius:6px;font-size:15.6px;opacity:0.7;">👥 用户管理</div>
+                <div style="padding:8px 12px;border-radius:6px;font-size:15.6px;opacity:0.7;">🤖 AI 助手</div>
+                <div style="padding:8px 12px;border-radius:6px;font-size:15.6px;opacity:0.7;">🧠 知识图谱</div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="card-title">重要说明</div>
+            <ul class="bullet-list" style="font-size:16.8px;margin-bottom:16px;">
+              <li>左侧菜单包含所有管理功能</li>
+              <li>点击菜单项直接跳转，URL 会同步变化</li>
+              <li>右上角显示当前登录的管理员账号</li>
+              <li>非 ADMIN 角色访问 <code>/admin/*</code> 会被重定向到工作台</li>
+            </ul>
+            <div class="card-title" style="margin-top:16px;">演示步骤</div>
+            <ol class="step-list" style="font-size:16.8px;">
+              <li><span class="step-num">1</span>登录后看到左侧导航菜单</li>
+              <li><span class="step-num">2</span>逐一点击每个菜单项，说明页面用途</li>
+              <li><span class="step-num">3</span>展示如何回到上一页（浏览器后退或点菜单）</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">A-M0 · 初始化</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 10: 公司设置
+         ============================================================ -->
+    <section class="slide" data-index="10">
+      <div class="accent-bar"></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="slide-header">
+          <div class="slide-header-left">
+            <span class="section-tag">公司设置</span>
+          </div>
+          <span class="slide-id">ADM-03</span>
+        </div>
+        <div class="slide-body">
+          <h2 class="slide-title" style="font-size:36px;margin-bottom:6px;">设置公司名称与 Logo</h2>
+          <p style="font-size:16.8px;color:var(--brown-light);margin-bottom:16px;">🎯 用户能修改公司名称，并成功上传 Logo</p>
+          <div class="two-col">
+            <div>
+              <div class="card-title">页内要点</div>
+              <ul class="bullet-list" style="font-size:16.8px;">
+                <li>入口：左侧菜单 → <strong>公司设置</strong>（<code>/admin/company</code>）</li>
+                <li>公司名称会显示在<strong>系统各处</strong>（登录页、顶部导航等）</li>
+                <li>Logo 显示在顶部导航栏，建议使用<strong>透明背景 PNG</strong></li>
+                <li>修改后点击保存，页面会<strong>自动刷新</strong>以显示最新效果</li>
+              </ul>
+              <div class="divider"></div>
+              <div class="card-title">常见问题</div>
+              <ul class="bullet-list" style="font-size:15.6px;">
+                <li>Logo 上传失败 → 检查文件格式（只支持 JPG/PNG）和大小（≤ 2MB）</li>
+                <li>保存后看不到变化 → 强制刷新浏览器（Ctrl+Shift+R）</li>
+              </ul>
+            </div>
+            <div>
+              <div class="card-title">演示步骤</div>
+              <ol class="step-list" style="font-size:16.8px;">
+                <li><span class="step-num">1</span>点击左侧「公司设置」</li>
+                <li><span class="step-num">2</span>在「公司名称」输入框里改名 → 点击保存</li>
+                <li><span class="step-num">3</span>在「Logo」区域点击上传 → 选择图片文件</li>
+                <li><span class="step-num">4</span>看到预览图 → 点击保存</li>
+                <li><span class="step-num">5</span>页面刷新后，验证顶部导航已显示新 Logo</li>
+              </ol>
+              <div class="callout tip" style="margin-top:14px;font-size:15.6px;">
+                ✅ 验收：用户成功上传 Logo，并在导航栏里看到它
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">A-M1 · 公司设置</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 11: 主题设置
+         ============================================================ -->
+    <section class="slide" data-index="11">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag">主题设置</span>
+        </div>
+        <span class="slide-id">ADM-04</span>
+      </div>
+      <div class="slide-body">
+        <h2 class="slide-title" style="font-size:36px;margin-bottom:16px;">切换界面主题</h2>
+        <div class="two-col" style="margin-bottom:16px;">
+          <div class="card" style="text-align:center;padding:20px 16px;border-top:3px solid var(--orange);">
+            <h3 style="font-size:19.2px;font-weight:600;margin-bottom:6px;">浅色</h3>
+            <p style="font-size:14.4px;color:var(--brown-light);line-height:1.5;margin-bottom:12px;">白色背景，适合白天使用、会议投屏</p>
+            <img src="sga-training-slides-pic/slide11-light.png" alt="浅色主题" style="width:100%;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.10);">
+          </div>
+          <div class="card" style="text-align:center;padding:20px 16px;background:#1C2B45;">
+            <h3 style="font-size:19.2px;font-weight:600;margin-bottom:6px;color:var(--cream);">深色</h3>
+            <p style="font-size:14.4px;color:rgba(250,248,245,0.6);line-height:1.5;margin-bottom:12px;">深色背景，护眼，适合长时间使用</p>
+            <img src="sga-training-slides-pic/slide11-dark.png" alt="深色主题" style="width:100%;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.30);">
+          </div>
+        </div>
+        <div class="callout" style="font-size:16.8px;">
+          💡 主题<strong>只影响视觉效果</strong>，不影响任何数据或权限。<br>
+          入口：左侧菜单 → <strong>主题</strong>（<code>/admin/theme</code>）
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">A-M2 · 主题设置</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 12: 为什么要先建部门
+         ============================================================ -->
+    <section class="slide" data-index="12">
+      <div class="accent-bar"></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="slide-header">
+          <div class="slide-header-left">
+            <span class="section-tag">部门管理</span>
+          </div>
+          <span class="slide-id">ADM-05</span>
+        </div>
+        <div class="slide-body">
+          <h2 class="slide-title" style="font-size:36px;margin-bottom:16px;">为什么要先建部门</h2>
+          <div class="two-col">
+            <div>
+              <ul class="bullet-list" style="font-size:18px;gap:12px;">
+                <li>部门是 AI 助手的<strong>分类标签</strong>，用户在工作台按部门看助手</li>
+                <li>用户看到的是「XX 部门的助手」，而不是一堆没有归属的助手</li>
+                <li>创建 Agent 时<strong>必须选择归属部门</strong>，所以部门要先建好</li>
+                <li>部门数量建议与公司实际组织对应（不用完全一致，以实用为主）</li>
+              </ul>
+              <div class="callout" style="margin-top:20px;font-size:16.8px;">
+                假设公司有销售部、客服部、技术部，就创建三个对应部门，然后把各自的 AI 助手放进去。用户在工作台就能看到清晰的分组。
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div class="card-title">部门 → Agent 的关系</div>
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <div class="card" style="padding:12px 16px;border-left:4px solid var(--orange);">
+                  <div style="font-size:15.6px;font-weight:600;margin-bottom:4px;">🏬 销售助手组</div>
+                  <div style="font-size:14.4px;color:var(--brown-light);">销售分析助手 · 报价生成助手</div>
+                </div>
+                <div class="card" style="padding:12px 16px;border-left:4px solid var(--blue);">
+                  <div style="font-size:15.6px;font-weight:600;margin-bottom:4px;">🛠 技术支持组</div>
+                  <div style="font-size:14.4px;color:var(--brown-light);">故障排查助手 · 文档查询助手</div>
+                </div>
+                <div class="card" style="padding:12px 16px;border-left:4px solid var(--green);">
+                  <div style="font-size:15.6px;font-weight:600;margin-bottom:4px;">💬 客服助手组</div>
+                  <div style="font-size:14.4px;color:var(--brown-light);">FAQ 助手 · 工单分析助手</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">A-M3 · 部门管理</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 13: 新建部门
+         ============================================================ -->
+    <section class="slide" data-index="13">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag">部门管理</span>
+        </div>
+        <span class="slide-id">ADM-06</span>
+      </div>
+      <div class="slide-body">
+        <h2 class="slide-title" style="font-size:36px;margin-bottom:6px;">新建部门</h2>
+        <p style="font-size:16.8px;color:var(--brown-light);margin-bottom:16px;">🎯 用户能独立创建一个新部门，并配置好所有信息</p>
+        <div class="two-col">
+          <div>
+            <div class="card-title">填写字段说明</div>
+            <table class="data-table" style="font-size:15.6px;margin-bottom:14px;">
+              <thead><tr><th>字段</th><th>是否必填</th><th>说明</th></tr></thead>
+              <tbody>
+                <tr><td><strong>部门名称</strong></td><td><span class="badge warn">必填</span></td><td>清晰明了，如「销售助手组」</td></tr>
+                <tr><td>描述</td><td>选填</td><td>说明部门用途</td></tr>
+                <tr><td>图标</td><td>选填</td><td>从预设图标库选择，增加辨识度</td></tr>
+                <tr><td>排序序号</td><td>选填</td><td>数字越小，工作台里越靠前显示</td></tr>
+              </tbody>
+            </table>
+            <img src="sga-training-slides-pic/slide13.png" alt="新建部门表单" style="width:100%;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,0.12);">
+          </div>
+          <div>
+            <div class="card-title">演示步骤</div>
+            <ol class="step-list" style="font-size:16.8px;">
+              <li><span class="step-num">1</span>左侧菜单 → <strong>部门管理</strong>（<code>/admin/departments</code>）</li>
+              <li><span class="step-num">2</span>点击右上角「新建部门」按钮</li>
+              <li><span class="step-num">3</span>填写部门名称（例如：销售助手组）</li>
+              <li><span class="step-num">4</span>填写描述和图标</li>
+              <li><span class="step-num">5</span>填写排序序号（例如：1）</li>
+              <li><span class="step-num">6</span>点击「保存」，在列表里确认创建成功</li>
+            </ol>
+            <div class="callout tip" style="margin-top:14px;font-size:15.6px;">
+              ✅ 验收：创建 2 个部门，名称、图标各不同，排序不同，在列表里都能看到
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">A-M3 · 部门管理</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 14: 编辑停用部门 + 组织架构
+         ============================================================ -->
+    <section class="slide" data-index="14">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag">部门管理</span>
+        </div>
+        <span class="slide-id">ADM-07 · ADM-08</span>
+      </div>
+      <div class="slide-body">
+        <div class="two-col" style="gap:32px;">
+          <div>
+            <h2 class="slide-title" style="font-size:28.8px;margin-bottom:12px;">编辑与停用部门</h2>
+            <ul class="bullet-list" style="font-size:16.8px;margin-bottom:12px;">
+              <li>在列表里点击部门右侧的<strong>「编辑」</strong>按钮可修改信息</li>
+              <li><strong>停用部门</strong>：该部门下的 Agent 不再显示给用户</li>
+              <li>停用 ≠ 删除——数据完整保留，随时可重新启用</li>
+              <li>适用场景：部门解散、临时下线某组助手</li>
+            </ul>
+            <div class="callout warning" style="font-size:15.6px;margin-bottom:14px;">
+              ⚠️ 停用部门后，有权限的用户刷新工作台就看不到该部门的助手了。用户反馈「助手不见了」，优先检查部门是否被停用。
+            </div>
+            <div style="display:flex;justify-content:center;">
+              <img src="sga-training-slides-pic/slide14.png" alt="添加部门弹窗" style="max-height:160px;width:auto;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,0.12);">
+            </div>
+          </div>
+          <div>
+            <h2 class="slide-title" style="font-size:28.8px;margin-bottom:12px;">查看组织架构树</h2>
+            <p style="font-size:15.6px;color:var(--brown-light);margin-bottom:10px;">入口：左侧菜单 → <strong>组织架构</strong>（<code>/admin/organization</code>）</p>
+            <ul class="bullet-list" style="font-size:16.8px;margin-bottom:12px;">
+              <li>树形结构展示所有部门和部门下的用户</li>
+              <li>可以展开/收起，可以<strong>搜索用户名</strong>快速定位</li>
+              <li>「未分配」分组：显示还没有归属部门的用户</li>
+            </ul>
+            <div class="card" style="padding:14px;background:var(--cream-dark);">
+              <div style="font-family:var(--font-mono);font-size:14.4px;line-height:2;color:var(--brown);">
+                📁 销售助手组<br>
+                &nbsp;&nbsp;&nbsp;👤 张三<br>
+                &nbsp;&nbsp;&nbsp;👤 李四<br>
+                📁 技术支持组<br>
+                &nbsp;&nbsp;&nbsp;👤 王五<br>
+                📁 未分配 <span style="color:var(--red);">● 2人</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">A-M3 · 部门管理</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE NEW: 演示：新建部门弹窗
+         ============================================================ -->
+    <section class="slide" data-index="15">
+      <div class="accent-bar"></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="slide-header">
+          <div class="slide-header-left">
+            <span class="section-tag">部门管理</span>
+          </div>
+          <span class="slide-id">ADM-07b</span>
+        </div>
+        <div class="slide-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
+          <h2 class="slide-title" style="font-size:28.8px;margin-bottom:6px;align-self:flex-start;">演示：新建部门填写界面</h2>
+          <p style="font-size:15.6px;color:var(--brown-light);margin-bottom:20px;align-self:flex-start;">入口：部门管理 → 右上角「新建部门」→ 填写名称、描述、图标、排序</p>
+          <img src="sga-training-slides-pic/slide14.png" alt="新建部门弹窗" style="max-height:460px;width:auto;border-radius:14px;box-shadow:0 4px 20px rgba(0,0,0,0.13);">
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">A-M3 · 部门管理</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 15: 用户与角色概念
+         ============================================================ -->
+    <section class="slide" data-index="16">
+      <div class="accent-bar"></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="slide-header">
+          <div class="slide-header-left">
+            <span class="section-tag">用户管理</span>
+          </div>
+          <span class="slide-id">ADM-09</span>
+        </div>
+        <div class="slide-body">
+          <h2 class="slide-title" style="font-size:36px;margin-bottom:16px;">用户与角色概念</h2>
+          <div class="two-col">
+            <div>
+              <ul class="bullet-list" style="font-size:18px;gap:12px;">
+                <li>系统只有两种角色：<strong>管理员（ADMIN）</strong> 和 <strong>普通用户（USER）</strong></li>
+                <li>管理员：能进入 <code>/admin/*</code>，可以配置一切</li>
+                <li>普通用户：只能进入工作台 <code>/workspace</code>，使用授权给他们的助手</li>
+                <li><strong>⚠️ 谨慎</strong>：把某人设为管理员，他就能修改系统所有配置</li>
+              </ul>
+              <div class="callout" style="margin-top:20px;font-size:16.8px;">
+                就像商场的「员工通道」和「顾客通道」。管理员有员工通道门禁，能进后台管理；普通用户只走顾客通道，只能使用前台功能。
+              </div>
+            </div>
+            <div>
+              <div style="display:flex;flex-direction:column;gap:12px;">
+                <div class="card" style="border-top:3px solid var(--orange);padding:20px;">
+                  <span class="badge admin" style="font-size:14.4px;margin-bottom:8px;display:inline-block;">ADMIN 管理员</span>
+                  <p style="font-size:15.6px;color:var(--brown-light);">可进入 <code>/admin/*</code>，配置所有资源</p>
+                  <p style="font-size:14.4px;color:var(--red);margin-top:8px;">⚠️ 请谨慎分配此角色</p>
+                </div>
+                <div class="card" style="border-top:3px solid var(--green);padding:20px;">
+                  <span class="badge user" style="font-size:14.4px;margin-bottom:8px;display:inline-block;">USER 普通用户</span>
+                  <p style="font-size:15.6px;color:var(--brown-light);">只可进入 <code>/workspace</code>，使用被授权的助手</p>
+                  <p style="font-size:14.4px;color:var(--green);margin-top:8px;">✅ 新建用户默认此角色</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">A-M4 · 用户管理</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 16: 创建用户账号
+         ============================================================ -->
+    <section class="slide" data-index="17">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag">用户管理</span>
+        </div>
+        <span class="slide-id">ADM-10</span>
+      </div>
+      <div class="slide-body">
+        <h2 class="slide-title" style="font-size:36px;margin-bottom:6px;">创建用户账号</h2>
+        <p style="font-size:16.8px;color:var(--brown-light);margin-bottom:14px;">🎯 用户能独立为新员工创建账号并分配到部门</p>
+        <div class="two-col">
+          <div>
+            <div class="card-title">字段说明</div>
+            <table class="data-table" style="font-size:15.6px;">
+              <thead><tr><th>字段</th><th>必/选填</th><th>备注</th></tr></thead>
+              <tbody>
+                <tr><td>用户名</td><td><span class="badge warn">必填</span></td><td>登录时使用，建议用工号或英文名</td></tr>
+                <tr><td>员工号</td><td><span class="badge warn">必填</span></td><td>唯一标识，同公司内不能重复</td></tr>
+                <tr><td>手机号</td><td><span class="badge warn">必填</span></td><td></td></tr>
+                <tr><td>显示名称</td><td><span class="badge warn">必填</span></td><td>中文名，工作台里展示</td></tr>
+                <tr><td>部门</td><td><span class="badge warn">必填</span></td><td>从已建部门中选择</td></tr>
+                <tr><td>初始密码</td><td><span class="badge warn">必填</span></td><td>建议告知用户后让其自行修改</td></tr>
+                <tr><td>邮箱/职位/头像</td><td>选填</td><td></td></tr>
+              </tbody>
+            </table>
+            <div class="callout" style="margin-top:10px;font-size:15.6px;">
+              💡 角色默认为「普通用户（USER）」，只有特别需要时才改为 ADMIN
+            </div>
+          </div>
+          <div>
+            <div class="card-title">演示步骤</div>
+            <ol class="step-list" style="font-size:16.8px;">
+              <li><span class="step-num">1</span>左侧菜单 → <strong>用户管理</strong> → 点击「新建用户」</li>
+              <li><span class="step-num">2</span>填写用户名：<code>zhangsan</code></li>
+              <li><span class="step-num">3</span>填写员工号：<code>EMP001</code></li>
+              <li><span class="step-num">4</span>填写手机号、显示名称（张三）</li>
+              <li><span class="step-num">5</span>选择部门：销售助手组</li>
+              <li><span class="step-num">6</span>设置初始密码 → 点击保存</li>
+              <li><span class="step-num">7</span>在用户列表里找到张三，确认信息正确</li>
+            </ol>
+            <div class="callout tip" style="margin-top:14px;font-size:15.6px;">
+              ✅ 验收：创建 2 个用户，分配到不同部门，列表里能找到他们
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">A-M4 · 用户管理</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 17: 编辑/停用用户 + 搜索
+         ============================================================ -->
+    <section class="slide" data-index="18">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag">用户管理</span>
+        </div>
+        <span class="slide-id">ADM-11 · ADM-12 · ADM-13</span>
+      </div>
+      <div class="slide-body">
+        <div class="two-col" style="gap:28px;">
+          <div>
+            <h3 class="slide-title" style="font-size:26.4px;margin-bottom:10px;">编辑用户信息</h3>
+            <ul class="bullet-list" style="font-size:16.8px;margin-bottom:12px;">
+              <li>可修改：显示名称、部门、职位、邮箱、头像</li>
+              <li><strong>不建议随便改</strong>：用户名（影响登录）、员工号（影响唯一性）</li>
+              <li>转部门：改完部门后，权限<strong>不会自动变化</strong>，需手动调整授权</li>
+            </ul>
+            <div class="callout warning" style="font-size:15.6px;">
+              ⚠️ 员工转岗时：①改部门 ②撤销旧部门 Agent 权限 ③添加新部门 Agent 权限。光改部门，权限不会自动跟着变。
+            </div>
+            <div class="divider" style="margin:16px 0;"></div>
+            <h3 class="slide-title" style="font-size:26.4px;margin-bottom:10px;">停用与启用用户</h3>
+            <ul class="bullet-list" style="font-size:16.8px;">
+              <li>停用后：无法登录，已有 token 失效</li>
+              <li>停用 ≠ 删除：数据完整保留，随时可重新启用</li>
+              <li><strong>员工离职处理流程</strong>：停用账号（不需要删除）</li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="slide-title" style="font-size:26.4px;margin-bottom:10px;">搜索与筛选用户</h3>
+            <ul class="bullet-list" style="font-size:16.8px;margin-bottom:16px;">
+              <li>搜索框：输入姓名 / 用户名 / 员工号</li>
+              <li>按<strong>部门</strong>筛选</li>
+              <li>按<strong>角色</strong>筛选（管理员 / 普通用户）</li>
+              <li>列表支持分页（10 / 20 / 50 条/页）</li>
+            </ul>
+            <div class="card" style="background:var(--cream-dark);padding:16px;">
+              <div style="font-size:14.4px;font-family:var(--font-mono);color:var(--brown-light);margin-bottom:8px;">QUICK ACTIONS</div>
+              <div style="display:flex;flex-direction:column;gap:6px;font-size:15.6px;">
+                <div class="check-item"><div class="check-box"></div>新建用户</div>
+                <div class="check-item"><div class="check-box"></div>编辑用户信息</div>
+                <div class="check-item"><div class="check-box"></div>停用账号</div>
+                <div class="check-item"><div class="check-box"></div>按部门/角色筛选</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">A-M4 · 用户管理</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 18: 什么是 Agent
+         ============================================================ -->
+    <section class="slide" data-index="19">
+      <div class="accent-bar"></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="slide-header">
+          <div class="slide-header-left">
+            <span class="section-tag">Agent 管理</span>
+          </div>
+          <span class="slide-id">ADM-14</span>
+        </div>
+        <div class="slide-body">
+          <h2 class="slide-title" style="font-size:36px;margin-bottom:16px;">什么是 Agent，如何理解它</h2>
+          <div class="two-col">
+            <div>
+              <ul class="bullet-list" style="font-size:18px;gap:12px;margin-bottom:16px;">
+                <li><strong>Agent = AI 助手</strong>：一个有名字、有头像、有专属职责的 AI 角色</li>
+                <li>背后连接 AI 平台（Dify / RAGFlow 等），平台提供对话能力</li>
+                <li>用户看到的有：名字、头像、归属部门</li>
+                <li>创建前需要：①有归属部门 ②有 AI 平台的 API 地址和密钥</li>
+              </ul>
+              <img src="sga-training-slides-pic/slide18.png" alt="Agent 管理界面" style="width:100%;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,0.12);">
+            </div>
+            <div>
+              <div class="card-title">支持的 AI 平台</div>
+              <table class="data-table" style="font-size:15.6px;">
+                <thead><tr><th>平台</th><th>适用场景</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Dify</strong></td><td>通用对话、知识库问答、工作流</td></tr>
+                  <tr><td><strong>RAGFlow</strong></td><td>基于文档的问答（知识检索增强）</td></tr>
+                  <tr><td><strong>OpenAI</strong></td><td>GPT 系列模型</td></tr>
+                  <tr><td><strong>Claude</strong></td><td>Anthropic Claude 系列模型</td></tr>
+                  <tr><td><strong>自定义</strong></td><td>公司自建的 AI 服务</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">A-M5 · Agent 管理</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 19: 创建 Agent 基本信息
+         ============================================================ -->
+    <section class="slide" data-index="20">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag">Agent 管理</span>
+        </div>
+        <span class="slide-id">ADM-15</span>
+      </div>
+      <div class="slide-body">
+        <h2 class="slide-title" style="font-size:33.6px;margin-bottom:6px;">创建 Agent —— 基本信息</h2>
+        <p style="font-size:16.8px;color:var(--brown-light);margin-bottom:14px;">🎯 用户能填写 Agent 的基本信息（名称、头像、部门等）</p>
+        <div class="two-col">
+          <div>
+            <div class="card-title">必填字段</div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+              <div class="card" style="padding:10px 14px;border-left:3px solid var(--orange);">
+                <div style="font-size:15.6px;font-weight:600;">中文名称</div>
+                <div style="font-size:14.4px;color:var(--brown-light);">用户看到的名字，例如：销售分析助手</div>
+              </div>
+              <div class="card" style="padding:10px 14px;border-left:3px solid var(--orange);">
+                <div style="font-size:15.6px;font-weight:600;">归属部门</div>
+                <div style="font-size:14.4px;color:var(--brown-light);">从已建部门中选择</div>
+              </div>
+              <div class="card" style="padding:10px 14px;border-left:3px solid var(--orange);">
+                <div style="font-size:15.6px;font-weight:600;">平台类型</div>
+                <div style="font-size:14.4px;color:var(--brown-light);">选 Dify / RAGFlow / OpenAI 等</div>
+              </div>
+            </div>
+            <div class="card-title">选填字段</div>
+            <div style="font-size:15.6px;color:var(--brown-light);line-height:1.8;">
+              英文名称 · 职位/岗位描述 · 头像图片（建议上传）· 展示照片 · 排序序号
+            </div>
+          </div>
+          <div>
+            <div class="card-title">演示步骤</div>
+            <ol class="step-list" style="font-size:16.8px;">
+              <li><span class="step-num">1</span>左侧菜单 → <strong>AI 助手</strong>（<code>/admin/agents</code>）</li>
+              <li><span class="step-num">2</span>点击「新建助手」</li>
+              <li><span class="step-num">3</span>填写中文名称：<code>销售分析助手</code></li>
+              <li><span class="step-num">4</span>选择部门：销售助手组</li>
+              <li><span class="step-num">5</span>填写描述：帮助分析销售数据、生成报表</li>
+              <li><span class="step-num">6</span>上传头像图片，填写排序序号：1</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">A-M5 · Agent 管理</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 20: 平台配置 RAGFlow + 在线状态 + 停用
+         ============================================================ -->
+    <section class="slide" data-index="21">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag">Agent 管理</span>
+        </div>
+        <span class="slide-id">ADM-17 · ADM-18 · ADM-19</span>
+      </div>
+      <div class="slide-body">
+        <div class="two-col" style="gap:28px;">
+          <div>
+            <h3 class="slide-title" style="font-size:26.4px;margin-bottom:10px;">RAGFlow 平台配置</h3>
+            <ul class="bullet-list" style="font-size:16.8px;margin-bottom:14px;">
+              <li><strong>API 地址</strong>：RAGFlow 服务地址</li>
+              <li><strong>API 密钥</strong>：RAGFlow 的访问密钥</li>
+              <li><strong>Agent ID</strong>：在 RAGFlow 中创建的 Agent 的 ID</li>
+              <li><strong>知识库 ID</strong>（Dataset ID）：对应的知识库 ID</li>
+            </ul>
+            <div class="callout" style="font-size:15.6px;">同样需要<strong>测试连接通过</strong>后再保存</div>
+            <div class="divider" style="margin:16px 0;"></div>
+            <h3 class="slide-title" style="font-size:26.4px;margin-bottom:10px;">停用与启用 Agent</h3>
+            <ul class="bullet-list" style="font-size:16.8px;">
+              <li>停用后：所有有权限的用户在工作台看不到该助手</li>
+              <li>停用不删数据，随时可重新启用</li>
+              <li>适用：平台临时维护、需要重新配置时</li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="slide-title" style="font-size:26.4px;margin-bottom:10px;">Agent 在线状态</h3>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+              <div class="card" style="padding:12px 16px;border-left:4px solid var(--green);display:flex;align-items:center;gap:12px;">
+                <div style="width:10px;height:10px;border-radius:50%;background:var(--green);flex-shrink:0;"></div>
+                <div><div style="font-size:15.6px;font-weight:600;">在线</div><div style="font-size:14.4px;color:var(--brown-light);">用户可以正常对话</div></div>
+              </div>
+              <div class="card" style="padding:12px 16px;border-left:4px solid var(--red);display:flex;align-items:center;gap:12px;">
+                <div style="width:10px;height:10px;border-radius:50%;background:var(--red);flex-shrink:0;"></div>
+                <div><div style="font-size:15.6px;font-weight:600;">离线</div><div style="font-size:14.4px;color:var(--brown-light);">对话会失败，需排查</div></div>
+              </div>
+            </div>
+            <div class="card-title">Agent 离线排查顺序</div>
+            <ol class="step-list" style="font-size:15.6px;margin-bottom:14px;">
+              <li><span class="step-num">1</span>进入 Agent 编辑页 → 点击「测试连接」</li>
+              <li><span class="step-num">2</span>看错误信息：地址错误 / 密钥过期 / 平台故障</li>
+              <li><span class="step-num">3</span>修复后重新测试，确认变为在线状态</li>
+            </ol>
+            <div style="display:flex;justify-content:center;">
+              <img src="sga-training-slides-pic/slide20.png" alt="RAGFlow 平台配置" style="max-height:160px;width:auto;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,0.12);">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">A-M5 · Agent 管理</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE NEW: 演示：RAGFlow 平台配置界面
+         ============================================================ -->
+    <section class="slide" data-index="22">
+      <div class="accent-bar"></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="slide-header">
+          <div class="slide-header-left">
+            <span class="section-tag">Agent 管理</span>
+          </div>
+          <span class="slide-id">ADM-17b</span>
+        </div>
+        <div class="slide-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
+          <h2 class="slide-title" style="font-size:28.8px;margin-bottom:6px;align-self:flex-start;">演示：RAGFlow 平台配置界面</h2>
+          <p style="font-size:15.6px;color:var(--brown-light);margin-bottom:20px;align-self:flex-start;">入口：Agent 管理 → 选择 Agent → 编辑 → 平台配置 → 选择 RAGFlow → 填写参数 → 测试连接</p>
+          <img src="sga-training-slides-pic/slide20.png" alt="RAGFlow 平台配置界面" style="max-height:460px;width:auto;border-radius:14px;box-shadow:0 4px 20px rgba(0,0,0,0.13);">
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">A-M5 · Agent 管理</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 22: 授权核心逻辑
+         ============================================================ -->
+    <section class="slide" data-index="23">
+      <div style="background:#FAF8F5;flex:1;display:flex;flex-direction:column;position:relative;overflow:hidden;">
+        <div style="position:absolute;top:-60px;right:-60px;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(212,82,42,0.08) 0%,transparent 70%);"></div>
+        <div class="slide-header" style="padding:18px 48px 0;">
+          <div class="slide-header-left">
+            <span class="section-tag">授权管理</span>
+          </div>
+          <span class="slide-id">ADM-20</span>
+        </div>
+        <div class="slide-body" style="position:relative;z-index:1;">
+          <h2 style="font-family:var(--font-display);font-size:38.4px;color:var(--brown-deep);margin-bottom:8px;">授权的核心逻辑</h2>
+          <p style="font-size:24px;color:var(--orange);font-family:var(--font-display);font-weight:500;margin-bottom:24px;">「没授权 = 用户什么都看不到」</p>
+          <div class="two-col">
+            <div>
+              <div style="color:var(--brown-light);font-size:16.8px;font-weight:600;margin-bottom:10px;letter-spacing:0.05em;text-transform:uppercase;">规则</div>
+              <ul style="list-style:none;display:flex;flex-direction:column;gap:10px;">
+                <li style="display:flex;gap:12px;align-items:flex-start;color:var(--brown-deep);font-size:16.8px;"><span style="color:var(--orange);">▸</span>用户默认什么 Agent 都看不到，必须由管理员显式授权</li>
+                <li style="display:flex;gap:12px;align-items:flex-start;color:var(--brown-deep);font-size:16.8px;"><span style="color:var(--orange);">▸</span>两种可授权的资源：<strong style="color:var(--orange);">AI 助手</strong> 和 <strong style="color:var(--orange);">知识图谱</strong></li>
+                <li style="display:flex;gap:12px;align-items:flex-start;color:var(--brown-deep);font-size:16.8px;"><span style="color:var(--orange);">▸</span>工作台 = 用户被授权资源的汇总展示</li>
+              </ul>
+            </div>
+            <div>
+              <div style="color:var(--brown-light);font-size:16.8px;font-weight:600;margin-bottom:10px;letter-spacing:0.05em;text-transform:uppercase;">排查优先级</div>
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <div style="background:var(--orange-pale);border:1px solid rgba(212,82,42,0.3);border-radius:8px;padding:12px 16px;color:var(--brown-deep);font-size:16.8px;">
+                  <span style="color:var(--orange);font-weight:700;margin-right:8px;">①</span>有没有授权给这个用户？<span style="float:right;font-size:13.2px;color:var(--brown-light);">最常见原因</span>
+                </div>
+                <div style="background:var(--cream-dark);border:1px solid var(--sand);border-radius:8px;padding:12px 16px;color:var(--brown);font-size:16.8px;">
+                  <span style="margin-right:8px;color:var(--brown-light);">②</span>Agent 是否被停用？
+                </div>
+                <div style="background:var(--cream-dark);border:1px solid var(--sand);border-radius:8px;padding:12px 16px;color:var(--brown);font-size:16.8px;">
+                  <span style="margin-right:8px;color:var(--brown-light);">③</span>Agent 是否离线？
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">A-M6 · 授权管理</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 23: 给用户授权 Agent
+         ============================================================ -->
+    <section class="slide" data-index="24">
+      <div class="accent-bar"></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="slide-header">
+          <div class="slide-header-left">
+            <span class="section-tag">授权管理</span>
+          </div>
+          <span class="slide-id">ADM-21</span>
+        </div>
+        <div class="slide-body">
+          <h2 class="slide-title" style="font-size:36px;margin-bottom:6px;">给用户授权 Agent</h2>
+          <p style="font-size:16.8px;color:var(--brown-light);margin-bottom:16px;">🎯 用户能为指定用户添加 Agent 使用权限</p>
+          <div class="two-col">
+            <div>
+              <div class="card-title">两种入口（任选其一）</div>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+                <div class="card" style="padding:14px;border-left:3px solid var(--orange);">
+                  <div style="font-size:15.6px;font-weight:600;margin-bottom:4px;">从用户侧</div>
+                  <div style="font-size:14.4px;color:var(--brown-light);">用户管理 → 找到用户 → 用户详情 → 「AI 助手权限」区域</div>
+                </div>
+                <div class="card" style="padding:14px;border-left:3px solid var(--blue);">
+                  <div style="font-size:15.6px;font-weight:600;margin-bottom:4px;">从 Agent 侧</div>
+                  <div style="font-size:14.4px;color:var(--brown-light);">AI 助手 → 找到 Agent → Agent 详情 → 「授权用户」区域</div>
+                </div>
+              </div>
+              <div class="callout tip" style="font-size:15.6px;">
+                ✅ 授权后：用户<strong>刷新工作台</strong>即可看到新增的助手（无需重新登录）
+              </div>
+            </div>
+            <div>
+              <div class="card-title">演示步骤（从用户侧入口）</div>
+              <ol class="step-list" style="font-size:16.8px;">
+                <li><span class="step-num">1</span>进入「用户管理」，点击张三的用户名</li>
+                <li><span class="step-num">2</span>找到「AI 助手权限」板块</li>
+                <li><span class="step-num">3</span>点击「添加助手」</li>
+                <li><span class="step-num">4</span>在弹窗里搜索并选择「销售分析助手」</li>
+                <li><span class="step-num">5</span>点击确认</li>
+                <li><span class="step-num">6</span>用张三账号刷新工作台，验证能看到助手</li>
+              </ol>
+              <div class="callout" style="margin-top:14px;font-size:15.6px;">
+                撤销授权：用户详情 → AI 助手权限列表 → 点击「移除」
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">A-M6 · 授权管理</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 24: 批量授权 + 知识图谱授权
+         ============================================================ -->
+    <section class="slide" data-index="25">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag">授权管理</span>
+        </div>
+        <span class="slide-id">ADM-22 · ADM-23 · ADM-24</span>
+      </div>
+      <div class="slide-body">
+        <div class="two-col" style="gap:28px;">
+          <div>
+            <h3 class="slide-title" style="font-size:26.4px;margin-bottom:10px;">给用户授权知识图谱</h3>
+            <ul class="bullet-list" style="font-size:16.8px;margin-bottom:12px;">
+              <li>操作方式与授权 Agent <strong>完全相同</strong></li>
+              <li>入口：用户详情 → 「知识图谱权限」板块 → 点击「添加」</li>
+              <li>授权后：用户在工作台可以看到并使用该知识图谱</li>
+            </ul>
+            <div class="callout warning" style="font-size:15.6px;">
+              ⚠️ 配置好知识图谱 ≠ 用户能用。还需要单独授权给用户。
+            </div>
+          </div>
+          <div>
+            <h3 class="slide-title" style="font-size:26.4px;margin-bottom:10px;">按部门批量授权 Agent（效率技巧）</h3>
+            <ul class="bullet-list" style="font-size:16.8px;margin-bottom:12px;">
+              <li>入口：AI 助手列表 → 找到 Agent → 点击「批量授权」按钮</li>
+              <li>可选择一个部门，将该 Agent 授权给<strong>部门下所有用户</strong></li>
+              <li>仅适用于 <strong>Agent 授权</strong>，知识图谱暂不支持批量授权</li>
+            </ul>
+            <div class="card-title" style="margin-bottom:6px;">演示步骤</div>
+            <ol class="step-list" style="font-size:15.6px;">
+              <li><span class="step-num">1</span>进入 AI 助手列表页</li>
+              <li><span class="step-num">2</span>找到目标 Agent，点击「批量授权」</li>
+              <li><span class="step-num">3</span>选择部门：销售助手组 → 确认</li>
+              <li><span class="step-num">4</span>验证部门下所有用户都能在工作台看到该助手</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">A-M6 · 授权管理</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 24: 知识图谱用户授权（截图）
+         ============================================================ -->
+    <section class="slide" data-index="26">
+      <div class="accent-bar"></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="slide-header">
+          <div class="slide-header-left">
+            <span class="section-tag">授权管理</span>
+          </div>
+          <span class="slide-id">ADM-23</span>
+        </div>
+        <div class="slide-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
+          <h2 class="slide-title" style="font-size:28.8px;margin-bottom:6px;align-self:flex-start;">演示：给用户授权知识图谱</h2>
+          <p style="font-size:15.6px;color:var(--brown-light);margin-bottom:20px;align-self:flex-start;">入口：用户管理 → 选中用户 → 「知识图谱权限」板块 → 添加</p>
+          <img src="sga-training-slides-pic/slide23.png" alt="知识图谱用户授权界面" style="max-width:85%;max-height:440px;object-fit:contain;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.12);">
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">A-M6 · 授权管理</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 25: Agent 批量授权（截图）
+         ============================================================ -->
+    <section class="slide" data-index="27">
+      <div class="accent-bar"></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="slide-header">
+          <div class="slide-header-left">
+            <span class="section-tag">授权管理</span>
+          </div>
+          <span class="slide-id">ADM-24</span>
+        </div>
+        <div class="slide-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
+          <h2 class="slide-title" style="font-size:28.8px;margin-bottom:6px;align-self:flex-start;">演示：按部门批量授权 Agent</h2>
+          <p style="font-size:15.6px;color:var(--brown-light);margin-bottom:20px;align-self:flex-start;">入口：AI 助手列表 → 找到 Agent → 点击「批量授权」→ 选择部门 → 保存规则</p>
+          <img src="sga-training-slides-pic/slide23-1.png" alt="Agent 部门批量授权弹窗" style="max-width:65%;max-height:440px;object-fit:contain;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.12);">
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">A-M6 · 授权管理</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 26: 知识图谱是什么
+         ============================================================ -->
+    <section class="slide" data-index="28">
+      <div class="accent-bar"></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="slide-header">
+          <div class="slide-header-left">
+            <span class="section-tag">知识图谱</span>
+          </div>
+          <span class="slide-id">ADM-25</span>
+        </div>
+        <div class="slide-body">
+          <h2 class="slide-title" style="font-size:36px;margin-bottom:16px;">知识图谱是什么</h2>
+          <div class="two-col">
+            <div>
+              <ul class="bullet-list" style="font-size:18px;gap:12px;">
+                <li>知识图谱 = 公司的<strong>AI 知识库</strong>，把文档变成 AI 能检索的结构化数据</li>
+                <li>用户提问时，AI 可以从知识图谱里查到相关内容再回答——答案 更贴合公司实际</li>
+                <li>基于 RAGFlow 平台，管理员在这里配置连接信息</li>
+                <li>知识图谱需要<strong>单独授权</strong>给用户（跟 Agent 授权分开）</li>
+              </ul>
+              <div class="callout" style="margin-top:20px;font-size:16.8px;">
+                把知识图谱想象成「公司内部百科全书」。没有它，AI 只能靠通用知识回答；有了它，AI 能翻到公司自己的资料再回答，准确度大幅提升。
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px;">
+              <div class="card" style="padding:16px;border-left:4px solid var(--orange);">
+                <div style="font-size:15.6px;font-weight:600;color:var(--orange);margin-bottom:6px;">没有知识图谱</div>
+                <div style="font-size:15.6px;color:var(--brown-light);">AI：「根据通用知识，该产品的重量约为...」<br>（可能不准确）</div>
+              </div>
+              <div style="text-align:center;font-size:24px;color:var(--sand-mid);">↓</div>
+              <div class="card" style="padding:16px;border-left:4px solid var(--green);">
+                <div style="font-size:15.6px;font-weight:600;color:var(--green);margin-bottom:6px;">有知识图谱</div>
+                <div style="font-size:15.6px;color:var(--brown-light);">AI：「根据产品手册第 3 页，该产品重量为 2.5kg」<br>（有来源，可追溯）</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">A-M7 · 知识图谱</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 27: 演示：知识图谱效果页
+         ============================================================ -->
+    <section class="slide" data-index="29">
+      <div class="accent-bar"></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="slide-header">
+          <div class="slide-header-left">
+            <span class="section-tag">知识图谱</span>
+          </div>
+          <span class="slide-id">ADM-25b</span>
+        </div>
+        <div class="slide-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
+          <h2 class="slide-title" style="font-size:28.8px;margin-bottom:6px;align-self:flex-start;">演示：知识图谱效果页</h2>
+          <p style="font-size:15.6px;color:var(--brown-light);margin-bottom:20px;align-self:flex-start;">入口：左侧菜单 → 知识图谱 → 选择知识图谱 → 查看图谱可视化与搜索效果</p>
+          <img src="sga-training-slides-pic/slide27.png" alt="知识图谱效果页" style="max-width:90%;max-height:440px;object-fit:contain;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.12);">
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">A-M7 · 知识图谱</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 28: 创建知识图谱配置
+         ============================================================ -->
+    <section class="slide" data-index="30">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag">知识图谱</span>
+        </div>
+        <span class="slide-id">ADM-26 · ADM-27</span>
+      </div>
+      <div class="slide-body">
+        <h2 class="slide-title" style="font-size:33.6px;margin-bottom:14px;">创建知识图谱配置与授权验证</h2>
+        <div class="two-col">
+          <div>
+            <div class="card-title">必填字段</div>
+            <table class="data-table" style="font-size:15.6px;margin-bottom:12px;">
+              <tbody>
+                <tr><td><strong>名称</strong></td><td>例如：产品手册知识库</td></tr>
+                <tr><td><strong>描述</strong></td><td>例如：包含所有产品规格和使用说明</td></tr>
+                <tr><td><strong>RAGFlow 地址</strong></td><td>RAGFlow 服务的 API URL</td></tr>
+                <tr><td><strong>API 密钥</strong></td><td>RAGFlow 的访问密钥</td></tr>
+                <tr><td><strong>知识库 ID</strong></td><td>KB ID，在 RAGFlow 中查找</td></tr>
+              </tbody>
+            </table>
+            <div class="card-title" style="margin-top:4px;">建好后可查看的关键指标</div>
+            <ul class="bullet-list" style="font-size:15.6px;">
+              <li><strong>节点数</strong>：知识库里有多少知识实体</li>
+              <li><strong>关系数</strong>：知识实体之间有多少连接</li>
+              <li><strong>最后同步时间</strong>：上次从 RAGFlow 同步数据的时间</li>
+              <li><strong>最后错误</strong>：同步失败时的原因</li>
+            </ul>
+          </div>
+          <div>
+            <div class="card-title">演示步骤</div>
+            <ol class="step-list" style="font-size:16.8px;margin-bottom:14px;">
+              <li><span class="step-num">1</span>左侧菜单 → <strong>知识图谱</strong> → 点击「新建」</li>
+              <li><span class="step-num">2</span>填写名称和描述</li>
+              <li><span class="step-num">3</span>填写 RAGFlow 服务地址、API 密钥、KB ID</li>
+              <li><span class="step-num">4</span>点击「测试连接」→ 看到成功提示</li>
+              <li><span class="step-num">5</span>保存</li>
+            </ol>
+            <div class="card-title">授权与验证</div>
+            <ol class="step-list" style="font-size:16.8px;">
+              <li><span class="step-num">1</span>给张三授权「产品手册知识库」（用户详情）</li>
+              <li><span class="step-num">2</span>张三登录工作台，验证能看到知识图谱</li>
+              <li><span class="step-num">3</span>在对话中开启知识图谱，验证能搜索使用</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">A-M7 · 知识图谱</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 27: 上线验收清单
+         ============================================================ -->
+    <section class="slide" data-index="31">
+      <div class="accent-bar"></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="slide-header">
+          <div class="slide-header-left">
+            <span class="section-tag">上线验收</span>
+          </div>
+          <span class="slide-id">ADM-28 · ADM-29</span>
+        </div>
+        <div class="slide-body">
+          <h2 class="slide-title" style="font-size:33.6px;margin-bottom:14px;">上线验收清单</h2>
+          <div class="two-col">
+            <div>
+              <div class="card-title">管理员视角验收（逐项勾选）</div>
+              <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+                <div class="check-item"><div class="check-box"></div>公司名称和 Logo 已设置，顶部导航显示正常</div>
+                <div class="check-item"><div class="check-box"></div>所有部门已创建，启用状态正常</div>
+                <div class="check-item"><div class="check-box"></div>所有 Agent 已创建，连接测试通过，状态在线</div>
+                <div class="check-item"><div class="check-box"></div>所有用户账号已创建，部门分配正确，账号启用</div>
+                <div class="check-item"><div class="check-box"></div>关键用户已授权正确的 Agent</div>
+                <div class="check-item"><div class="check-box"></div>知识图谱已配置，连接测试通过（如启用）</div>
+                <div class="check-item"><div class="check-box"></div>关键用户已授权知识图谱（如启用）</div>
+              </div>
+            </div>
+            <div>
+              <div class="card-title">用户视角验收（最终确认）</div>
+              <ol class="step-list" style="font-size:16.8px;margin-bottom:16px;">
+                <li><span class="step-num">1</span>用一个普通用户账号登录（不要用管理员账号）</li>
+                <li><span class="step-num">2</span>进入工作台 <code>/workspace</code></li>
+                <li><span class="step-num">3</span>验证能看到被授权的 AI 助手</li>
+                <li><span class="step-num">4</span>点击助手，发一条测试消息，收到正常回复</li>
+                <li><span class="step-num">5</span>验证能看到被授权的知识图谱</li>
+              </ol>
+              <div class="callout tip" style="font-size:15.6px;">
+                验收标准很简单：<strong>普通用户能正常用，就算过了</strong>。从用户视角去看，而不是从后台配置去猜。
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">A-M8 · 上线验收</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 28: CHAPTER B — 普通用户操作手册
+         ============================================================ -->
+    <section class="slide slide-chapter" data-index="32">
+      <div class="chapter-number">B</div>
+      <div class="chapter-inner">
+        <div class="chapter-eyebrow">课件 B · 普通用户专场</div>
+        <h2 class="chapter-title">普通用户操作手册</h2>
+        <p class="chapter-desc">登录系统、找到 AI 助手、开始对话。<br>目标：让用户独立上手，30 分钟内完成第一次对话。</p>
+        <div style="margin-top:28px;display:flex;gap:12px;flex-wrap:wrap;">
+          <span class="badge user">首次登录</span>
+          <span class="badge user">认识工作台</span>
+          <span class="badge user">选择 AI 助手</span>
+          <span class="badge user">发送消息</span>
+          <span class="badge user">使用知识图谱</span>
+          <span class="badge user">历史对话</span>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">课件 B · 普通用户</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 29: 首次登录
+         ============================================================ -->
+    <section class="slide" data-index="33">
+      <div class="accent-bar" style="background:var(--green);"></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="slide-header">
+          <div class="slide-header-left">
+            <span class="section-tag" style="background:#EFF6F1;color:var(--green);border-color:rgba(74,124,89,0.25);">首次登录</span>
+          </div>
+          <span class="slide-id">USER-01</span>
+        </div>
+        <div class="slide-body">
+          <h2 class="slide-title" style="font-size:36px;margin-bottom:6px;">拿到账号后的第一步</h2>
+          <p style="font-size:16.8px;color:var(--brown-light);margin-bottom:16px;">🎯 用户能成功登录并进入工作台</p>
+          <div class="two-col">
+            <div>
+              <div class="card-title">你需要准备的信息</div>
+              <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+                <div class="card" style="padding:10px 14px;border-left:3px solid var(--green);">① 系统地址（例如 <code>http://ai.company.com</code>）</div>
+                <div class="card" style="padding:10px 14px;border-left:3px solid var(--green);">② 你的用户名</div>
+                <div class="card" style="padding:10px 14px;border-left:3px solid var(--green);">③ 初始密码（由管理员提供）</div>
+              </div>
+              <div class="card-title">如果登录失败</div>
+              <table class="data-table" style="font-size:15px;">
+                <thead><tr><th>错误提示</th><th>解决方式</th></tr></thead>
+                <tbody>
+                  <tr><td>用户名或密码错误</td><td>检查大小写，确认未用中文输入法</td></tr>
+                  <tr><td>账号已停用</td><td>联系管理员恢复账号</td></tr>
+                  <tr><td>页面加载不出来</td><td>确认网络可用、地址是否正确</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <div class="card-title">演示步骤</div>
+              <ol class="step-list" style="font-size:16.8px;">
+                <li><span class="step-num" style="background:var(--green);">1</span>打开浏览器，输入系统地址</li>
+                <li><span class="step-num" style="background:var(--green);">2</span>在「用户名」框输入账号</li>
+                <li><span class="step-num" style="background:var(--green);">3</span>在「密码」框输入初始密码</li>
+                <li><span class="step-num" style="background:var(--green);">4</span>点击「登录」</li>
+                <li><span class="step-num" style="background:var(--green);">5</span>看到工作台界面，登录成功</li>
+              </ol>
+              <div class="callout tip" style="margin-top:14px;font-size:15.6px;">
+                ✅ 第一次登录后建议修改初始密码：右上角用户头像 → 设置
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">B-M0 · 首次登录</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 30: 工作台界面介绍
+         ============================================================ -->
+    <section class="slide" data-index="34">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag" style="background:#EFF6F1;color:var(--green);border-color:rgba(74,124,89,0.25);">认识工作台</span>
+        </div>
+        <span class="slide-id">USER-02</span>
+      </div>
+      <div class="slide-body">
+        <h2 class="slide-title" style="font-size:36px;margin-bottom:16px;">工作台界面介绍</h2>
+        <div class="two-col">
+          <div>
+            <!-- Workspace mockup -->
+            <div style="background:#1C2B45;border-radius:10px;overflow:hidden;font-size:14.4px;font-family:var(--font-mono);">
+              <!-- topbar -->
+              <div style="background:rgba(0,0,0,0.3);padding:8px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.1);">
+                <span style="color:var(--orange-light);font-weight:600;">SGA Workspace</span>
+                <span style="color:rgba(250,248,245,0.5);">张三 ▾</span>
+              </div>
+              <div style="display:flex;height:180px;">
+                <!-- sidebar -->
+                <div style="width:140px;padding:10px;border-right:1px solid rgba(255,255,255,0.08);">
+                  <div style="color:rgba(250,248,245,0.4);font-size:12px;margin-bottom:8px;letter-spacing:0.1em;">AI 助手</div>
+                  <div style="background:rgba(212,82,42,0.25);border-radius:4px;padding:6px 8px;margin-bottom:4px;color:var(--orange-light);">销售助手组</div>
+                  <div style="padding:4px 8px;color:rgba(250,248,245,0.5);font-size:13.2px;margin-left:8px;">销售分析助手</div>
+                  <div style="padding:4px 8px;color:rgba(250,248,245,0.5);font-size:13.2px;margin-left:8px;">报价生成助手</div>
+                  <div style="padding:6px 8px;margin-bottom:4px;color:rgba(250,248,245,0.6);">技术支持组</div>
+                  <div style="margin-top:12px;border-top:1px solid rgba(255,255,255,0.08);padding-top:8px;color:rgba(250,248,245,0.4);font-size:12px;">知识图谱</div>
+                </div>
+                <!-- chat area -->
+                <div style="flex:1;padding:12px;display:flex;flex-direction:column;justify-content:flex-end;">
+                  <div style="background:rgba(255,255,255,0.07);border-radius:6px;padding:8px;color:rgba(250,248,245,0.6);font-size:13.2px;margin-bottom:6px;">销售分析助手：你好！请问有什么可以帮你的？</div>
+                  <div style="background:rgba(212,82,42,0.3);border-radius:6px;padding:8px;color:var(--orange-light);font-size:13.2px;text-align:right;">分析一下上个季度的销售数据</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;">
+            <ul class="bullet-list" style="font-size:18px;gap:12px;">
+              <li><strong>顶部导航</strong>：公司 Logo、用户名、设置入口</li>
+              <li><strong>左侧</strong>：你有权限的所有 AI 助手（按部门分组显示）</li>
+              <li><strong>右侧</strong>：当前对话的聊天界面</li>
+              <li><strong>左侧底部</strong>：知识图谱入口（管理员授权后可见）</li>
+            </ul>
+            <div class="callout warning" style="margin-top:16px;font-size:15.6px;margin-bottom:16px;">
+              如果左侧是空的，说明还没有授权给你任何助手，联系管理员即可。
+            </div>
+            <img src="sga-training-slides-pic/slide32.png" alt="工作台界面截图" style="width:100%;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,0.12);">
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">B-M1 · 认识工作台</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 31: 选择 AI 助手 + 发送消息
+         ============================================================ -->
+    <section class="slide" data-index="35">
+      <div class="accent-bar" style="background:var(--green);"></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="slide-header">
+          <div class="slide-header-left">
+            <span class="section-tag" style="background:#EFF6F1;color:var(--green);border-color:rgba(74,124,89,0.25);">使用助手</span>
+          </div>
+          <span class="slide-id">USER-03 · USER-04</span>
+        </div>
+        <div class="slide-body">
+          <div class="two-col" style="gap:28px;">
+            <div>
+              <h3 class="slide-title" style="font-size:26.4px;margin-bottom:10px;">找到并选择 AI 助手</h3>
+              <ul class="bullet-list" style="font-size:16.8px;margin-bottom:12px;">
+                <li>左侧列表按<strong>部门分组</strong>展示所有你有权限的助手</li>
+                <li>每个助手显示：头像、名字、职位描述、在线状态</li>
+                <li>绿色点 = 可用；灰色/红色点 = 暂时不可用（联系管理员）</li>
+              </ul>
+              <ol class="step-list" style="font-size:15.6px;">
+                <li><span class="step-num" style="background:var(--green);">1</span>在左侧找到目标助手（例如「销售分析助手」）</li>
+                <li><span class="step-num" style="background:var(--green);">2</span>点击助手卡片，右侧出现对话界面</li>
+                <li><span class="step-num" style="background:var(--green);">3</span>在底部输入框输入问题，按回车发送</li>
+                <li><span class="step-num" style="background:var(--green);">4</span>等待助手回复</li>
+              </ol>
+            </div>
+            <div style="display:flex;flex-direction:column;">
+              <h3 class="slide-title" style="font-size:26.4px;margin-bottom:10px;">发送消息与附件</h3>
+              <ul class="bullet-list" style="font-size:16.8px;margin-bottom:12px;">
+                <li><strong>发送文字</strong>：输入框输入内容，按<kbd style="background:var(--sand);padding:1px 5px;border-radius:3px;font-size:14.4px;">Enter</kbd>发送</li>
+                <li><strong>换行</strong>：按<kbd style="background:var(--sand);padding:1px 5px;border-radius:3px;font-size:14.4px;">Shift + Enter</kbd>（不发送）</li>
+                <li><strong>上传</strong>：点击输入框左侧的 📎 图标（支持 PDF、Word、TXT等）</li>
+              </ul>
+              <div class="callout" style="font-size:15.6px;margin-bottom:16px;">
+                💡 不是所有助手都支持上传文件——取决于背后的 AI 平台。如果上传后报错，该助手可能不支持文件输入。
+              </div>
+              <img src="sga-training-slides-pic/slide33.png" alt="AI 助手对话界面截图" style="width:100%;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,0.12);">
+            </div>
+          </div>
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">B-M1 · 认识工作台</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 32: 历史对话 + 知识图谱使用
+         ============================================================ -->
+    <section class="slide" data-index="36">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag" style="background:#EFF6F1;color:var(--green);border-color:rgba(74,124,89,0.25);">知识图谱 · 历史对话</span>
+        </div>
+        <span class="slide-id">USER-05 · USER-06 · USER-07</span>
+      </div>
+      <div class="slide-body">
+        <div class="two-col" style="gap:28px;">
+          <div>
+            <h3 class="slide-title" style="font-size:26.4px;margin-bottom:10px;">查看和管理历史对话</h3>
+            <ul class="bullet-list" style="font-size:16.8px;margin-bottom:12px;">
+              <li>每次与某个助手对话都会生成一个「会话」</li>
+              <li>历史会话显示在左侧面板（点击助手后展开）</li>
+              <li>点击历史会话：继续之前的对话</li>
+              <li>点击「新对话」按钮：开始全新空白对话</li>
+              <li>历史对话在服务器上保存，<strong>换设备登录也能看到</strong></li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="slide-title" style="font-size:26.4px;margin-bottom:10px;">在对话中使用知识图谱</h3>
+            <ul class="bullet-list" style="font-size:16.8px;margin-bottom:12px;">
+              <li>知识图谱 = 公司把自己的知识「喂给」AI 的方式</li>
+              <li>开启后，AI 会优先从<strong>公司资料</strong>里找答案</li>
+              <li>适合：查产品规格、了解公司政策、基于内部资料问答</li>
+              <li>AI 的回答会<strong>标注来源</strong>，点击可查看原始文档片段</li>
+            </ul>
+            <ol class="step-list" style="font-size:15.6px;">
+              <li><span class="step-num" style="background:var(--green);">1</span>选择一个 AI 助手，进入对话界面</li>
+              <li><span class="step-num" style="background:var(--green);">2</span>找到知识图谱开关并开启</li>
+              <li><span class="step-num" style="background:var(--green);">3</span>输入问题，观察 AI 回复中的来源标注</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">B-M2 · 知识图谱</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 33: 常用操作速查
+         ============================================================ -->
+    <section class="slide" data-index="37">
+      <div class="accent-bar" style="background:var(--green);"></div>
+      <div style="flex:1;display:flex;flex-direction:column;">
+        <div class="slide-header">
+          <div class="slide-header-left">
+            <span class="section-tag" style="background:#EFF6F1;color:var(--green);border-color:rgba(74,124,89,0.25);">实用技巧</span>
+          </div>
+          <span class="slide-id">USER-08</span>
+        </div>
+        <div class="slide-body">
+          <h2 class="slide-title" style="font-size:36px;margin-bottom:16px;">常用操作速查</h2>
+          <div class="two-col">
+            <table class="data-table">
+              <thead><tr><th>操作</th><th>方式</th></tr></thead>
+              <tbody>
+                <tr><td>开始新对话</td><td>点击「新对话」按钮</td></tr>
+                <tr><td>回到历史对话</td><td>点击左侧历史记录</td></tr>
+                <tr><td>上传文件</td><td>输入框旁的 📎 图标</td></tr>
+                <tr><td>换行（不发送）</td><td><kbd style="background:var(--sand);padding:1px 6px;border-radius:3px;">Shift</kbd> + <kbd style="background:var(--sand);padding:1px 6px;border-radius:3px;">Enter</kbd></td></tr>
+                <tr><td>发送消息</td><td><kbd style="background:var(--sand);padding:1px 6px;border-radius:3px;">Enter</kbd> 或点击发送按钮</td></tr>
+                <tr><td>复制 AI 回复</td><td>选中文字右键复制 / 点击复制图标</td></tr>
+                <tr><td>切换主题</td><td>右上角用户图标 → 设置 → 主题</td></tr>
+              </tbody>
+            </table>
+            <div>
+              <div class="card-title">遇到问题时怎么办</div>
+              <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;font-size:15.6px;">
+                <div class="card" style="padding:10px 14px;">
+                  <div style="font-weight:600;margin-bottom:4px;">AI 助手不回复 / 转圈</div>
+                  <div style="color:var(--brown-light);">等待 10–30 秒 → 刷新页面 → 仍无反应则联系管理员</div>
+                </div>
+                <div class="card" style="padding:10px 14px;">
+                  <div style="font-weight:600;margin-bottom:4px;">找不到某个助手</div>
+                  <div style="color:var(--brown-light);">确认在正确部门分组里找 → 联系管理员确认授权</div>
+                </div>
+                <div class="card" style="padding:10px 14px;">
+                  <div style="font-weight:600;margin-bottom:4px;">忘记密码</div>
+                  <div style="color:var(--brown-light);">无法自助重置，联系管理员重置密码</div>
+                </div>
+                <div class="card" style="padding:10px 14px;">
+                  <div style="font-weight:600;margin-bottom:4px;">登录后页面空白</div>
+                  <div style="color:var(--brown-light);"><kbd style="background:var(--sand);padding:0 4px;border-radius:3px;">Ctrl+Shift+R</kbd> 强制刷新 → 清除浏览器缓存</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="slide-footer">
+          <span class="footer-logo">SGA Workspace</span>
+          <span class="footer-chapter">B-M3 · 实用技巧</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 34: 附录 — 常见问题快速索引
+         ============================================================ -->
+    <section class="slide" data-index="38">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag">附录</span>
+        </div>
+        <span class="slide-id">APP-03</span>
+      </div>
+      <div class="slide-body">
+        <h2 class="slide-title" style="font-size:33.6px;margin-bottom:14px;">常见问题快速索引 <span style="font-size:16.8px;font-weight:300;color:var(--brown-light);">管理员处理指南</span></h2>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:240px;">用户反馈</th>
+              <th>管理员处理步骤</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>「我看不到任何 AI 助手」</td><td>检查该用户的 Agent 授权列表是否为空，前往用户详情添加授权</td></tr>
+            <tr><td>「某个助手不见了」</td><td>① 检查 Agent 是否被停用  ② 检查用户授权是否被撤销</td></tr>
+            <tr><td>「助手发消息没有回复」</td><td>进入 Agent 编辑页 → 点击「测试连接」→ 看错误信息</td></tr>
+            <tr><td>「我看不到知识图谱」</td><td>检查该用户的知识图谱授权列表，前往用户详情添加授权</td></tr>
+            <tr><td>「用户登录不进去」</td><td>检查账号是否被停用，或密码是否需要重置</td></tr>
+            <tr><td>新员工入职</td><td>创建账号 → 分配部门 → 授权 Agent + 知识图谱 → 告知用户账号密码</td></tr>
+            <tr><td>员工离职</td><td>进入用户管理 → 停用该账号（无需删除，保留历史记录）</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">附录</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 35: 附录 — 术语对照表
+         ============================================================ -->
+    <section class="slide" data-index="39">
+      <div class="slide-header">
+        <div class="slide-header-left">
+          <span class="section-tag">附录</span>
+        </div>
+        <span class="slide-id">APP-01 · APP-02</span>
+      </div>
+      <div class="slide-body">
+        <div class="two-col" style="gap:28px;">
+          <div>
+            <h3 class="slide-title" style="font-size:26.4px;margin-bottom:12px;">术语快速对照表</h3>
+            <table class="data-table">
+              <thead><tr><th>系统名词</th><th>通俗说法</th></tr></thead>
+              <tbody>
+                <tr><td>Agent / AI 助手</td><td>AI 机器人</td></tr>
+                <tr><td>部门</td><td>AI 助手的分组</td></tr>
+                <tr><td>知识图谱</td><td>公司知识库</td></tr>
+                <tr><td>授权</td><td>开通使用权限</td></tr>
+                <tr><td>工作台（/workspace）</td><td>用户的主页</td></tr>
+                <tr><td>管理后台（/admin）</td><td>管理员配置页面</td></tr>
+                <tr><td>连接测试</td><td>检查 AI 助手是否能用</td></tr>
+                <tr><td>停用</td><td>临时关闭（数据不删）</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <h3 class="slide-title" style="font-size:26.4px;margin-bottom:12px;">管理员上线核查清单</h3>
+            <div style="display:flex;flex-direction:column;gap:5px;font-size:15.6px;">
+              <div class="check-item"><div class="check-box"></div>公司名称已正确设置</div>
+              <div class="check-item"><div class="check-box"></div>公司 Logo 已上传并在导航栏显示正常</div>
+              <div class="check-item"><div class="check-box"></div>所有部门已创建，启用状态正常</div>
+              <div class="check-item"><div class="check-box"></div>所有 Agent 已创建，连接测试通过，状态在线</div>
+              <div class="check-item"><div class="check-box"></div>所有用户账号已创建，部门分配正确，账号启用</div>
+              <div class="check-item"><div class="check-box"></div>关键用户已完成 Agent 授权，用户侧验证可见</div>
+              <div class="check-item"><div class="check-box"></div>知识图谱已配置，连接测试通过（如启用）</div>
+              <div class="check-item"><div class="check-box"></div>关键用户已完成知识图谱授权（如启用）</div>
+              <div class="check-item"><div class="check-box"></div>用普通用户账号登录，完整体验一次对话流程</div>
+              <div class="check-item"><div class="check-box"></div>培训已完成，联系方式已告知用户</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span class="footer-logo">SGA Workspace</span>
+        <span class="footer-chapter">附录</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SLIDE 36: 结尾 THANK YOU
+         ============================================================ -->
+    <section class="slide slide-cover" data-index="40">
+      <div class="cover-grid"></div>
+      <div class="cover-inner">
+        <div class="cover-eyebrow">培训完成</div>
+        <h1 class="cover-title" style="font-size:62.4px;">感谢参与<br><br>使用培训</h1>
+        <p class="cover-subtitle">如有问题，请联系系统管理员</p>
+        <div class="cover-meta">
+          <div class="meta-item">管理员操作手册<span>课件 A · 共 20 页</span></div>
+          <div class="meta-item">用户操作手册<span>课件 B · 共 8 页</span></div>
+          <div class="meta-item">打印 PDF<span>浏览器 → 打印 → 另存为 PDF</span></div>
+        </div>
+      </div>
+    </section>
+
+  </div><!-- /slide-viewport -->
+</div><!-- /presentation -->
+
+<!-- Navigation -->
+<div id="nav">
+  <button class="nav-btn" id="btn-prev">←</button>
+  <span id="slide-counter">1 / 1</span>
+  <button class="nav-btn" id="btn-next">→</button>
+  <button class="nav-btn" id="btn-overview" title="概览" style="margin-left:8px;font-size:13.2px;">≡</button>
+</div>
+
+<script>
+// ── Slide data
+const slides = document.querySelectorAll('.slide');
+const total = slides.length;
+let current = 0;
+
+// ── Viewport scaling
+function scaleViewport() {
+  const vp = document.getElementById('slide-viewport');
+  const W = 1280, H = 720;
+  const scaleX = window.innerWidth / W;
+  const scaleY = window.innerHeight / H;
+  const scale = Math.min(scaleX, scaleY) * 0.96;
+  vp.style.transform = `scale(${scale})`;
+}
+scaleViewport();
+window.addEventListener('resize', scaleViewport);
+
+// ── Navigate
+function goTo(index) {
+  slides[current].classList.remove('active');
+  current = Math.max(0, Math.min(total - 1, index));
+  slides[current].classList.add('active');
+  document.getElementById('slide-counter').textContent = `${current + 1} / ${total}`;
+  const pct = ((current + 1) / total * 100).toFixed(1);
+  document.getElementById('progress-bar').style.width = pct + '%';
+}
+
+document.getElementById('btn-prev').addEventListener('click', () => goTo(current - 1));
+document.getElementById('btn-next').addEventListener('click', () => goTo(current + 1));
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); goTo(current + 1); }
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')  { e.preventDefault(); goTo(current - 1); }
+  if (e.key === 'Home') goTo(0);
+  if (e.key === 'End')  goTo(total - 1);
+});
+
+// ── Touch swipe
+let touchX = 0;
+document.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; });
+document.addEventListener('touchend',   e => {
+  const dx = e.changedTouches[0].clientX - touchX;
+  if (Math.abs(dx) > 50) goTo(dx < 0 ? current + 1 : current - 1);
+});
+
+// ── Init
+goTo(0);
+</script>
+
+</body>
+</html>

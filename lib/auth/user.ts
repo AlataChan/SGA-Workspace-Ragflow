@@ -10,6 +10,7 @@ export interface AuthUser {
   username: string
   companyId: string
   role: string
+  departmentId?: string | null
 }
 
 export async function verifyUserAuth(request: NextRequest): Promise<AuthUser | null> {
@@ -70,7 +71,8 @@ export async function verifyUserAuth(request: NextRequest): Promise<AuthUser | n
       userId: user.id,  // 别名
       username: user.username,
       companyId: user.companyId,
-      role: user.role
+      role: user.role,
+      departmentId: user.departmentId ?? null,
     }
 
   } catch (error) {
