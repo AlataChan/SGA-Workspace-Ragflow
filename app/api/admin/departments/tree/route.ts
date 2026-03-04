@@ -1,79 +1,90 @@
 /**
- * 部门树（按层级懒加载）API
- * GET /api/admin/departments/tree?parentId=xxx
+ * 部门树（全量）API
+ * GET /api/admin/departments/tree
  *
- * - 不传 parentId / parentId=__ROOT__：返回顶级部门（parentId=null）
- * - 传 parentId：返回该上级部门的直接子部门
- * - 返回轻量字段 + hasChildren（用于前端决定是否显示展开按钮）
+ * 返回：
+ * - companyId
+ * - departments：按 parentId 组装的树结构（每个节点含 children 数组）
+ *
+ * 说明：
+ * - 懒加载子节点请使用 `/api/admin/departments/children`
  */
 
 import { NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { withAdminAuth } from "@/lib/auth/middleware"
-import { z } from "zod"
-
-const querySchema = z.object({
-  parentId: z.string().trim().optional(),
-})
 
 export const GET = withAdminAuth(async (request) => {
   try {
     const user = request.user!
-    const url = new URL(request.url)
-    const parsed = querySchema.safeParse({ parentId: url.searchParams.get("parentId") ?? undefined })
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: { code: "VALIDATION_ERROR", message: "请求参数错误", details: parsed.error.flatten().fieldErrors } },
-        { status: 400 },
-      )
-    }
-
-    const raw = (parsed.data.parentId ?? "").trim()
-    const parentId = raw === "" || raw === "__ROOT__" ? null : raw
 
     const departments = await prisma.department.findMany({
-      where: {
-        companyId: user.companyId,
-        parentId,
-      },
+      where: { companyId: user.companyId },
       select: {
         id: true,
+        companyId: true,
         name: true,
         parentId: true,
         description: true,
         icon: true,
         sortOrder: true,
+        isActive: true,
         createdAt: true,
         updatedAt: true,
-        _count: { select: { children: true } },
       },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     })
 
-    const data = departments.map((d) => ({
-      id: d.id,
-      name: d.name,
-      parentId: d.parentId,
-      description: d.description,
-      icon: d.icon,
-      sortOrder: d.sortOrder,
-      createdAt: d.createdAt,
-      updatedAt: d.updatedAt,
-      hasChildren: (d._count?.children ?? 0) > 0,
-    }))
+    type DepartmentNode = (typeof departments)[number] & { children: DepartmentNode[]; isActive: boolean }
 
-    return NextResponse.json({ data, message: "获取部门树节点成功" })
+    const nodeById = new Map<string, DepartmentNode>()
+    for (const dept of departments) {
+      nodeById.set(dept.id, {
+        ...dept,
+        isActive: dept.isActive ?? true,
+        children: [],
+      })
+    }
+
+    const roots: DepartmentNode[] = []
+    for (const node of nodeById.values()) {
+      if (node.parentId && nodeById.has(node.parentId)) {
+        nodeById.get(node.parentId)!.children.push(node)
+      } else {
+        roots.push(node)
+      }
+    }
+
+    const sortTree = (nodes: DepartmentNode[]) => {
+      nodes.sort((a, b) => {
+        const diff = (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+        if (diff !== 0) return diff
+        return String(a.name).localeCompare(String(b.name), "zh-Hans-CN-u-co-pinyin")
+      })
+      for (const node of nodes) {
+        if (node.children.length > 0) sortTree(node.children)
+      }
+    }
+
+    sortTree(roots)
+
+    return NextResponse.json({
+      data: {
+        companyId: user.companyId,
+        departments: roots,
+      },
+      message: "获取部门树成功",
+    })
   } catch (error) {
-    console.error("获取部门树节点失败:", error)
+    console.error("获取部门树失败:", error)
     return NextResponse.json(
-      { error: { code: "INTERNAL_ERROR", message: "获取部门树节点失败" } },
+      { error: { code: "INTERNAL_ERROR", message: "获取部门树失败" } },
       { status: 500 },
     )
   } finally {
     await prisma.$disconnect()
   }
 })
-
 
 
 
