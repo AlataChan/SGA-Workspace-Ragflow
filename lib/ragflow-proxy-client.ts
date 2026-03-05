@@ -25,6 +25,26 @@ function deriveSessionNameFromFirstQuestion(question: string): string {
   return text.length > 30 ? `${text.slice(0, 30)}...` : text
 }
 
+/** @description 可自动重试的 HTTP 状态码（网关/服务器临时故障） */
+const RETRYABLE_STATUS_CODES = [502, 503, 504]
+
+/** @description 最大自动重试次数 */
+const MAX_RETRIES = 2
+
+/** @description 指数退避基础延迟（毫秒） */
+const RETRY_BASE_DELAY_MS = 1500
+
+/**
+ * @description 计算第 n 次重试的等待时间（指数退避 + 随机抖动）
+ * @param attempt - 当前重试次数（从 1 开始）
+ * @returns 毫秒级等待时间
+ */
+function retryDelay(attempt: number): number {
+  const base = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1)
+  const jitter = Math.random() * 500
+  return Math.min(base + jitter, 15_000)
+}
+
 export class RAGFlowProxyClient {
   private config: RAGFlowProxyConfig
   private sessionId: string | null = null
@@ -113,25 +133,46 @@ export class RAGFlowProxyClient {
         messageLength: message.length
       })
 
-      const response = await fetch(`/api/agents/${this.config.agentId}/ragflow`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'sendMessage',
-          userId: this.config.userId,
-          sessionId: this.sessionId,
-          sessionName,
-          question: message
-        }),
-        signal: this.currentController.signal
-      })
+      let response: Response | null = null
+      let lastErrorMsg = ''
 
-      if (!response.ok) {
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        if (attempt > 0) {
+          const delay = retryDelay(attempt)
+          console.log(`[RAGFlowProxy] 第 ${attempt}/${MAX_RETRIES} 次重试，等待 ${Math.round(delay)}ms`)
+          onMessage({ type: 'thinking', content: `网关超时，正在第 ${attempt} 次重试...` })
+          await new Promise(resolve => setTimeout(resolve, delay))
+
+          if (this.currentController?.signal.aborted) return
+        }
+
+        response = await fetch(`/api/agents/${this.config.agentId}/ragflow`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'sendMessage',
+            userId: this.config.userId,
+            sessionId: this.sessionId,
+            sessionName,
+            question: message
+          }),
+          signal: this.currentController!.signal
+        })
+
+        if (response.ok) break
+
         const errorData = await response.json().catch(() => ({}))
-        const errorMsg = errorData.error || `API 错误: ${response.status}`
-        console.error('[RAGFlowProxy] API 错误:', errorMsg)
+        lastErrorMsg = errorData.error || errorData.message || `API 错误: ${response.status}`
+        console.warn(`[RAGFlowProxy] 请求失败 (HTTP ${response.status}):`, lastErrorMsg)
+
+        if (!RETRYABLE_STATUS_CODES.includes(response.status)) break
+      }
+
+      if (!response || !response.ok) {
+        const errorMsg = lastErrorMsg || '发送消息失败'
+        console.error('[RAGFlowProxy] API 错误（重试已用尽）:', errorMsg)
         onError?.(errorMsg)
         onMessage({ type: 'error', content: errorMsg })
         return
