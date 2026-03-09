@@ -18,7 +18,9 @@ COPY package.json package-lock.json* .npmrc* ./
 
 RUN --mount=type=cache,target=/root/.npm \
     npm ci
-
+    
+# 确保安装 sharp 的可选依赖（Next 构建图片时需要）
+RUN npm install --include=optional sharp
 ############################################
 # Build stage
 ############################################
