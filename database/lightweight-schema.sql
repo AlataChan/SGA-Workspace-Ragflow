@@ -187,6 +187,38 @@ CREATE TABLE user_knowledge_graph_permissions (
     CONSTRAINT "userId_knowledgeGraphId" UNIQUE (user_id, knowledge_graph_id)
 );
 
+-- 用户知识图谱权限撤销表（用于审计/临时禁用等场景）
+CREATE TABLE user_knowledge_graph_permission_revocations (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    knowledge_graph_id TEXT NOT NULL REFERENCES knowledge_graphs(id) ON DELETE CASCADE,
+
+    revoked_by TEXT NOT NULL,
+    revoked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    reason TEXT,
+
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    expires_at TIMESTAMPTZ,
+
+    CONSTRAINT "unique_user_knowledge_graph_revocation" UNIQUE (user_id, knowledge_graph_id)
+);
+
+-- 知识图谱按部门授权表（支持授权部门及其子部门）
+CREATE TABLE knowledge_graph_department_grants (
+    id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    knowledge_graph_id TEXT NOT NULL REFERENCES knowledge_graphs(id) ON DELETE CASCADE,
+    department_id TEXT NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+    include_sub_departments BOOLEAN NOT NULL DEFAULT true,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+
+    created_by TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT "unique_kg_department_grant" UNIQUE (knowledge_graph_id, department_id)
+);
+
 -- ===========================================
 -- 临时知识库（用户侧）表
 -- ===========================================
@@ -291,6 +323,9 @@ CREATE INDEX idx_agent_department_grant_company_agent ON agent_department_grants
 CREATE INDEX idx_agent_department_grant_company_department ON agent_department_grants(company_id, department_id);
 CREATE INDEX idx_user_kg_permissions_user_id ON user_knowledge_graph_permissions(user_id);
 CREATE INDEX idx_user_kg_permissions_kg_id ON user_knowledge_graph_permissions(knowledge_graph_id);
+CREATE INDEX idx_user_kg_revocation_kg_active ON user_knowledge_graph_permission_revocations(knowledge_graph_id, is_active);
+CREATE INDEX idx_kg_department_grant_company_kg ON knowledge_graph_department_grants(company_id, knowledge_graph_id);
+CREATE INDEX idx_kg_department_grant_company_department ON knowledge_graph_department_grants(company_id, department_id);
 
 -- 知识图谱相关索引
 CREATE INDEX idx_knowledge_graphs_company_id ON knowledge_graphs(company_id);
@@ -330,6 +365,7 @@ CREATE TRIGGER update_departments_updated_at BEFORE UPDATE ON departments FOR EA
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_agents_updated_at BEFORE UPDATE ON agents FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_agent_department_grants_updated_at BEFORE UPDATE ON agent_department_grants FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_knowledge_graph_department_grants_updated_at BEFORE UPDATE ON knowledge_graph_department_grants FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_knowledge_graphs_updated_at BEFORE UPDATE ON knowledge_graphs FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_chat_sessions_updated_at BEFORE UPDATE ON chat_sessions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_user_temp_knowledge_bases_updated_at BEFORE UPDATE ON user_temp_knowledge_bases FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

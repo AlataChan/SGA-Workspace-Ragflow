@@ -14,8 +14,10 @@ model Company {
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
   agents          Agent[]
+  agentDepartmentGrants AgentDepartmentGrant[]
   departments     Department[]
   knowledgeGraphs KnowledgeGraph[]
+  knowledgeGraphDepartmentGrants KnowledgeGraphDepartmentGrant[]
   users           User[]
 
   @@map("companies")
@@ -36,6 +38,7 @@ model Department {
 
   agents                Agent[]
   agentDepartmentGrants AgentDepartmentGrant[]
+  knowledgeGraphDepartmentGrants KnowledgeGraphDepartmentGrant[]
   company               Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
   users                 User[]
 
@@ -77,7 +80,9 @@ model User {
   sessions                      ChatSession[]
   uploadedFiles                 UploadedFile[]
   agentPermissions              UserAgentPermission[]
+  agentPermissionRevocations    UserAgentPermissionRevocation[]
   knowledgeGraphPermissions     UserKnowledgeGraphPermission[]
+  knowledgeGraphPermissionRevocations UserKnowledgeGraphPermissionRevocation[]
   tempKnowledgeBase             UserTempKnowledgeBase?
   company                       Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   department                    Department?                   @relation(fields: [departmentId], references: [id])
@@ -112,6 +117,8 @@ model Agent {
   department         Department            @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   sessions           ChatSession[]
   userPermissions    UserAgentPermission[]
+  userPermissionRevocations UserAgentPermissionRevocation[]
+  departmentGrants   AgentDepartmentGrant[]
 
   @@map("agents")
 }
@@ -129,6 +136,42 @@ model UserAgentPermission {
   @@map("user_agent_permissions")
 }
 
+model UserAgentPermissionRevocation {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  agentId   String   @map("agent_id")
+  revokedBy String   @map("revoked_by")
+  revokedAt DateTime @default(now()) @map("revoked_at")
+  reason    String?
+  isActive  Boolean  @default(true) @map("is_active")
+  expiresAt DateTime? @map("expires_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, agentId], name: "unique_user_agent_revocation")
+  @@map("user_agent_permission_revocations")
+}
+
+model AgentDepartmentGrant {
+  id                    String   @id @default(cuid())
+  companyId             String   @map("company_id")
+  agentId               String   @map("agent_id")
+  departmentId          String   @map("department_id")
+  includeSubDepartments Boolean  @default(true) @map("include_sub_departments")
+  isActive              Boolean  @default(true) @map("is_active")
+  createdBy             String   @map("created_by")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  company               Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  agent                 Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  department            Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, departmentId], name: "unique_agent_department_grant")
+  @@map("agent_department_grants")
+}
+
 model UserKnowledgeGraphPermission {
   id                String         @id @default(cuid())
   userId            String         @map("user_id")
@@ -140,6 +183,42 @@ model UserKnowledgeGraphPermission {
 
   @@unique([userId, knowledgeGraphId], name: "userId_knowledgeGraphId")
   @@map("user_knowledge_graph_permissions")
+}
+
+model UserKnowledgeGraphPermissionRevocation {
+  id               String   @id @default(cuid())
+  userId           String   @map("user_id")
+  knowledgeGraphId String   @map("knowledge_graph_id")
+  revokedBy        String   @map("revoked_by")
+  revokedAt        DateTime @default(now()) @map("revoked_at")
+  reason           String?
+  isActive         Boolean  @default(true) @map("is_active")
+  expiresAt        DateTime? @map("expires_at")
+
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  knowledgeGraph   KnowledgeGraph @relation(fields: [knowledgeGraphId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, knowledgeGraphId], name: "unique_user_knowledge_graph_revocation")
+  @@map("user_knowledge_graph_permission_revocations")
+}
+
+model KnowledgeGraphDepartmentGrant {
+  id                    String   @id @default(cuid())
+  companyId             String   @map("company_id")
+  knowledgeGraphId      String   @map("knowledge_graph_id")
+  departmentId          String   @map("department_id")
+  includeSubDepartments Boolean  @default(true) @map("include_sub_departments")
+  isActive              Boolean  @default(true) @map("is_active")
+  createdBy             String   @map("created_by")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  company               Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  knowledgeGraph        KnowledgeGraph @relation(fields: [knowledgeGraphId], references: [id], onDelete: Cascade)
+  department            Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([knowledgeGraphId, departmentId], name: "unique_kg_department_grant")
+  @@map("knowledge_graph_department_grants")
 }
 
 model ChatSession {
@@ -203,6 +282,8 @@ model KnowledgeGraph {
   updatedAt         DateTime                       @updatedAt @map("updated_at")
   company           Company                        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   userPermissions   UserKnowledgeGraphPermission[]
+  userPermissionRevocations UserKnowledgeGraphPermissionRevocation[]
+  departmentGrants  KnowledgeGraphDepartmentGrant[]
 
   @@unique([companyId, name], name: "companyId_name")
   @@map("knowledge_graphs")
