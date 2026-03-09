@@ -16,9 +16,11 @@ FROM base AS deps
 
 COPY package.json package-lock.json* .npmrc* ./
 
+RUN npm config set registry https://registry.npmmirror.com/
+
 RUN --mount=type=cache,target=/root/.npm \
     npm ci
-    
+
 # 确保安装 sharp 的可选依赖（Next 构建图片时需要）
 RUN npm install --include=optional sharp
 ############################################
