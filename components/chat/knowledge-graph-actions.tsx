@@ -60,20 +60,11 @@ export default function KnowledgeGraphActions(props: {
     }
   }, [isDialogOpen]);
 
-  const getAuthToken = () => {
-    const token = localStorage.getItem("auth-token");
-    if (!token) throw new Error("未登录");
-    return token;
-  };
-
   const saveChunkOnce = async () => {
-    const token = getAuthToken();
-
     const response = await fetch("/api/temp-kb/chunks", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
         content: cleanedContent,
@@ -82,6 +73,10 @@ export default function KnowledgeGraphActions(props: {
         agentId,
       }),
     });
+
+    if (response.status === 401) {
+      throw new Error("未登录");
+    }
 
     const result = await response.json();
     if (!result?.success || !result?.data?.chunkId) {
@@ -98,12 +93,20 @@ export default function KnowledgeGraphActions(props: {
   };
 
   const triggerBuildGraph = async () => {
-    const token = getAuthToken();
+    const response = await fetch(
+      "/api/temp-kb/graph",
+      agentId
+        ? {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ agentId }),
+          }
+        : { method: "POST" },
+    );
 
-    const response = await fetch("/api/temp-kb/graph", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    if (response.status === 401) {
+      throw new Error("未登录");
+    }
 
     const result = await response.json();
     if (!result?.success) {
@@ -112,11 +115,11 @@ export default function KnowledgeGraphActions(props: {
   };
 
   const pollBuildStatus = async () => {
-    const token = getAuthToken();
-
     const response = await fetch("/api/temp-kb/graph/status", {
-      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-cache",
     });
+
+    if (response.status === 401) return { done: true, ok: false };
 
     const result = await response.json();
     if (!result?.success || !result?.data?.status) return { done: false };
@@ -221,7 +224,12 @@ export default function KnowledgeGraphActions(props: {
             {dialogMode === "preview" ? (
               <KnowledgeGraphView height={560} />
             ) : (
-              <TempKbPanel className="border-0 shadow-none h-full" compact defaultTab="graph" />
+              <TempKbPanel
+                className="border-0 shadow-none h-full"
+                compact
+                defaultTab="graph"
+                agentId={agentId}
+              />
             )}
           </div>
         </DialogContent>

@@ -4,6 +4,7 @@
  */
 
 import { normalizeRagflowContent } from "./ragflow-utils";
+import { mergeRagflowStreamingText } from "./ragflow-streaming";
 
 export interface RAGFlowConfig {
   baseUrl: string
@@ -235,8 +236,8 @@ export class RAGFlowBlockingClient {
                     continue
                   }
 
-                  // RAGFlow 返回的是累积的完整内容，直接使用
-                  fullContent = normalizedContent
+                  // RAGFlow SSE 可能是“增量片段”或“累计全文”，统一做一次去重合并，避免只剩尾段或全文翻倍
+                  fullContent = mergeRagflowStreamingText(fullContent, normalizedContent)
 
                   console.log('[RAGFlowBlocking] 收到流式内容:', {
                     contentLength: fullContent.length,

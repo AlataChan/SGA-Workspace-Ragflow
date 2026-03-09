@@ -39,6 +39,7 @@ import {
   normalizeRagflowContent,
   stripRagflowInlineReferenceMarkers
 } from '@/lib/ragflow-utils'
+import { formatChatTimestamp } from "@/lib/utils/format-chat-timestamp"
 import TempKbDialog from '@/components/temp-kb/temp-kb-dialog'
 import KnowledgeGraphActions from '@/components/chat/knowledge-graph-actions'
 import { useRouter } from "next/navigation"
@@ -1478,12 +1479,10 @@ export default function EnhancedChatWithSidebar({
   const upsertLocalChatSession = async (sessionId: string, sessionName: string) => {
     if (!agentConfig?.localAgentId) return
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null
       await fetch('/api/chat-sessions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
           id: sessionId,
@@ -1504,12 +1503,10 @@ export default function EnhancedChatWithSidebar({
   ) => {
     if (!agentConfig?.localAgentId) return
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null
       await fetch(`/api/chat-sessions/${encodeURIComponent(sessionId)}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
         body: JSON.stringify({ role, content, metadata })
       })
@@ -1520,13 +1517,9 @@ export default function EnhancedChatWithSidebar({
 
   const loadLocalAssistantReferences = async (sessionId: string): Promise<Map<string, any>> => {
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null
       const resp = await fetch(`/api/chat-sessions/${encodeURIComponent(sessionId)}/messages`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
+        headers: { 'Content-Type': 'application/json' }
       })
       if (!resp.ok) return new Map()
       const data = await resp.json().catch(() => ({}))
@@ -3067,7 +3060,11 @@ export default function EnhancedChatWithSidebar({
                                   content: message.content,
                                   safeContent: rawContent
                                 })}
-                                <TypewriterEffect content={streamingAnswer} speed={20} />
+                                {agentConfig?.platform === 'RAGFLOW' ? (
+                                  <SimpleContentRenderer content={streamingAnswer} />
+                                ) : (
+                                  <TypewriterEffect content={streamingAnswer} speed={20} />
+                                )}
                               </>
                             )
                           ) : (
@@ -3167,14 +3164,7 @@ export default function EnhancedChatWithSidebar({
 
                         {/* 时间戳 */}
                         <div className={`text-xs text-muted-foreground/70 mt-2 ${isUser ? 'text-right' : 'text-left'}`}>
-                          {message.timestamp && !isNaN(message.timestamp)
-                            ? new Date(message.timestamp).toLocaleTimeString('zh-CN', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: false
-                            })
-                            : '刚刚'
-                          }
+                          {formatChatTimestamp(message.timestamp)}
                         </div>
                         {/* RAGFlow 引用卡片 */}
                         {message.reference && agentConfig?.platform === 'RAGFLOW' && (

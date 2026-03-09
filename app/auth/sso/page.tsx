@@ -16,9 +16,15 @@ import Link from 'next/link'
 function SSOAuthContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
+  const [status, setStatus] = useState<'loading' | 'success' | 'error' | 'confirm'>('loading')
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)
+  const [ticket, setTicket] = useState<string | null>(null)
+  const [activeSession, setActiveSession] = useState<{
+    lastSeenAt?: string
+    ip?: string
+    userAgent?: string
+  } | null>(null)
   const isAuthenticatingRef = useRef(false)
 function getSafeRedirect(raw: string | null): string | null {
   if (!raw) return null
@@ -43,9 +49,9 @@ function isMobileViewport(): boolean {
       return
     }
 
-    const ticket = searchParams.get('ticket')
+    const ticketFromUrl = searchParams.get('ticket')
 
-    if (!ticket) {
+    if (!ticketFromUrl) {
       setStatus('error')
       setError('缺少认证凭证（ticket），请从i国贸客户端打开')
       return
@@ -55,7 +61,8 @@ function isMobileViewport(): boolean {
     isAuthenticatingRef.current = true
     
     // 开始 SSO 认证
-    authenticateWithSSO(ticket)
+    setTicket(ticketFromUrl)
+    authenticateWithSSO(ticketFromUrl)
   }, [searchParams])
 
   // 模拟进度条
@@ -68,17 +75,18 @@ function isMobileViewport(): boolean {
     }
   }, [progress, status])
 
-  async function authenticateWithSSO(ticket: string) {
+  async function authenticateWithSSO(ticket: string, confirmReplace?: boolean) {
     try {
       console.log('[SSO Page] 开始 SSO 认证', { ticket: ticket.substring(0, 8) + '...' })
       setProgress(20)
+      setActiveSession(null)
 
       const response = await fetch('/api/auth/sso', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ ticket }),
+        body: JSON.stringify({ ticket, ...(confirmReplace ? { confirmReplace: true } : {}) }),
       })
 
       setProgress(60)
@@ -87,7 +95,14 @@ function isMobileViewport(): boolean {
 
       setProgress(80)
 
-      if (!result.success) {
+      if (response.status === 409 && result?.error?.code === "SESSION_EXISTS") {
+        setStatus("confirm")
+        setActiveSession(result?.data?.activeSession ?? null)
+        setError(result.error?.message || "已有会话在用")
+        return
+      }
+
+      if (!response.ok || !result.success) {
         console.error('[SSO Page] SSO 认证失败', result.error)
         setStatus('error')
         setError(result.error?.message || 'SSO 认证失败')
@@ -104,7 +119,6 @@ function isMobileViewport(): boolean {
       // 保存用户信息和 token
       if (typeof window !== 'undefined') {
         localStorage.setItem('user', JSON.stringify(result.data.user))
-        localStorage.setItem('auth-token', result.data.token)
       }
 
       setStatus('success')
@@ -195,6 +209,49 @@ function isMobileViewport(): boolean {
     )
   }
 
+  if (status === "confirm") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-amber-900 to-orange-900 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-slate-800/50 backdrop-blur-xl rounded-2xl p-8 border border-amber-500/20">
+          <div className="mx-auto w-20 h-20 bg-gradient-to-br from-amber-500 to-orange-500 rounded-full flex items-center justify-center mb-6">
+            <AlertCircle className="w-10 h-10 text-white" />
+          </div>
+
+          <h1 className="text-2xl font-bold text-white text-center mb-4">已有会话在用</h1>
+
+          <Alert className="mb-6 bg-amber-500/10 border-amber-500/30">
+            <AlertCircle className="h-4 w-4 text-amber-200" />
+            <AlertDescription className="text-amber-200">
+              {error || "当前账号已有一个有效会话。继续登录将撤销旧会话并让旧登录登出。"}
+              {activeSession?.lastSeenAt ? (
+                <div className="mt-2 text-xs text-slate-300">
+                  上次活跃时间：{new Date(activeSession.lastSeenAt).toLocaleString()}
+                </div>
+              ) : null}
+            </AlertDescription>
+          </Alert>
+
+          <div className="space-y-3">
+            <Button onClick={() => router.push("/auth/login")} variant="secondary" className="w-full">
+              取消
+            </Button>
+            <Button
+              onClick={() => {
+                if (!ticket) return
+                setStatus("loading")
+                setProgress(0)
+                authenticateWithSSO(ticket, true)
+              }}
+              className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500"
+            >
+              继续登录
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // 错误状态
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-red-900 to-rose-900 flex items-center justify-center p-4">
@@ -252,7 +309,3 @@ export default function SSOAuthPage() {
     </Suspense>
   )
 }
-
-
-
-

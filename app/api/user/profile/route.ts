@@ -7,8 +7,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withAuth } from '@/lib/auth/middleware'
+import { hashPassword, verifyPassword, validatePasswordStrength } from '@/lib/auth/password'
+import { writeAuditEvent } from '@/lib/security/audit-events'
+import { enforceSameOrigin } from '@/lib/security/origin-check'
 import { z } from 'zod'
-import bcrypt from 'bcryptjs'
 import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 
 // CORS headers
@@ -32,7 +34,7 @@ const updateProfileSchema = z.object({
   position: z.string().max(100, "职位过长").optional(),
   avatarUrl: z.string().optional(),
   currentPassword: z.string().optional(),
-  newPassword: z.string().min(6, "新密码至少6位").optional(),
+  newPassword: z.string().min(8, "新密码至少8位").optional(),
 })
 
 // GET /api/user/profile - 获取个人信息
@@ -125,6 +127,9 @@ export const GET = withAuth(async (request) => {
 // PUT /api/user/profile - 更新个人信息
 export const PUT = withAuth(async (request) => {
   try {
+    const originBlocked = enforceSameOrigin(request)
+    if (originBlocked) return originBlocked
+
     const user = request.user!
     const body = await request.json()
 
@@ -145,8 +150,51 @@ export const PUT = withAuth(async (request) => {
 
     const updateData = validationResult.data
 
-    // 如果要修改密码，验证当前密码
-    if (updateData.newPassword && updateData.currentPassword) {
+    const currentPassword = updateData.currentPassword === '' ? undefined : updateData.currentPassword
+    const newPassword = updateData.newPassword === '' ? undefined : updateData.newPassword
+
+    const wantsPasswordChange = currentPassword !== undefined || newPassword !== undefined
+
+    if (wantsPasswordChange) {
+      if (!newPassword) {
+        return NextResponse.json(
+          {
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: '修改密码需要提供 newPassword',
+            }
+          },
+          { status: 400, headers: corsHeaders }
+        )
+      }
+
+      const passwordStrength = validatePasswordStrength(newPassword)
+      if (!passwordStrength.isValid) {
+        return NextResponse.json(
+          {
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: '请求参数错误',
+              details: {
+                newPassword: passwordStrength.errors,
+              }
+            }
+          },
+          { status: 400, headers: corsHeaders }
+        )
+      }
+    }
+
+    // 准备更新数据
+    const updateFields: any = {}
+    if (updateData.chineseName !== undefined) updateFields.chineseName = updateData.chineseName
+    if (updateData.englishName !== undefined) updateFields.englishName = updateData.englishName
+    if (updateData.email !== undefined) updateFields.email = updateData.email
+    if (updateData.phone !== undefined) updateFields.phone = updateData.phone
+    if (updateData.position !== undefined) updateFields.position = updateData.position
+    if (updateData.avatarUrl !== undefined) updateFields.avatarUrl = updateData.avatarUrl
+
+    if (wantsPasswordChange) {
       const currentUser = await prisma.user.findUnique({
         where: { id: user.userId }, // 使用id字段
         select: { passwordHash: true }
@@ -164,34 +212,37 @@ export const PUT = withAuth(async (request) => {
         )
       }
 
-      // 验证当前密码
-      const isCurrentPasswordValid = await bcrypt.compare(updateData.currentPassword, currentUser.passwordHash)
-      if (!isCurrentPasswordValid) {
-        return NextResponse.json(
-          {
-            error: {
-              code: 'INVALID_PASSWORD',
-              message: '当前密码不正确'
-            }
-          },
-          { status: 400, headers: corsHeaders }
-        )
+      const hasPassword = Boolean(currentUser.passwordHash)
+
+      if (hasPassword) {
+        if (!currentPassword) {
+          return NextResponse.json(
+            {
+              error: {
+                code: 'VALIDATION_ERROR',
+                message: '修改密码需要提供 currentPassword',
+              }
+            },
+            { status: 400, headers: corsHeaders }
+          )
+        }
+
+        const isCurrentPasswordValid = await verifyPassword(currentPassword, currentUser.passwordHash)
+        if (!isCurrentPasswordValid) {
+          return NextResponse.json(
+            {
+              error: {
+                code: 'INVALID_PASSWORD',
+                message: '当前密码不正确'
+              }
+            },
+            { status: 400, headers: corsHeaders }
+          )
+        }
       }
 
-      // 加密新密码
-      const hashedNewPassword = await bcrypt.hash(updateData.newPassword, 12)
-      updateData.newPassword = hashedNewPassword
+      updateFields.passwordHash = await hashPassword(newPassword!)
     }
-
-    // 准备更新数据
-    const updateFields: any = {}
-    if (updateData.chineseName !== undefined) updateFields.chineseName = updateData.chineseName
-    if (updateData.englishName !== undefined) updateFields.englishName = updateData.englishName
-    if (updateData.email !== undefined) updateFields.email = updateData.email
-    if (updateData.phone !== undefined) updateFields.phone = updateData.phone
-    if (updateData.position !== undefined) updateFields.position = updateData.position
-    if (updateData.avatarUrl !== undefined) updateFields.avatarUrl = updateData.avatarUrl
-    if (updateData.newPassword) updateFields.passwordHash = updateData.newPassword
 
     // 更新用户信息
     const updatedUser = await prisma.user.update({
@@ -219,6 +270,16 @@ export const PUT = withAuth(async (request) => {
         }
       }
     })
+
+    if (wantsPasswordChange) {
+      await writeAuditEvent({
+        companyId: user.companyId,
+        actorUserId: user.userId,
+        targetUserId: user.userId,
+        eventType: 'AUTH_PASSWORD_CHANGED_SELF',
+        result: 'SUCCESS',
+      })
+    }
 
     const storedAvatarValue = updatedUser.avatarUrl
     const signedAvatarUrl = await resolveImageDisplayUrl(storedAvatarValue)

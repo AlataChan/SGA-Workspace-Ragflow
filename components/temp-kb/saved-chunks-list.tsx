@@ -44,16 +44,13 @@ export default function SavedChunksList({
     setError(null)
 
     try {
-      const token = localStorage.getItem('auth-token')
-      if (!token) {
+      const response = await fetch('/api/temp-kb/chunks', {
+        headers: { 'Content-Type': 'application/json' }
+      })
+
+      if (response.status === 401) {
         throw new Error('未登录')
       }
-
-      const response = await fetch('/api/temp-kb/chunks', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
 
       const result = await response.json()
 
@@ -90,17 +87,13 @@ export default function SavedChunksList({
     setDeletingId(chunkId)
 
     try {
-      const token = localStorage.getItem('auth-token')
-      if (!token) {
-        throw new Error('未登录')
-      }
-
       const response = await fetch(`/api/temp-kb/chunks/${chunkId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
       })
+
+      if (response.status === 401) {
+        throw new Error('未登录')
+      }
 
       const result = await response.json()
 

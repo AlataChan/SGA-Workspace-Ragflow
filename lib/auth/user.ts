@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server"
-import { PrismaClient } from "@prisma/client"
-import jwt from "jsonwebtoken"
-
-const prisma = new PrismaClient()
+import { UserRole } from "@prisma/client"
+import prisma from "@/lib/prisma"
+import { extractTokenFromHeader, verifyToken } from "./jwt"
+import { validateAuthSessionForJwtPayload } from "./auth-session"
 
 export interface AuthUser {
   id: string
@@ -17,8 +17,7 @@ export async function verifyUserAuth(request: NextRequest): Promise<AuthUser | n
   try {
     // 从Cookie或Authorization头获取token
     const cookieToken = request.cookies.get('auth-token')?.value
-    const authHeader = request.headers.get('authorization')
-    const headerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null
+    const headerToken = extractTokenFromHeader(request.headers.get('authorization'))
     
     const token = cookieToken || headerToken
     
@@ -26,18 +25,24 @@ export async function verifyUserAuth(request: NextRequest): Promise<AuthUser | n
       return null
     }
 
-    // 验证JWT token
-    let decoded: any
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key')
-    } catch (error) {
-      console.error('JWT验证失败:', error)
+    const payload = verifyToken(token)
+    if (!payload || !payload.sessionId) {
+      return null
+    }
+
+    const session = await validateAuthSessionForJwtPayload({
+      sessionId: payload.sessionId,
+      userId: payload.userId,
+      companyId: payload.companyId,
+    })
+
+    if (!session) {
       return null
     }
 
     // 从数据库获取用户信息
     const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
+      where: { id: payload.userId },
       select: {
         id: true,
         username: true,
@@ -57,8 +62,12 @@ export async function verifyUserAuth(request: NextRequest): Promise<AuthUser | n
       return null
     }
 
+    if (user.companyId !== payload.companyId) {
+      return null
+    }
+
     if (
-      user.role !== 'ADMIN'
+      user.role !== UserRole.ADMIN
       && user.departmentId
       && user.department
       && !user.department.isActive

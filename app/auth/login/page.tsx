@@ -9,6 +9,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Loader2, AlertCircle, Eye, EyeOff } from "lucide-react"
 import { logger } from "@/lib/utils/simple-logger"
 
@@ -31,6 +41,12 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
+  const [sessionExistsOpen, setSessionExistsOpen] = useState(false)
+  const [activeSession, setActiveSession] = useState<{
+    lastSeenAt?: string
+    ip?: string
+    userAgent?: string
+  } | null>(null)
 
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -43,6 +59,56 @@ function LoginForm() {
     }
   }, [searchParams])
 
+  const performLogin = async (confirmReplace?: boolean) => {
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...formData,
+        ...(confirmReplace ? { confirmReplace: true } : {}),
+      }),
+    })
+
+    const result = await response.json().catch(() => ({}))
+
+    if (response.status === 409 && result?.error?.code === "SESSION_EXISTS") {
+      setActiveSession(result?.data?.activeSession ?? null)
+      setSessionExistsOpen(true)
+      return
+    }
+
+    if (!response.ok) {
+      const errorMessage = result.error?.message || "登录失败"
+      throw new Error(errorMessage)
+    }
+
+    console.log("登录成功", {
+      identifier: formData.identifier,
+      userId: result.data.user.id,
+      role: result.data.user.role,
+    })
+
+    // 存储用户信息（不再存储 token）
+    if (typeof window !== "undefined") {
+      localStorage.setItem("user", JSON.stringify(result.data.user))
+
+      // 记住登录信息
+      if (formData.rememberMe) {
+        localStorage.setItem("remembered_identifier", formData.identifier)
+        localStorage.setItem("remembered_type", formData.type)
+      } else {
+        localStorage.removeItem("remembered_identifier")
+        localStorage.removeItem("remembered_type")
+      }
+    }
+
+    // 重定向到工作空间
+    const redirectTo = searchParams.get("redirect") || "/workspace"
+    router.push(redirectTo)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -53,46 +119,7 @@ function LoginForm() {
 
     try {
       console.log("用户登录尝试", { identifier: formData.identifier, type: formData.type })
-
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        const errorMessage = result.error?.message || "登录失败"
-        throw new Error(errorMessage)
-      }
-
-      console.log("登录成功", {
-        identifier: formData.identifier,
-        userId: result.data.user.id,
-        role: result.data.user.role
-      })
-
-      // 存储用户信息
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('user', JSON.stringify(result.data.user))
-        localStorage.setItem('auth-token', result.data.token) // 修复token名称
-
-        // 记住登录信息
-        if (formData.rememberMe) {
-          localStorage.setItem('remembered_identifier', formData.identifier)
-          localStorage.setItem('remembered_type', formData.type)
-        } else {
-          localStorage.removeItem('remembered_identifier')
-          localStorage.removeItem('remembered_type')
-        }
-      }
-
-      // 重定向到工作空间
-      const redirectTo = searchParams.get("redirect") || "/workspace"
-      router.push(redirectTo)
+      await performLogin()
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "登录失败，请稍后重试"
@@ -254,6 +281,43 @@ function LoginForm() {
             </Button>
           </form>
 
+          <AlertDialog open={sessionExistsOpen} onOpenChange={setSessionExistsOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>已有会话在用</AlertDialogTitle>
+                <AlertDialogDescription>
+                  当前账号已有一个有效会话。继续登录将撤销旧会话并让旧登录登出。
+                  {activeSession?.lastSeenAt ? (
+                    <div className="mt-3 text-xs text-muted-foreground">
+                      上次活跃时间：{new Date(activeSession.lastSeenAt).toLocaleString()}
+                    </div>
+                  ) : null}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isLoading}>取消</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={isLoading}
+                  onClick={async () => {
+                    setSessionExistsOpen(false)
+                    setIsLoading(true)
+                    setError(null)
+                    try {
+                      await performLogin(true)
+                    } catch (e) {
+                      const errorMessage =
+                        e instanceof Error ? e.message : "登录失败，请稍后重试"
+                      setError(errorMessage)
+                    } finally {
+                      setIsLoading(false)
+                    }
+                  }}
+                >
+                  继续登录
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
         </CardContent>
       </Card>

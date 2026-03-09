@@ -6,6 +6,8 @@
  * 响应: SSE 流式，使用 retcode 字段
  */
 
+import { mergeRagflowStreamingText } from './ragflow-streaming'
+
 export interface RAGFlowDialogConfig {
   baseUrl: string
   jwtToken: string  // 使用 JWT Token 而不是 API Key
@@ -215,8 +217,8 @@ export class RAGFlowDialogClient {
 
               // 提取内容
               if (data.data?.answer) {
-                // RAGFlow 返回累积的完整内容，不是增量
-                fullContent = data.data.answer
+                // RAGFlow 可能返回增量/累计全文，统一做一次去重合并
+                fullContent = mergeRagflowStreamingText(fullContent, String(data.data.answer))
 
                 onMessage({
                   type: 'content',
@@ -266,4 +268,3 @@ export class RAGFlowDialogClient {
     this.conversationId = null
   }
 }
-

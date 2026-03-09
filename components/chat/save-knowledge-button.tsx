@@ -69,16 +69,10 @@ export default function SaveKnowledgeButton({
     setIsSaving(true)
 
     try {
-      const token = localStorage.getItem('auth-token')
-      if (!token) {
-        throw new Error('未登录')
-      }
-
       const response = await fetch('/api/temp-kb/chunks', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           content: normalizedContent,
@@ -88,6 +82,10 @@ export default function SaveKnowledgeButton({
           keywords
         })
       })
+
+      if (response.status === 401) {
+        throw new Error('未登录')
+      }
 
       const result = await response.json()
 

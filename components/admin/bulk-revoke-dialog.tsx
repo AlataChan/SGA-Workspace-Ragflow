@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { ChevronDown, ChevronRight, Loader2, Search } from "lucide-react"
 import { toast } from "sonner"
@@ -115,6 +116,7 @@ export default function BulkRevokeDialog({
   const [loadingChildIds, setLoadingChildIds] = useState<Set<string>>(new Set())
   const [selectedDepartmentIds, setSelectedDepartmentIds] = useState<Set<string>>(new Set())
   const [includeSubDepartments, setIncludeSubDepartments] = useState(true)
+  const [authorizedDepartmentIds, setAuthorizedDepartmentIds] = useState<Set<string>>(new Set())
 
   const [includeAdmins, setIncludeAdmins] = useState(false)
   const [includeInactive, setIncludeInactive] = useState(true)
@@ -193,6 +195,28 @@ export default function BulkRevokeDialog({
     }
   }
 
+  const fetchAuthorizedDepartments = async (resourceId: string) => {
+    try {
+      const policyEndpoint =
+        resourceType === "agent"
+          ? `/api/admin/agents/${resourceId}/department-grants`
+          : `/api/admin/knowledge-graphs/${resourceId}/department-grants`
+
+      const response = await fetch(policyEndpoint, { cache: "no-cache" })
+      if (!response.ok) return
+      const json = await response.json().catch(() => ({}))
+      const grants: any[] = json?.data?.grants ?? []
+
+      const active = grants.filter((g) => g && g.isActive !== false && typeof g.departmentId === "string")
+      const ids = new Set<string>(active.map((g) => g.departmentId))
+
+      setAuthorizedDepartmentIds(ids)
+      setSelectedDepartmentIds(ids)
+    } catch (e) {
+      console.warn("获取已授权部门失败:", e)
+    }
+  }
+
   useEffect(() => {
     if (!open) return
 
@@ -201,6 +225,7 @@ export default function BulkRevokeDialog({
     setLoadingChildIds(new Set())
     setSelectedDepartmentIds(new Set())
     setIncludeSubDepartments(true)
+    setAuthorizedDepartmentIds(new Set())
     setIncludeAdmins(false)
     setIncludeInactive(true)
     setReason("")
@@ -210,6 +235,7 @@ export default function BulkRevokeDialog({
     setError(null)
 
     if (!departments) fetchDepartmentTree()
+    if (resourceId) fetchAuthorizedDepartments(resourceId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, resourceId])
 
@@ -545,6 +571,7 @@ export default function BulkRevokeDialog({
                           const isLoadingChildren = loadingChildIds.has(node.id)
                           const hasChildren = Boolean(node.hasChildren) || node.children.length > 0
                           const checked = selectedDepartmentIds.has(node.id)
+                          const authorized = authorizedDepartmentIds.has(node.id)
 
                           return (
                             <div
@@ -571,8 +598,9 @@ export default function BulkRevokeDialog({
                               <Checkbox checked={checked} onCheckedChange={(v) => toggleDepartment(node.id, Boolean(v))} />
 
                               <div className="min-w-0 flex-1">
-                                <div className="text-sm font-medium truncate" title={node.name}>
-                                  {node.name}
+                                <div className="text-sm font-medium truncate flex items-center gap-2" title={node.name}>
+                                  <span className="truncate">{node.name}</span>
+                                  {authorized ? <Badge variant="secondary">已授权</Badge> : null}
                                 </div>
                                 {!node.isActive ? <div className="text-[11px] text-muted-foreground">已停用</div> : null}
                               </div>
@@ -639,4 +667,3 @@ export default function BulkRevokeDialog({
     </Dialog>
   )
 }
-

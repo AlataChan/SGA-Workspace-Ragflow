@@ -68,6 +68,12 @@ export interface GetGraphResult {
   error?: string
 }
 
+export interface CheckDatasetAccessResult {
+  success: boolean
+  data?: { owned: boolean }
+  error?: string
+}
+
 /**
  * RAGFlow 临时知识库客户端
  */
@@ -93,6 +99,49 @@ export class RAGFlowTempKbClient {
       result?.error ||
       fallback
     )
+  }
+
+  /**
+   * 检查当前 API Key 是否拥有指定 dataset 的访问权限
+   * - owned=true: 可访问（属于当前 API Key）
+   * - owned=false: dataset 存在但不属于当前 API Key（常见于配置被覆盖/切换导致）
+   */
+  async checkDatasetAccess(datasetId: string): Promise<CheckDatasetAccessResult> {
+    try {
+      const url = `${this.config.baseUrl}/api/v1/datasets/${datasetId}/documents?page=1&page_size=1`
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+        },
+        signal: AbortSignal.timeout(30000),
+      })
+
+      const result = await response.json().catch(() => ({}))
+
+      if (this.isSuccess(result) && result.data !== false && result.data != null) {
+        return { success: true, data: { owned: true } }
+      }
+
+      const message = this.getErrorMessage(result, '检查 dataset 权限失败')
+      const lower = message.toLowerCase()
+      if (lower.includes("don't own the dataset") || lower.includes('you do not own the dataset')) {
+        return { success: true, data: { owned: false }, error: message }
+      }
+
+      if (lower.includes('not found')) {
+        return { success: true, data: { owned: false }, error: message }
+      }
+
+      // 其他错误（如 API key 无效/网络异常）视为检查失败
+      return { success: false, error: message }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '检查 dataset 权限异常',
+      }
+    }
   }
 
   /**
@@ -365,6 +414,19 @@ export class RAGFlowTempKbClient {
 
       if (this.isSuccess(result) && result.data) {
         const data = result.data
+        // RAGFlow 有时会返回 `{code:0,data:{}}` 表示尚未创建 GraphRAG 任务
+        // 这种情况如果误判为 building，会导致服务端 buildGraph 提前返回（不触发 run_graphrag），前端一直 loading。
+        if (
+          data
+          && typeof data === 'object'
+          && !Array.isArray(data)
+          && Object.keys(data).length === 0
+        ) {
+          return {
+            success: false,
+            error: 'GraphRAG 构建任务尚未创建',
+          }
+        }
         let status: 'building' | 'completed' | 'failed' | 'unknown' = 'unknown'
 
         const progressRaw = data.progress ?? 0

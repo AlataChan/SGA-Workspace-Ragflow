@@ -516,13 +516,11 @@ export default function MainWorkspaceLayout({ user, agents, sessions, company }:
     try {
       await fetch('/api/auth/logout', { method: 'POST' })
       localStorage.removeItem('user')
-      localStorage.removeItem('auth-token')
       router.push('/auth/login')
     } catch (error) {
       console.error('登出失败:', error)
       // 即使API失败，也清除本地数据并跳转
       localStorage.removeItem('user')
-      localStorage.removeItem('auth-token')
       router.push('/auth/login')
     }
   }

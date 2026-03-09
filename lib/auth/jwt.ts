@@ -5,12 +5,22 @@
 import jwt from 'jsonwebtoken'
 import { UserRole } from '@prisma/client'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key'
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET
+  if (secret) return secret
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET is required in production')
+  }
+
+  return 'dev-fallback-jwt-secret'
+}
 
 export interface JWTPayload {
   userId: string
   companyId: string
   role: UserRole
+  sessionId: string
   iat?: number
   exp?: number
 }
@@ -19,7 +29,11 @@ export interface JWTPayload {
  * 生成 JWT Token
  */
 export function generateToken(payload: Omit<JWTPayload, 'iat' | 'exp'>): string {
-  return jwt.sign(payload, JWT_SECRET, {
+  if (!payload.sessionId) {
+    throw new Error('JWTPayload.sessionId is required')
+  }
+
+  return jwt.sign(payload, getJwtSecret(), {
     expiresIn: '7d', // 7天过期
   })
 }
@@ -29,7 +43,7 @@ export function generateToken(payload: Omit<JWTPayload, 'iat' | 'exp'>): string 
  */
 export function verifyToken(token: string): JWTPayload | null {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload
+    const decoded = jwt.verify(token, getJwtSecret()) as JWTPayload
     return decoded
   } catch (error) {
     console.error('JWT verification failed:', error)

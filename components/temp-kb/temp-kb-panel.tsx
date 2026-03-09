@@ -45,6 +45,8 @@ interface TempKbPanelProps {
   compact?: boolean
   /** 默认展示的标签页 */
   defaultTab?: 'chunks' | 'graph'
+  /** 可选：用于使用当前聊天 Agent 的 RAGFlow 配置 */
+  agentId?: string
   onGraphReady?: () => void
   onKbChange?: (info: { chunkCount: number; nodeCount: number; edgeCount: number }) => void
 }
@@ -57,6 +59,7 @@ export default function TempKbPanel({
   className,
   compact = false,
   defaultTab = 'chunks',
+  agentId,
   onGraphReady,
   onKbChange
 }: TempKbPanelProps) {
@@ -80,12 +83,12 @@ export default function TempKbPanel({
 
   const fetchKbInfo = useCallback(async () => {
     try {
-      const token = localStorage.getItem('auth-token')
-      if (!token) return
+      const response = await fetch('/api/temp-kb', { cache: 'no-cache' })
 
-      const response = await fetch('/api/temp-kb', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
+      if (response.status === 401) {
+        setKbInfo(null)
+        return
+      }
 
       const result = await response.json()
       if (result.success) {
@@ -108,13 +111,18 @@ export default function TempKbPanel({
     setError(null)
 
     try {
-      const token = localStorage.getItem('auth-token')
-      if (!token) throw new Error('未登录')
+      const response = await fetch(
+        '/api/temp-kb/graph',
+        agentId
+          ? {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ agentId }),
+            }
+          : { method: 'POST' },
+      )
 
-      const response = await fetch('/api/temp-kb/graph', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
+      if (response.status === 401) throw new Error('未登录')
 
       const result = await response.json()
       if (result.success) {
@@ -130,14 +138,12 @@ export default function TempKbPanel({
   }
 
   const pollBuildStatus = async () => {
-    const token = localStorage.getItem('auth-token')
-    if (!token) return
-
     const checkStatus = async () => {
       try {
         const response = await fetch('/api/temp-kb/graph/status', {
-          headers: { 'Authorization': `Bearer ${token}` }
+          cache: 'no-cache'
         })
+        if (response.status === 401) return true
         const result = await response.json()
 
         if (result.success && result.data) {
@@ -182,16 +188,13 @@ export default function TempKbPanel({
     setIsClearing(true)
 
     try {
-      const token = localStorage.getItem('auth-token')
-      if (!token) throw new Error('未登录')
-
       console.log('[TempKbPanel] 开始调用删除 API...')
       const response = await fetch('/api/temp-kb', {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
       })
 
       console.log('[TempKbPanel] API 响应状态:', response.status)
+      if (response.status === 401) throw new Error('未登录')
       const result = await response.json()
       console.log('[TempKbPanel] API 返回结果:', result)
 
