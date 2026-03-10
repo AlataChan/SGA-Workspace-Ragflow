@@ -69,6 +69,11 @@ CREATE TABLE users (
     role "UserRole" NOT NULL DEFAULT 'USER',
     is_active BOOLEAN NOT NULL DEFAULT true,
     last_login_at TIMESTAMPTZ,
+    login_failed_count_24h INTEGER NOT NULL DEFAULT 0,
+    login_failed_window_start_at TIMESTAMPTZ,
+    login_locked_until TIMESTAMPTZ,
+    login_lock_level VARCHAR(50),
+    login_lock_needs_admin BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     
@@ -149,6 +154,41 @@ CREATE TABLE agent_department_grants (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     CONSTRAINT "unique_agent_department_grant" UNIQUE (agent_id, department_id)
+);
+
+-- ===========================================
+-- 安全与会话表
+-- ===========================================
+
+-- 用户认证会话表
+CREATE TABLE auth_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked_at TIMESTAMPTZ,
+    revoked_by_user_id TEXT,
+    revoke_reason TEXT,
+    ip VARCHAR(100),
+    user_agent VARCHAR(500)
+);
+
+-- 安全审计事件表
+CREATE TABLE security_audit_events (
+    id TEXT PRIMARY KEY,
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    actor_user_id TEXT REFERENCES users(id),
+    target_user_id TEXT REFERENCES users(id),
+    event_type VARCHAR(100) NOT NULL,
+    result VARCHAR(50) NOT NULL,
+    reason TEXT,
+    ip VARCHAR(100),
+    user_agent VARCHAR(500),
+    request_id VARCHAR(255),
+    details JSONB
 );
 
 -- ===========================================
@@ -310,6 +350,16 @@ CREATE INDEX idx_departments_company_parent ON departments(company_id, parent_id
 CREATE INDEX idx_users_company_id ON users(company_id);
 CREATE INDEX idx_users_department_id ON users(department_id);
 CREATE INDEX idx_users_yunzhijia_user_id ON users(yunzhijia_user_id);
+
+-- 认证会话相关索引
+CREATE INDEX idx_auth_session_company_user_revoked ON auth_sessions(company_id, user_id, revoked_at);
+CREATE INDEX idx_auth_session_company_expires ON auth_sessions(company_id, expires_at);
+CREATE INDEX idx_auth_session_company_last_seen ON auth_sessions(company_id, last_seen_at);
+
+-- 安全审计事件相关索引
+CREATE INDEX idx_audit_company_time ON security_audit_events(company_id, occurred_at);
+CREATE INDEX idx_audit_company_target_time ON security_audit_events(company_id, target_user_id, occurred_at);
+CREATE INDEX idx_audit_company_type_time ON security_audit_events(company_id, event_type, occurred_at);
 
 -- Agent 相关索引
 CREATE INDEX idx_agents_company_id ON agents(company_id);

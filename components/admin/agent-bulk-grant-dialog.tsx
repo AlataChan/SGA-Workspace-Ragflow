@@ -139,26 +139,19 @@ export default function AgentBulkGrantDialog({
     children: [],
   })
 
+  // 懒加载：只拉取当前层级，不加载下级部门数据
   const fetchDepartmentChildren = async (parentId: string | null): Promise<DepartmentNode[]> => {
     const url = parentId
-      ? `/api/admin/departments/tree?parentId=${encodeURIComponent(parentId)}`
-      : "/api/admin/departments/tree"
+      ? `/api/admin/departments/children?parentId=${encodeURIComponent(parentId)}`
+      : "/api/admin/departments/children"
 
     const response = await fetch(url, { cache: "no-cache" })
     if (!response.ok) {
-      throw new Error(`获取部门树失败 (HTTP ${response.status})`)
+      throw new Error(`获取部门失败 (HTTP ${response.status})`)
     }
 
     const json = (await response.json().catch(() => ({}))) as Partial<DepartmentTreeResponse> & any
-
-    // 兼容两种返回结构：
-    // 1) data: DepartmentNode[]（当前懒加载接口）
-    // 2) data: { departments: DepartmentNode[] }（历史完整树接口）
-    const list = Array.isArray(json?.data)
-      ? json.data
-      : Array.isArray(json?.data?.departments)
-        ? json.data.departments
-        : []
+    const list = Array.isArray(json?.data) ? json.data : []
 
     return list.map((raw: any) => normalizeDepartmentNode(raw))
   }

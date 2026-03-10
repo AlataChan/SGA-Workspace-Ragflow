@@ -36,6 +36,7 @@ export const GET = withAdminAuth(async (request) => {
       where: { companyId: user.companyId, parentId },
       select: {
         id: true,
+        companyId: true,
         name: true,
         parentId: true,
         description: true,

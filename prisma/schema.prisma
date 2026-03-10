@@ -190,7 +190,7 @@ model UserAgentPermission {
   @@map("user_agent_permissions")
 }
 
-model AgentDepartmentGrant {
+
 model UserAgentPermissionRevocation {
   id      String @id @default(cuid())
   userId  String @map("user_id")
