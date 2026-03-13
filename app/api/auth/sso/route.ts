@@ -100,10 +100,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 3. 标记 ticket 为已使用
-    markTicketAsUsed(ticket)
-
-    // 4. 检查i国贸配置
+    // 3. 检查i国贸配置
     if (!process.env.YUNZHIJIA_APP_ID || !process.env.YUNZHIJIA_APP_SECRET) {
       console.error('[SSO] i国贸配置缺失')
       return NextResponse.json(
@@ -118,10 +115,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 5. 创建i国贸客户端
+    // 4. 创建i国贸客户端
     const yunzhijiaClient = createYunzhijiaClient()
 
-    // 6. 使用 ticket 换取 accessToken
+    // 5. 使用 ticket 换取 accessToken
     console.log('[SSO] 获取 accessToken...')
     const tokens = await yunzhijiaClient.getAccessToken(ticket)
 
@@ -139,7 +136,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 7. 使用 accessToken 获取用户信息
+    // 6. 使用 accessToken 获取用户信息
     const yunzhijiaUser = await yunzhijiaClient.getUserInfo(tokens.accessToken, ticket)
     console.log('[SSO] 同步用户信息...', yunzhijiaUser)
     if (!yunzhijiaUser.userid) {
@@ -156,7 +153,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 8. 同步用户到本地数据库
+    // 7. 同步用户到本地数据库
 
     const localUser = await userSyncService.syncUser(yunzhijiaUser)
 
@@ -169,43 +166,43 @@ export async function POST(request: NextRequest) {
       companyId: localUser.companyId,
     })
 
-    if (activeSession && confirmReplace !== true) {
-      await writeAuditEvent({
-        companyId: localUser.companyId,
-        targetUserId: localUser.id,
-        eventType: "AUTH_SESSION_EXISTS_PROMPTED",
-        result: "BLOCKED",
-        reason: "ACTIVE_SESSION",
-        ip,
-        userAgent,
-        requestId,
-        details: {
-          lastSeenAt: activeSession.lastSeenAt,
-          ip: activeSession.ip,
-          userAgent: activeSession.userAgent,
-        },
-      })
+    // if (activeSession && confirmReplace !== true) {
+    //   await writeAuditEvent({
+    //     companyId: localUser.companyId,
+    //     targetUserId: localUser.id,
+    //     eventType: "AUTH_SESSION_EXISTS_PROMPTED",
+    //     result: "BLOCKED",
+    //     reason: "ACTIVE_SESSION",
+    //     ip,
+    //     userAgent,
+    //     requestId,
+    //     details: {
+    //       lastSeenAt: activeSession.lastSeenAt,
+    //       ip: activeSession.ip,
+    //       userAgent: activeSession.userAgent,
+    //     },
+    //   })
 
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: "SESSION_EXISTS",
-            message: "已有会话在用，新登录将让旧登录登出，是否继续？",
-          },
-          data: {
-            activeSession: {
-              lastSeenAt: activeSession.lastSeenAt,
-              ip: activeSession.ip,
-              userAgent: activeSession.userAgent,
-            },
-          },
-        },
-        { status: 409 },
-      )
-    }
+    //   return NextResponse.json(
+    //     {
+    //       success: false,
+    //       error: {
+    //         code: "SESSION_EXISTS",
+    //         message: "已有会话在用，新登录将让旧登录登出，是否继续？",
+    //       },
+    //       data: {
+    //         activeSession: {
+    //           lastSeenAt: activeSession.lastSeenAt,
+    //           ip: activeSession.ip,
+    //           userAgent: activeSession.userAgent,
+    //         },
+    //       },
+    //     },
+    //     { status: 409 },
+    //   )
+    // }
 
-    // 9. 缓存 accessToken 和 refreshToken
+    // 8. 缓存 accessToken 和 refreshToken
     console.log('[SSO] 缓存 Token...', { userId: localUser.id })
     await tokenCacheService.cacheTokens(localUser.id, {
       accessToken: tokens.accessToken,
@@ -247,7 +244,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // 10. 生成本地 JWT Token
+    // 9. 生成本地 JWT Token
     const localToken = generateToken({
       userId: localUser.id,
       companyId: localUser.companyId,
@@ -274,7 +271,10 @@ export async function POST(request: NextRequest) {
       role: localUser.role
     })
 
-    // 11. 准备响应数据
+    // 在本地会话和 Token 全部就绪后，标记 ticket 为已使用
+    markTicketAsUsed(ticket)
+
+    // 10. 准备响应数据
     const signedAvatarUrl = await resolveImageDisplayUrl(localUser.avatarUrl)
     const responseData = {
       success: true,

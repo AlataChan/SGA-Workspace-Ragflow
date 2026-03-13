@@ -31,7 +31,7 @@ export class UserSyncService {
       const existingUser = await prisma.user.findFirst({
         where: {
           OR: [
-            { yunzhijiaUserId: yunzhijiaUser.userid },
+            { userId: yunzhijiaUser.openid },
             ...(yunzhijiaUser.phone ? [{ phone: yunzhijiaUser.phone }] : []),
             ...(yunzhijiaUser.email ? [{ email: yunzhijiaUser.email }] : []),
             ...(yunzhijiaUser.username ? [{ username: yunzhijiaUser.username }] : []),
