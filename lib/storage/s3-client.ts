@@ -112,7 +112,7 @@ function computeStorageConfig(): StorageConfig | null {
   const useSSL = parseBoolean(process.env.S3_USE_SSL, !isLocalhost);
 
   // forcePathStyle: 默认兼容多数 S3 兼容存储；如需改为 virtual-hosted-style 可显式关闭
-  const forcePathStyle = parseBoolean(process.env.S3_FORCE_PATH_STYLE, true);
+  const forcePathStyle = parseBoolean(process.env.S3_FORCE_PATH_STYLE, false);
 
   // 构建完整的 endpoint URL（去掉末尾 /）
   const fullEndpoint = normalizeEndpoint(endpoint, useSSL);
