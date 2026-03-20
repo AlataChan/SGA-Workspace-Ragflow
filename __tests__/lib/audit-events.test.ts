@@ -42,6 +42,7 @@ describe("audit-events", () => {
             ok: "x",
             nested: { ok: true },
             arr: [{ ok: 1 }],
+            resourceType: "USER",
           },
         }),
       }),

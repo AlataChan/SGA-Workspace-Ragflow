@@ -44,7 +44,9 @@ import {
   Camera,
   Network,
   Minus,
-  Ban
+  Ban,
+  Lock,
+  Unlock
 } from "lucide-react"
 import NewAdminLayout from "@/components/admin/new-admin-layout"
 import { DepartmentCombobox } from "@/components/admin/department-combobox"
@@ -94,6 +96,40 @@ interface PaginationInfo {
   pageSize: number
   total: number
   totalPages: number
+}
+
+function extractApiErrorMessage(errorData: any, fallback: string): string {
+  const details = errorData?.error?.details
+
+  const collectStringArrayValues = (value: any, out: string[]) => {
+    if (Array.isArray(value)) {
+      if (value.every((v) => typeof v === "string")) out.push(...value)
+      return
+    }
+    if (value && typeof value === "object") {
+      for (const v of Object.values(value)) {
+        collectStringArrayValues(v, out)
+      }
+    }
+  }
+
+  if (details) {
+    const passwordErrors = details.password ?? details.newPassword
+    if (Array.isArray(passwordErrors) && passwordErrors.length > 0) {
+      return passwordErrors.join("；")
+    }
+
+    const collected: string[] = []
+    collectStringArrayValues(details, collected)
+    if (collected.length > 0) {
+      return Array.from(new Set(collected)).join("；")
+    }
+  }
+
+  const message = errorData?.error?.message
+  if (typeof message === "string" && message.trim()) return message
+
+  return fallback
 }
 
 interface UserFormData {
@@ -165,6 +201,15 @@ export default function UsersPage() {
   // 消息状态
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
+  // 创建/编辑弹窗内的错误（展示在表单附近，避免笼统全局报错）
+  const [createDialogError, setCreateDialogError] = useState<string | null>(null)
+  const [editDialogError, setEditDialogError] = useState<string | null>(null)
+
+  const [editSecurityStatus, setEditSecurityStatus] = useState<{
+    lock: { lockedUntil: string | null; lockLevel: string | null; needsAdmin: boolean }
+  } | null>(null)
+  const [isUnlocking, setIsUnlocking] = useState(false)
+
 
 
   // Agent权限管理状态
@@ -225,6 +270,27 @@ export default function UsersPage() {
   useEffect(() => {
     fetchUsers()
   }, [page, pageSize, debouncedSearchTerm, filterDepartment, filterRole, includeChildren])
+
+  useEffect(() => {
+    if (!isEditDialogOpen || !editingUser?.id) {
+      setEditSecurityStatus(null)
+      return
+    }
+    const fetchSecurity = async () => {
+      try {
+        const res = await fetch(`/api/admin/users/${editingUser.id}/security`)
+        if (res.ok) {
+          const data = await res.json()
+          setEditSecurityStatus(data.data)
+        } else {
+          setEditSecurityStatus(null)
+        }
+      } catch {
+        setEditSecurityStatus(null)
+      }
+    }
+    fetchSecurity()
+  }, [isEditDialogOpen, editingUser?.id])
 
   const fetchAgents = async () => {
     try {
@@ -513,13 +579,14 @@ export default function UsersPage() {
 	  const handleCreate = async () => {
 	    // 验证必填字段
 	    if (!formData.username.trim() || !formData.userId.trim() || !formData.phone.trim() || !formData.chineseName.trim() || !formData.position.trim() || !formData.password.trim()) {
-	      setMessage({ type: 'error', text: '请填写必填字段' })
-	      setTimeout(() => setMessage(null), 3000)
+	      setCreateDialogError('请填写必填字段')
+	      setTimeout(() => setCreateDialogError(null), 3000)
 	      return
 	    }
 
     setIsSaving(true)
     setMessage(null)
+      setCreateDialogError(null)
 
     try {
       console.log('📡 准备发送API请求...')
@@ -573,15 +640,12 @@ export default function UsersPage() {
       } else {
         const errorData = await response.json()
         console.error('❌ 创建失败:', errorData)
-        throw new Error(errorData.error?.message || '创建用户失败')
+	        throw new Error(extractApiErrorMessage(errorData, '创建用户失败'))
       }
     } catch (error) {
       console.error('创建用户失败:', error)
-      setMessage({
-        type: 'error',
-        text: error instanceof Error ? error.message : '创建失败，请稍后重试'
-      })
-      setTimeout(() => setMessage(null), 3000)
+	      setCreateDialogError(error instanceof Error ? error.message : '创建失败，请稍后重试')
+        setTimeout(() => setCreateDialogError(null), 6000)
     } finally {
       setIsSaving(false)
     }
@@ -610,12 +674,14 @@ export default function UsersPage() {
   // 更新用户
 	  const handleUpdate = async () => {
 	    if (!formData.username.trim() || !formData.userId.trim() || !formData.phone.trim() || !formData.chineseName.trim() || !formData.position.trim()) {
-	      setMessage({ type: 'error', text: '请填写必填字段' })
+	      setEditDialogError('请填写必填字段')
+	      setTimeout(() => setEditDialogError(null), 3000)
 	      return
 	    }
 
     setIsSaving(true)
 	    setMessage(null)
+      setEditDialogError(null)
 	
 	    try {
 	      const updateData: Record<string, any> = { ...formData }
@@ -661,16 +727,46 @@ export default function UsersPage() {
         setTimeout(() => setMessage(null), 3000)
       } else {
         const error = await response.json()
-        throw new Error((error.error && error.error.message) || '更新失败')
+        throw new Error(extractApiErrorMessage(error, '更新失败'))
       }
     } catch (error) {
       console.error('更新用户失败:', error)
-      setMessage({
-        type: 'error',
-        text: error instanceof Error ? error.message : '更新失败，请稍后重试'
-      })
+      setEditDialogError(error instanceof Error ? error.message : '更新失败，请稍后重试')
+      setTimeout(() => setEditDialogError(null), 6000)
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleUnlock = async () => {
+    if (!editingUser?.id) return
+    setIsUnlocking(true)
+    setMessage(null)
+    try {
+      const res = await fetch(`/api/admin/users/${editingUser.id}/security/unlock`, {
+        method: "POST",
+      })
+      if (res.ok) {
+        setEditSecurityStatus((prev) =>
+          prev
+            ? {
+                ...prev,
+                lock: { lockedUntil: null, lockLevel: null, needsAdmin: false },
+              }
+            : null
+        )
+        setMessage({ type: "success", text: "账号已解锁" })
+        setTimeout(() => setMessage(null), 3000)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setEditDialogError(data?.error?.message ?? data?.error ?? "解锁失败")
+        setTimeout(() => setEditDialogError(null), 3000)
+      }
+    } catch (error) {
+      setEditDialogError("解锁失败，请稍后重试")
+      setTimeout(() => setEditDialogError(null), 3000)
+    } finally {
+      setIsUnlocking(false)
     }
   }
 
@@ -1368,7 +1464,13 @@ export default function UsersPage() {
         </div>
 
         {/* 创建用户弹窗 */}
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <Dialog
+          open={isCreateDialogOpen}
+          onOpenChange={(open) => {
+            setIsCreateDialogOpen(open)
+            if (!open) setCreateDialogError(null)
+          }}
+        >
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>添加用户</DialogTitle>
@@ -1522,6 +1624,9 @@ export default function UsersPage() {
                     value={formData.password}
                     onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                   />
+                  {createDialogError && (
+                    <p className="text-sm text-destructive">{createDialogError}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1555,7 +1660,16 @@ export default function UsersPage() {
         </Dialog>
 
         {/* 编辑用户弹窗 */}
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <Dialog
+          open={isEditDialogOpen}
+          onOpenChange={(open) => {
+            setIsEditDialogOpen(open)
+            if (!open) {
+              setEditDialogError(null)
+              setEditSecurityStatus(null)
+            }
+          }}
+        >
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>编辑用户</DialogTitle>
@@ -1709,8 +1823,59 @@ export default function UsersPage() {
                     value={formData.password}
                     onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                   />
+                  {editDialogError && (
+                    <p className="text-sm text-destructive">{editDialogError}</p>
+                  )}
                 </div>
               </div>
+
+              {/* 账号锁定与解锁 */}
+              {editSecurityStatus && (
+                <div className="space-y-2 p-4 rounded-lg border border-border bg-muted/50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Lock className="w-4 h-4 text-muted-foreground" />
+                      <span className="font-medium text-foreground">登录安全</span>
+                    </div>
+                    {editSecurityStatus.lock.lockedUntil &&
+                    new Date(editSecurityStatus.lock.lockedUntil) > new Date() ? (
+                      <Badge variant="destructive" className="gap-1">
+                        <Lock className="w-3 h-3" />
+                        已锁定
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">正常</Badge>
+                    )}
+                  </div>
+                  {editSecurityStatus.lock.lockedUntil &&
+                  new Date(editSecurityStatus.lock.lockedUntil) > new Date() ? (
+                    <div className="space-y-2 text-sm">
+                      <p className="text-muted-foreground">
+                        {editSecurityStatus.lock.lockLevel === "LONG_24H"
+                          ? "24 小时锁定（需管理员解锁）"
+                          : "60 分钟锁定"}
+                        ，到期时间：{new Date(editSecurityStatus.lock.lockedUntil).toLocaleString()}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleUnlock}
+                        disabled={isUnlocking}
+                        className="border-amber-500/50 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
+                      >
+                        {isUnlocking ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Unlock className="w-4 h-4 mr-2" />
+                        )}
+                        解锁账号
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">账号未被锁定</p>
+                  )}
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button
@@ -1719,6 +1884,7 @@ export default function UsersPage() {
                   setIsEditDialogOpen(false)
                   setEditingUser(null)
                   resetForm()
+                  setEditSecurityStatus(null)
                 }}
               >
                 取消

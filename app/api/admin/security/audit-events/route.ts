@@ -32,7 +32,9 @@ export async function GET(request: NextRequest) {
     const pageSize = Math.min(100, Math.max(1, Number.parseInt(pageSizeParam || "50", 10) || 50))
 
     const targetUserId = searchParams.get("targetUserId") || undefined
+    const actorUserId = searchParams.get("actorUserId") || undefined
     const eventType = searchParams.get("eventType") || undefined
+    const resourceType = searchParams.get("resourceType") || undefined
     const from = searchParams.get("from")
     const to = searchParams.get("to")
 
@@ -41,7 +43,12 @@ export async function GET(request: NextRequest) {
     }
 
     if (targetUserId) whereClause.targetUserId = targetUserId
+    if (actorUserId) whereClause.actorUserId = actorUserId
     if (eventType) whereClause.eventType = eventType
+
+    if (resourceType) {
+      whereClause.details = { path: ["resourceType"], equals: resourceType }
+    }
 
     if (from || to) {
       whereClause.occurredAt = {}

@@ -140,7 +140,7 @@ describe("Password enforcement (API routes)", () => {
 
     const { PUT } = await import("@/app/api/admin/users/[id]/route")
     const res = await PUT(
-      makeReq({ password: "Abcd1234!" }, { userId: "admin-1", companyId: "c1", role: UserRole.ADMIN }),
+      makeReq({ password: "Abc1d2e3!" }, { userId: "admin-1", companyId: "c1", role: UserRole.ADMIN }),
       { params: { id: "u1" } } as any,
     )
 
@@ -163,7 +163,7 @@ describe("Password enforcement (API routes)", () => {
     const { PUT } = await import("@/app/api/user/profile/route")
     const res = await PUT(
       makeReq(
-        { currentPassword: "old", newPassword: "Abcd1234!" },
+        { currentPassword: "old", newPassword: "Abc1d2e3!" },
         { userId: "u1", companyId: "c1", role: UserRole.USER },
       ),
     )
@@ -186,7 +186,7 @@ describe("Password enforcement (API routes)", () => {
 
     const { PUT } = await import("@/app/api/user/profile/route")
     const res = await PUT(
-      makeReq({ newPassword: "Abcd1234!" }, { userId: "u1", companyId: "c1", role: UserRole.USER }),
+      makeReq({ newPassword: "Abc1d2e3!" }, { userId: "u1", companyId: "c1", role: UserRole.USER }),
     )
 
     expect(res.status).toBe(200)

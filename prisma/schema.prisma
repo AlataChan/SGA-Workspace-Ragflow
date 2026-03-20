@@ -90,6 +90,8 @@ model User {
   knowledgeGraphPermissions     UserKnowledgeGraphPermission[]
   knowledgeGraphPermissionRevocations UserKnowledgeGraphPermissionRevocation[]
   tempKnowledgeBase             UserTempKnowledgeBase?
+  auditEventsAsActor            SecurityAuditEvent[]          @relation("AuditActor")
+  auditEventsAsTarget           SecurityAuditEvent[]          @relation("AuditTarget")
   company                       Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   department                    Department?                   @relation(fields: [departmentId], references: [id])
 
@@ -140,6 +142,9 @@ model SecurityAuditEvent {
   requestId String? @map("request_id")
 
   details Json? @map("details")
+
+  actorUser  User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  targetUser User? @relation("AuditTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
 
   @@index([companyId, occurredAt], name: "idx_audit_company_time")
   @@index([companyId, targetUserId, occurredAt], name: "idx_audit_company_target_time")

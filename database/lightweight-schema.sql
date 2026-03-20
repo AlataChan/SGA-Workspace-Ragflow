@@ -431,6 +431,29 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- ===========================================
+-- 日志保留期清理（默认 180 天）
+-- ===========================================
+-- 说明：
+-- - 只清理审计日志表 security_audit_events
+-- - 可被外部调度器/运维脚本调用：SELECT cleanup_old_logs(); 或 SELECT cleanup_old_logs(90);
+CREATE OR REPLACE FUNCTION cleanup_old_logs(retention_days INTEGER DEFAULT 180)
+RETURNS INTEGER AS $$
+DECLARE
+  deleted_count INTEGER;
+BEGIN
+  IF retention_days IS NULL OR retention_days < 1 THEN
+    RAISE EXCEPTION 'retention_days must be >= 1';
+  END IF;
+
+  DELETE FROM security_audit_events
+  WHERE occurred_at < (NOW() - make_interval(days => retention_days));
+
+  GET DIAGNOSTICS deleted_count = ROW_COUNT;
+  RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+
 
 -- ===========================================
 -- 说明

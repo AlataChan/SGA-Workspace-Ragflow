@@ -72,6 +72,23 @@ interface UserManagementProps {
   companyId?: string
 }
 
+function extractApiErrorMessage(errorData: any, fallback: string): string {
+  const details = errorData?.error?.details
+  if (details) {
+    const passwordErrors = details.password ?? details.newPassword
+    if (Array.isArray(passwordErrors) && passwordErrors.length > 0) {
+      return passwordErrors.join("；")
+    }
+  }
+
+  const message = errorData?.error?.message
+  if (typeof message === "string" && message.trim()) {
+    return message
+  }
+
+  return fallback
+}
+
 export default function UserManagement({ companyId }: UserManagementProps) {
   const [users, setUsers] = useState<ExtendedUser[]>([])
   const [pagination, setPagination] = useState<PaginationInfo>({
@@ -170,7 +187,7 @@ export default function UserManagement({ companyId }: UserManagementProps) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error?.message || "创建用户失败")
+        throw new Error(extractApiErrorMessage(errorData, "创建用户失败"))
       }
 
       // 重置表单并刷新列表
@@ -209,7 +226,7 @@ export default function UserManagement({ companyId }: UserManagementProps) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error?.message || "更新用户失败")
+        throw new Error(extractApiErrorMessage(errorData, "更新用户失败"))
       }
 
       setIsEditDialogOpen(false)

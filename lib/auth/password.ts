@@ -56,10 +56,38 @@ export function generateRandomPassword(length: number = 12): string {
   return chars.join('')
 }
 
+/** 密码校验可选参数 */
+export interface ValidatePasswordOptions {
+  /** 账号名（大小写不敏感），密码中不得包含 */
+  username?: string
+}
+
+/**
+ * 检测是否包含 4 个及以上连续升序/降序字符（如 1234、abcd、DCBA）
+ */
+function hasConsecutiveSequence(s: string, minLen: number = 4): boolean {
+  if (s.length < minLen) return false
+  for (let i = 0; i <= s.length - minLen; i++) {
+    let asc = true
+    let desc = true
+    for (let j = 1; j < minLen; j++) {
+      const a = s.charCodeAt(i + j - 1)
+      const b = s.charCodeAt(i + j)
+      if (b !== a + 1) asc = false
+      if (b !== a - 1) desc = false
+    }
+    if (asc || desc) return true
+  }
+  return false
+}
+
 /**
  * 验证密码强度
  */
-export function validatePasswordStrength(password: string): {
+export function validatePasswordStrength(
+  password: string,
+  options?: ValidatePasswordOptions
+): {
   isValid: boolean
   errors: string[]
 } {
@@ -88,10 +116,22 @@ export function validatePasswordStrength(password: string): {
   if (!/[^A-Za-z0-9]/.test(password)) {
     errors.push('密码必须包含符号')
   }
-  
+
+  if (hasConsecutiveSequence(password)) {
+    errors.push('密码不能包含4个及以上连续升序或降序字符（如1234、abcd、DCBA）')
+  }
+
+  if (options?.username && options.username.length >= 2) {
+    const pwLower = password.toLowerCase()
+    const unLower = options.username.toLowerCase()
+    if (pwLower.includes(unLower)) {
+      errors.push('密码不能包含账号名')
+    }
+  }
+
   return {
     isValid: errors.length === 0,
-    errors
+    errors,
   }
 }
 

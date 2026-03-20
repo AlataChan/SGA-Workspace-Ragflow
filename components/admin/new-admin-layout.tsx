@@ -89,6 +89,12 @@ export default function NewAdminLayout({ children }: AdminLayoutProps) {
       description: "用户账号管理"
     },
     {
+      href: "/admin/security/audit-events",
+      label: "审计日志",
+      icon: Shield,
+      description: "安全审计事件查询"
+    },
+    {
       href: "/admin/theme",
       label: "主题设置",
       icon: Palette,

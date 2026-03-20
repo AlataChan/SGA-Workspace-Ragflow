@@ -4,7 +4,7 @@ import { generateRandomPassword, validatePasswordStrength } from "@/lib/auth/pas
 
 describe("validatePasswordStrength", () => {
   it("accepts passwords with upper/lower/digit/symbol and length >= 8", () => {
-    const result = validatePasswordStrength("Abcd1234!")
+    const result = validatePasswordStrength("Abc1d2e3!")
     expect(result.isValid).toBe(true)
     expect(result.errors).toHaveLength(0)
   })
@@ -37,6 +37,35 @@ describe("validatePasswordStrength", () => {
     const result = validatePasswordStrength("Abcd1234")
     expect(result.isValid).toBe(false)
     expect(result.errors.join(",")).toMatch(/符号/)
+  })
+
+  it("rejects passwords with 4+ consecutive ascending characters", () => {
+    expect(validatePasswordStrength("Abcd1234!").isValid).toBe(false)
+    expect(validatePasswordStrength("A1234bcd!").isValid).toBe(false)
+    expect(validatePasswordStrength("Abcdefg1!").isValid).toBe(false)
+    expect(validatePasswordStrength("ABCD1234!").isValid).toBe(false)
+  })
+
+  it("rejects passwords with 4+ consecutive descending characters", () => {
+    expect(validatePasswordStrength("Abcd4321!").isValid).toBe(false)
+    expect(validatePasswordStrength("Adcba123!").isValid).toBe(false)
+    expect(validatePasswordStrength("DCBA1234!").isValid).toBe(false)
+  })
+
+  it("accepts passwords without 4+ consecutive sequences", () => {
+    const result = validatePasswordStrength("Abc1d2e3!")
+    expect(result.isValid).toBe(true)
+  })
+
+  it("rejects passwords containing username (case insensitive)", () => {
+    const result = validatePasswordStrength("Alice1234!", { username: "alice" })
+    expect(result.isValid).toBe(false)
+    expect(result.errors.join(",")).toMatch(/账号名/)
+  })
+
+  it("accepts passwords without username when username provided", () => {
+    const result = validatePasswordStrength("Abc1d2e3!", { username: "bob" })
+    expect(result.isValid).toBe(true)
   })
 })
 

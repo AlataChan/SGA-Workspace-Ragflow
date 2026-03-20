@@ -21,6 +21,22 @@ import {
   EyeOff
 } from "lucide-react"
 
+function hasConsecutiveSequence(s: string, minLen = 4): boolean {
+  if (s.length < minLen) return false
+  for (let i = 0; i <= s.length - minLen; i++) {
+    let asc = true
+    let desc = true
+    for (let j = 1; j < minLen; j++) {
+      const a = s.charCodeAt(i + j - 1)
+      const b = s.charCodeAt(i + j)
+      if (b !== a + 1) asc = false
+      if (b !== a - 1) desc = false
+    }
+    if (asc || desc) return true
+  }
+  return false
+}
+
 interface ChangePasswordDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -63,6 +79,9 @@ export default function ChangePasswordDialog({ open, onOpenChange }: ChangePassw
       if (!/[a-z]/.test(formData.newPassword)) passwordErrors.push('新密码必须包含小写字母')
       if (!/[0-9]/.test(formData.newPassword)) passwordErrors.push('新密码必须包含数字')
       if (!/[^A-Za-z0-9]/.test(formData.newPassword)) passwordErrors.push('新密码必须包含符号')
+      if (hasConsecutiveSequence(formData.newPassword)) {
+        passwordErrors.push('新密码不能包含4个及以上连续升序或降序字符（如1234、abcd、DCBA）')
+      }
 
       if (passwordErrors.length > 0) {
         setMessage({ type: 'error', text: passwordErrors[0] })

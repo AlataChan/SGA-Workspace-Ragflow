@@ -9,6 +9,7 @@ import prisma from '@/lib/prisma'
 import { UserRole } from '@prisma/client'
 import { withAdminAuth } from '@/lib/auth/middleware'
 import { validatePasswordStrength } from '@/lib/auth/password'
+import { writeAuditEvent } from '@/lib/security/audit-events'
 import { enforceSameOrigin } from '@/lib/security/origin-check'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
@@ -244,7 +245,9 @@ export const POST = withAdminAuth(async (request) => {
 
     const userData = validationResult.data
 
-    const passwordStrength = validatePasswordStrength(userData.password)
+    const passwordStrength = validatePasswordStrength(userData.password, {
+      username: userData.username,
+    })
     if (!passwordStrength.isValid) {
       return NextResponse.json(
         {
@@ -414,6 +417,27 @@ export const POST = withAdminAuth(async (request) => {
     const storedAvatarValue = newUser.avatarUrl
     const signedAvatarUrl = await resolveImageDisplayUrl(storedAvatarValue)
     const avatarKey = storedAvatarValue ?? null
+
+    await writeAuditEvent({
+      companyId: user.companyId,
+      actorUserId: user.userId,
+      targetUserId: newUser.id,
+      eventType: 'USER_CREATED',
+      result: 'SUCCESS',
+      reason: 'ADMIN_ACTION',
+      resourceType: 'USER',
+      resourceId: newUser.id,
+      ip: request.headers.get('x-forwarded-for') ?? undefined,
+      userAgent: request.headers.get('user-agent') ?? undefined,
+      requestId: request.headers.get('x-request-id') ?? undefined,
+      details: {
+        username: newUser.username,
+        userId: newUser.userId,
+        chineseName: newUser.chineseName,
+        role: newUser.role,
+        departmentId: newUser.departmentId ?? null,
+      },
+    })
 
     return NextResponse.json({
       data: {
