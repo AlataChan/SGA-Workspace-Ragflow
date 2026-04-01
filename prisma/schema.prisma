@@ -51,6 +51,7 @@ model Department {
 
 model User {
   id               String                @id @default(cuid())
+  ldapuid          String?
   companyId        String                @map("company_id")
   username         String                @map("username")
   userId           String                @default("") @map("user_id")
