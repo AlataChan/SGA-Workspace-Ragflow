@@ -13,6 +13,11 @@ interface H5Agent {
   photoUrl?: string | null
   platform: string
   platformConfig?: Record<string, any> | null
+  moltRuntime?: {
+    id?: string
+    status?: string
+    [key: string]: unknown
+  }
 }
 
 interface UserProfile {
@@ -70,7 +75,9 @@ function H5ChatPageContent() {
         const list = (agentsJson?.data?.agents || []) as H5Agent[]
         const found = list.find((a) => a.id === agentId) || null
         if (!found) throw new Error("未找到智能体或无权限访问")
-        if (found.platform !== "RAGFLOW") throw new Error("该智能体不是 RAGFLOW 平台")
+        if (found.platform !== "RAGFLOW" && !found.moltRuntime) {
+          throw new Error("该智能体不是 RAGFLOW 或 Molt 集成平台")
+        }
         setAgent(found)
       } catch (e: any) {
         if (cancelled) return
@@ -90,6 +97,16 @@ function H5ChatPageContent() {
 
   const agentConfig = useMemo(() => {
     if (!agent || !user) return undefined
+    if (agent.moltRuntime) {
+      return {
+        platform: "MOLT" as const,
+        localAgentId: agent.id,
+        userId: user.id,
+        userAvatar: user.avatarUrl || undefined,
+        agentAvatar,
+        moltRuntime: agent.moltRuntime,
+      }
+    }
     return {
       platform: "RAGFLOW" as const,
       localAgentId: agent.id,

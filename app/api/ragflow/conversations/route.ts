@@ -1,16 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { RAGFlowClient } from '@/lib/ragflow-client'
 import prisma from '@/lib/prisma'
+import { verifyUserAuth } from '@/lib/auth/user'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
     try {
+        const user = await verifyUserAuth(request)
+        if (!user) {
+            return NextResponse.json(
+                { error: '未授权' },
+                { status: 401 }
+            )
+        }
+
         const searchParams = request.nextUrl.searchParams
         const agent_id = searchParams.get('agent_id')
         const page = parseInt(searchParams.get('page') || '1')
         const page_size = parseInt(searchParams.get('page_size') || '20')
-        const user_id = searchParams.get('user_id') || 'default-user'
+        const user_id = user.userId || 'default-user'
 
         if (!agent_id) {
             return NextResponse.json(
@@ -20,8 +29,11 @@ export async function GET(request: NextRequest) {
         }
 
         // 获取 Agent 配置
-        const agent = await prisma.agent.findUnique({
-            where: { id: agent_id }
+        const agent = await prisma.agent.findFirst({
+            where: {
+                id: agent_id,
+                companyId: user.companyId
+            }
         })
         if (!agent) {
             return NextResponse.json(

@@ -2,23 +2,32 @@ import { NextRequest, NextResponse } from 'next/server';
 import { RAGFlowClient } from '@/lib/ragflow-client';
 import prisma from '@/lib/prisma';
 import { normalizeRagflowContent } from '@/lib/ragflow-utils';
+import { verifyUserAuth } from '@/lib/auth/user';
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
     try {
+        const user = await verifyUserAuth(request);
+        if (!user) {
+            return NextResponse.json({ error: '未授权' }, { status: 401 });
+        }
+
         const searchParams = request.nextUrl.searchParams;
         const conversationId = searchParams.get('conversation_id');
         const agentId = searchParams.get('agent_id');
-        const userId = searchParams.get('user_id') || 'history_sys';
+        const userId = user.userId || 'history_sys';
 
         if (!conversationId || !agentId) {
             return NextResponse.json({ error: 'Missing conversation_id or agent_id' }, { status: 400 });
         }
 
         // 获取Agent配置
-        const agent = await prisma.agent.findUnique({
-            where: { id: agentId }
+        const agent = await prisma.agent.findFirst({
+            where: {
+                id: agentId,
+                companyId: user.companyId
+            }
         });
         if (!agent) {
             return NextResponse.json({ error: 'Agent not found' }, { status: 404 });

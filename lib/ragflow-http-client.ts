@@ -12,7 +12,7 @@
  */
 
 export interface RAGFlowHTTPConfig {
-  baseUrl: string          // http://43.139.167.250:9301
+  baseUrl: string          // https://your-ragflow-host.example.com:9301
   apiKey: string           // Bearer Token
   chatId: string           // Chat Assistant ID
   agentId?: string         // Agent ID (可选)

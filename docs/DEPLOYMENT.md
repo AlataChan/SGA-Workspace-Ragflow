@@ -87,6 +87,7 @@ NEXTAUTH_SECRET=your_nextauth_secret
 CSRF_SECRET=your_csrf_secret
 JWT_SECRET=your_jwt_secret
 ENCRYPTION_KEY=your_encryption_key
+TOKEN_ENCRYPTION_KEY=your_64_char_hex_token_encryption_key
 
 # 应用配置
 NEXT_PUBLIC_APP_URL=http://localhost:3000
@@ -189,6 +190,7 @@ LOG_FORMAT=json
 |--------|------|------|--------|
 | `JWT_SECRET` | JWT签名密钥 | ✅ | - |
 | `ENCRYPTION_KEY` | 数据加密密钥 | ✅ | - |
+| `TOKEN_ENCRYPTION_KEY` | SSO Token 加密密钥（启用 SSO 时必需） | ❌ | - |
 | `API_RATE_LIMIT_REQUESTS` | API速率限制请求数 | ❌ | 100 |
 | `API_RATE_LIMIT_WINDOW` | API速率限制时间窗口(ms) | ❌ | 60000 |
 

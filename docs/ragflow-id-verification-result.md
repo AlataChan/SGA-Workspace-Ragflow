@@ -82,8 +82,8 @@
 
 ```bash
 # RAGFlow配置
-RAGFLOW_URL=http://43.139.167.250:9301
-RAGFLOW_API_KEY=ragflow-oFtwVwk4wN6xBDJGbuUaPwM-QwOWQBgTMFYPkW8kSQY
+RAGFLOW_URL=http://your-ragflow-host:9301
+RAGFLOW_API_KEY=ragflow-your-api-key
 
 # Chat Assistant (已确认: jerry)
 RAGFLOW_CHAT_ID=5969765e909a11f0901cde75c101e789
@@ -103,14 +103,14 @@ RAGFLOW_KB_ID=dc949110906a11f08b78aa7cd3e67281
 
 ```bash
 # 创建会话
-curl -X POST "http://43.139.167.250:9301/api/v1/chats/5969765e909a11f0901cde75c101e789/sessions" \
-  -H "Authorization: Bearer ragflow-oFtwVwk4wN6xBDJGbuUaPwM-QwOWQBgTMFYPkW8kSQY" \
+curl -X POST "http://your-ragflow-host:9301/api/v1/chats/5969765e909a11f0901cde75c101e789/sessions" \
+  -H "Authorization: Bearer ragflow-your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"name": "测试会话"}'
 
 # 发送消息
-curl -X POST "http://43.139.167.250:9301/api/v1/chats/5969765e909a11f0901cde75c101e789/sessions/{session_id}/completions" \
-  -H "Authorization: Bearer ragflow-oFtwVwk4wN6xBDJGbuUaPwM-QwOWQBgTMFYPkW8kSQY" \
+curl -X POST "http://your-ragflow-host:9301/api/v1/chats/5969765e909a11f0901cde75c101e789/sessions/{session_id}/completions" \
+  -H "Authorization: Bearer ragflow-your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"question": "你好", "stream": true}'
 ```
@@ -119,25 +119,25 @@ curl -X POST "http://43.139.167.250:9301/api/v1/chats/5969765e909a11f0901cde75c1
 
 ```bash
 # 获取知识库信息
-curl -X GET "http://43.139.167.250:9301/api/v1/datasets" \
-  -H "Authorization: Bearer ragflow-oFtwVwk4wN6xBDJGbuUaPwM-QwOWQBgTMFYPkW8kSQY"
+curl -X GET "http://your-ragflow-host:9301/api/v1/datasets" \
+  -H "Authorization: Bearer ragflow-your-api-key"
 
 # 上传文档到知识库
-curl -X POST "http://43.139.167.250:9301/api/v1/datasets/dc949110906a11f08b78aa7cd3e67281/documents" \
-  -H "Authorization: Bearer ragflow-oFtwVwk4wN6xBDJGbuUaPwM-QwOWQBgTMFYPkW8kSQY" \
+curl -X POST "http://your-ragflow-host:9301/api/v1/datasets/dc949110906a11f08b78aa7cd3e67281/documents" \
+  -H "Authorization: Bearer ragflow-your-api-key" \
   -F "file=@document.pdf"
 
 # 获取知识图谱
-curl -X GET "http://43.139.167.250:9301/api/v1/datasets/dc949110906a11f08b78aa7cd3e67281/knowledge_graph" \
-  -H "Authorization: Bearer ragflow-oFtwVwk4wN6xBDJGbuUaPwM-QwOWQBgTMFYPkW8kSQY"
+curl -X GET "http://your-ragflow-host:9301/api/v1/datasets/dc949110906a11f08b78aa7cd3e67281/knowledge_graph" \
+  -H "Authorization: Bearer ragflow-your-api-key"
 ```
 
 ### 3. Agent功能 (使用Agent ID)
 
 ```bash
 # 调用Agent
-curl -X POST "http://43.139.167.250:9301/api/v1/webhook/3a7b0690909a11f0a862de75c101e789" \
-  -H "Authorization: Bearer ragflow-oFtwVwk4wN6xBDJGbuUaPwM-QwOWQBgTMFYPkW8kSQY" \
+curl -X POST "http://your-ragflow-host:9301/api/v1/webhook/3a7b0690909a11f0a862de75c101e789" \
+  -H "Authorization: Bearer ragflow-your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"question": "你好", "stream": true}'
 ```
@@ -206,4 +206,3 @@ npx tsx scripts/test-ragflow-ids.ts
 - 环境变量已更新，可以开始使用HTTP API进行集成开发
 
 **最后更新**: 2025-12-20
-

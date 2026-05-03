@@ -2,7 +2,7 @@
 
 ## 基础信息
 
-- **基础 URL**: `http://192.144.232.60/v1`
+- **基础 URL**: `https://your-dify-host.example.com/v1`
 - **鉴权**: 所有 API 请求需在 HTTP Header 中添加
   ```
   Authorization: Bearer {API_KEY}
@@ -48,7 +48,7 @@
 #### 请求示例
 
 ```bash
-curl -X POST 'http://192.144.232.60/v1/chat-messages' \
+curl -X POST 'https://your-dify-host.example.com/v1/chat-messages' \
   --header 'Authorization: Bearer {api_key}' \
   --header 'Content-Type: application/json' \
   --data-raw '{
@@ -136,7 +136,7 @@ curl -X POST 'http://192.144.232.60/v1/chat-messages' \
 #### 请求示例
 
 ```bash
-curl -X POST 'http://192.144.232.60/v1/files/upload' \
+curl -X POST 'https://your-dify-host.example.com/v1/files/upload' \
   --header 'Authorization: Bearer {api_key}' \
   --form 'file=@localfile;type=image/png' \
   --form 'user=abc-123'

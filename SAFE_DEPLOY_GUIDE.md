@@ -157,7 +157,7 @@ docker compose exec app sh
 ## 🔒 安全建议
 
 1. **修改默认密码**: 首次登录后立即修改
-2. **更新密钥**: 编辑 `.env` 文件，修改所有 `change-this` 的值
+2. **更新密钥**: 编辑 `.env` 文件，修改所有 `change-this` 的值，并确认 `TOKEN_ENCRYPTION_KEY` 已配置
 3. **生产环境**: 使用 HTTPS，配置防火墙
 4. **定期备份**: 备份数据库和上传文件
 
@@ -169,4 +169,3 @@ docker compose exec app sh
 1. 查看日志: `docker compose logs -f`
 2. 检查服务状态: `docker compose ps`
 3. 查看文档: `README.md`, `DEPLOYMENT.md`
-

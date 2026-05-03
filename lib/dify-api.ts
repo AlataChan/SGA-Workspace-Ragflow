@@ -31,9 +31,15 @@ export class DifyAPI {
   private baseUrl: string
   private apiKey: string
 
-  constructor() {
-    this.baseUrl = "http://192.144.232.60/v1"
-    this.apiKey = "app-P0zICVDnPuLSteB4iM7SClQi"
+  constructor(config?: { baseUrl?: string; apiKey?: string }) {
+    this.baseUrl = String(config?.baseUrl || process.env.DEFAULT_DIFY_BASE_URL || "").replace(/\/+$/, "")
+    this.apiKey = String(config?.apiKey || process.env.DEFAULT_DIFY_API_KEY || "").trim()
+  }
+
+  private assertConfigured() {
+    if (!this.baseUrl || !this.apiKey) {
+      throw new Error("Dify API 未配置，请设置 DEFAULT_DIFY_BASE_URL 和 DEFAULT_DIFY_API_KEY")
+    }
   }
 
   // 发送消息到Dify
@@ -47,6 +53,8 @@ export class DifyAPI {
       upload_file_id?: string
     }>
   ): Promise<AsyncGenerator<DifyStreamResponse>> {
+    this.assertConfigured()
+
     const response = await fetch(`${this.baseUrl}/chat-messages`, {
       method: 'POST',
       headers: {
@@ -107,6 +115,8 @@ export class DifyAPI {
 
   // 上传文件到Dify
   async uploadFile(file: File): Promise<{ id: string; name: string }> {
+    this.assertConfigured()
+
     const formData = new FormData()
     formData.append('file', file)
     formData.append('user', 'user-123')
@@ -132,6 +142,8 @@ export class DifyAPI {
 
   // 获取对话历史
   async getConversationMessages(conversationId: string): Promise<DifyMessage[]> {
+    this.assertConfigured()
+
     const response = await fetch(`${this.baseUrl}/messages?conversation_id=${conversationId}&limit=100`, {
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,

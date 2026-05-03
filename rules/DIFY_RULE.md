@@ -2,7 +2,7 @@
 
 ## 基础信息
 
-- **基础 URL**: `http://192.144.232.60/v1`
+- **基础 URL**: `https://your-dify-host.example.com/v1`
 - **鉴权**: 所有 API 请求需在 HTTP Header 中添加
   ```
   Authorization: Bearer {API_KEY}
@@ -48,7 +48,7 @@
 #### 请求示例
 
 ```bash
-curl -X POST 'http://192.144.232.60/v1/chat-messages' \
+curl -X POST 'https://your-dify-host.example.com/v1/chat-messages' \
   --header 'Authorization: Bearer {api_key}' \
   --header 'Content-Type: application/json' \
   --data-raw '{
@@ -136,7 +136,7 @@ curl -X POST 'http://192.144.232.60/v1/chat-messages' \
 #### 请求示例
 
 ```bash
-curl -X POST 'http://192.144.232.60/v1/files/upload' \
+curl -X POST 'https://your-dify-host.example.com/v1/files/upload' \
   --header 'Authorization: Bearer {api_key}' \
   --form 'file=@localfile;type=image/png' \
   --form 'user=abc-123'
@@ -309,7 +309,7 @@ Request Example
 Request
 GET
 /messages
-curl -X GET 'http://43.139.167.250/v1/messages?user=abc-123&conversation_id=' \
+curl -X GET 'https://your-dify-host.example.com/v1/messages?user=abc-123&conversation_id=' \
 --header 'Authorization: Bearer {api_key}'
 
 Copy
@@ -428,7 +428,7 @@ limit (int) 返回条数，若传入超过系统限制，返回系统限制数�
 Request
 GET
 /conversations
-curl -X GET 'http://43.139.167.250/v1/conversations?user=abc-123&last_id=&limit=20'\
+curl -X GET 'https://your-dify-host.example.com/v1/conversations?user=abc-123&last_id=&limit=20'\
 --header 'Authorization: Bearer {api_key}'
 
 Copy
@@ -478,7 +478,7 @@ result (string) 固定返回 success
 Request
 DELETE
 /conversations/:conversation_id
-curl -X DELETE 'http://43.139.167.250/v1/conversations/:conversation_id' \
+curl -X DELETE 'https://your-dify-host.example.com/v1/conversations/:conversation_id' \
 --header 'Authorization: Bearer {api_key}' \
 --header 'Content-Type: application/json' \
 --data-raw '{ 
@@ -532,7 +532,7 @@ updated_at (timestamp) 更新时间
 Request
 POST
 /conversations/:conversation_id/name
-curl -X POST 'http://43.139.167.250/v1/conversations/:conversation_id/name' \
+curl -X POST 'https://your-dify-host.example.com/v1/conversations/:conversation_id/name' \
 --header 'Authorization: Bearer {api_key}' \
 --header 'Content-Type: application/json' \
 --data-raw '{ 
@@ -607,7 +607,7 @@ updated_at (int) 最后更新时间戳
 Request
 GET
 /conversations/:conversation_id/variables
-curl -X GET 'http://43.139.167.250/v1/conversations/{conversation_id}/variables?user=abc-123' \
+curl -X GET 'https://your-dify-host.example.com/v1/conversations/{conversation_id}/variables?user=abc-123' \
 --header 'Authorization: Bearer {api_key}'
 
 Copy
@@ -698,7 +698,7 @@ updated_at (int) 最后更新时间戳
 Request
 PUT
 /conversations/:conversation_id/variables/:variable_id
-curl -X PUT 'http://43.139.167.250/v1/conversations/{conversation_id}/variables/{variable_id}' \
+curl -X PUT 'https://your-dify-host.example.com/v1/conversations/{conversation_id}/variables/{variable_id}' \
 --header 'Authorization: Bearer {api_key}' \
 --header 'Content-Type: application/json' \
 --data-raw '{
@@ -820,7 +820,7 @@ Header：通过 HTTP Header X-Trace-Id 传递，优先级最高。
 Query 参数：通过 URL 查询参数 trace_id 传递。
 Request Body：通过请求体字段 trace_id 传递（即本字段）。
 
-curl -X POST 'http://43.139.167.250/v1/chat-messages' \
+curl -X POST 'https://your-dify-host.example.com/v1/chat-messages' \
 --header 'Authorization: Bearer {api_key}' \
 --header 'Content-Type: application/json' \
 --data-raw '{

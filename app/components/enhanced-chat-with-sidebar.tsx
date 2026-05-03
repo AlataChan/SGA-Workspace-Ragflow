@@ -32,8 +32,11 @@ import FileCard from './file-card'
 import { EnhancedDifyClient, DifyStreamMessage } from '@/lib/enhanced-dify-client'
 import { RAGFlowBlockingClient, RAGFlowMessage } from '@/lib/ragflow-blocking-client'
 import { RAGFlowProxyClient, RAGFlowProxyMessage } from '@/lib/ragflow-proxy-client'
+import { MoltBrowserClient } from '@/lib/molt/browser-client'
+import type { MoltSseEvent } from '@/lib/molt/types'
 import RAGFlowReferenceCard from '@/components/chat/ragflow-reference-card'
 import { splitThinkTags } from '@/lib/thinking'
+import { shouldProxyDifyImageUrl } from '@/lib/utils/dify-file-url'
 import {
   hasRagflowInlineReferenceMarkers,
   normalizeRagflowContent,
@@ -450,13 +453,8 @@ const AttachmentRenderer: React.FC<AttachmentRendererProps> = ({
       if (attachment.base64Data) {
         imageSrc = attachment.base64Data;
       } else if (attachment.url) {
-        // 检查是否需要代理（内网地址或特定域名）
-        if (attachment.url.includes('192.144.232.60') ||
-          attachment.url.includes('localhost') ||
-          attachment.url.includes('127.0.0.1') ||
-          attachment.url.includes('10.') ||
-          attachment.url.includes('172.') ||
-          attachment.url.includes('192.168.')) {
+        // 仅对 Dify 文件 URL 走代理，避免把该接口用成通用图片代理。
+        if (shouldProxyDifyImageUrl(attachment.url)) {
           imageSrc = `/api/proxy-image?url=${encodeURIComponent(attachment.url)}`;
         } else {
           imageSrc = attachment.url;
@@ -516,8 +514,8 @@ const AttachmentRenderer: React.FC<AttachmentRendererProps> = ({
       if (attachment.base64Data) {
         imageSrc = attachment.base64Data;
       } else if (attachment.url) {
-        // 对于DIFY的图片URL，使用代理
-        if (attachment.url.startsWith('/files/') || attachment.url.includes('files/tools/')) {
+        // 仅对 Dify 文件 URL 使用代理。
+        if (shouldProxyDifyImageUrl(attachment.url)) {
           imageSrc = `/api/proxy-image?url=${encodeURIComponent(attachment.url)}`;
         } else {
           imageSrc = attachment.url;
@@ -625,10 +623,15 @@ interface MessageCache {
 
 interface AgentConfig {
   // 通用配置
-  platform?: 'DIFY' | 'RAGFLOW'
+  platform?: 'DIFY' | 'RAGFLOW' | 'MOLT'
   userId: string
   userAvatar?: string
   agentAvatar?: string
+  moltRuntime?: {
+    id?: string
+    status?: string
+    [key: string]: unknown
+  }
 
   // DIFY 配置
   difyUrl?: string
@@ -767,10 +770,14 @@ export default function EnhancedChatWithSidebar({
   const difyClientRef = useRef<EnhancedDifyClient | null>(null)
   const ragflowClientRef = useRef<RAGFlowBlockingClient | null>(null)
   const ragflowProxyClientRef = useRef<RAGFlowProxyClient | null>(null)
+  const moltClientRef = useRef<MoltBrowserClient | null>(null)
+  const moltAbortControllerRef = useRef<AbortController | null>(null)
 
   const currentSession = sessions.find(s => s.id === currentSessionId)
   const actualAgentAvatar = agentConfig?.agentAvatar || agentAvatar
   const actualUserAvatar = agentConfig?.userAvatar
+  const isMoltIntegrated = agentConfig?.platform === 'MOLT' || Boolean(agentConfig?.moltRuntime)
+  const moltAgentId = agentConfig?.localAgentId || agentConfig?.agentId || agentConfig?.moltRuntime?.id
 
   // 调试用户头像
   useEffect(() => {
@@ -786,8 +793,8 @@ export default function EnhancedChatWithSidebar({
     const files = event.target.files
     if (!files || files.length === 0) return
 
-    if (agentConfig?.platform !== 'DIFY' || !agentConfig?.localAgentId || !agentConfig?.userId) {
-      toast.error('当前 Agent 不支持文件上传（需要 Dify 平台且具备 agentId/userId）')
+    if ((!isMoltIntegrated && agentConfig?.platform !== 'DIFY') || !agentConfig?.localAgentId || !agentConfig?.userId) {
+      toast.error('当前 Agent 不支持文件上传（需要支持上传的平台且具备 agentId/userId）')
       return
     }
 
@@ -831,20 +838,22 @@ export default function EnhancedChatWithSidebar({
           throw new Error(`文件大小超过限制（最大 ${maxLabel}，当前 ${currentLabel}）`)
         }
 
-        // 统一上传到 Dify（支持图片和文档）
+        // 统一上传到当前 Agent 的后端适配器；Molt-backed agents 进入 Molt custody。
         const formData = new FormData()
         formData.append('file', file)
         formData.append('agentId', agentConfig.localAgentId)
         formData.append('userId', agentConfig.userId)
+        const uploadEndpoint = isMoltIntegrated ? '/api/molt/files/upload' : '/api/dify/files/upload'
 
-        console.log(`[FileUpload] 上传文件到 Dify:`, {
+        console.log(`[FileUpload] 上传文件:`, {
           fileName: file.name,
           fileType: file.type,
           fileSize: file.size,
-          agentId: agentConfig.localAgentId
+          agentId: agentConfig.localAgentId,
+          endpoint: uploadEndpoint,
         })
 
-        const response = await fetch('/api/dify/files/upload', {
+        const response = await fetch(uploadEndpoint, {
           method: 'POST',
           body: formData,
         })
@@ -874,6 +883,8 @@ export default function EnhancedChatWithSidebar({
 
         const result = await response.json()
         console.log(`[FileUpload] 文件上传成功:`, result)
+        const uploaded = result.data ?? result
+        const uploadId = uploaded.upload_id || result.upload_id || uploaded.id || result.id
 
         // 为图片文件生成base64数据作为备用
         let base64Data: string | undefined = undefined
@@ -892,12 +903,12 @@ export default function EnhancedChatWithSidebar({
         }
 
         const attachment: FileAttachment = {
-          id: result.id || nanoid(),
+          id: uploadId || nanoid(),
           name: file.name,
           type: file.type,
           size: file.size,
-          url: result.url,
-          uploadFileId: result.id,
+          url: uploaded.url || result.url,
+          uploadFileId: uploadId,
           base64Data, // 添加base64数据
           source: 'user' // 标记为用户上传
         }
@@ -924,6 +935,74 @@ export default function EnhancedChatWithSidebar({
 
   // 获取历史对话列表
   const fetchHistoryConversations = useCallback(async (forceRefresh = false, loadMore = false) => {
+    if (isMoltIntegrated && moltAgentId) {
+      if (isLoadingHistory) return
+
+      const now = Date.now()
+      const cacheValid = (now - historyCacheRef.current.lastFetch) < 5 * 60 * 1000
+
+      if (!forceRefresh && !loadMore && cacheValid && historyCacheRef.current.conversations.length > 0) {
+        setHistoryConversations(historyCacheRef.current.conversations)
+        setHasMoreHistory(historyCacheRef.current.hasMore)
+        return
+      }
+
+      try {
+        setIsLoadingHistory(true)
+        setHistoryError(null)
+
+        if (!moltClientRef.current) {
+          moltClientRef.current = new MoltBrowserClient()
+        }
+
+        const pageSize = 20
+        const offset = loadMore ? historyCacheRef.current.conversations.length : 0
+        const result = await moltClientRef.current.listConversations(moltAgentId, {
+          limit: pageSize,
+          offset,
+        })
+
+        const newConversations: DifyHistoryConversation[] = (result.data || []).map((conversation: any) => ({
+          id: String(conversation.id),
+          name: conversation.title || conversation.name || '未命名会话',
+          created_at: String(
+            conversation.createdAt
+            ?? conversation.created_at
+            ?? conversation.updatedAt
+            ?? conversation.updated_at
+            ?? Date.now()
+          ),
+          inputs: {},
+        }))
+
+        const allConversations = loadMore
+          ? [...historyCacheRef.current.conversations, ...newConversations]
+          : newConversations
+        const total = Number.isFinite(Number(result.total)) ? Number(result.total) : allConversations.length
+        const hasMore = offset + newConversations.length < total
+
+        historyCacheRef.current = {
+          conversations: allConversations,
+          lastFetch: now,
+          hasMore,
+          lastId: undefined,
+        }
+
+        setHistoryConversations(allConversations)
+        setHasMoreHistory(hasMore)
+      } catch (error) {
+        console.error('获取Molt历史失败:', error)
+        if (!loadMore) {
+          setHistoryConversations([])
+          setHasMoreHistory(false)
+        }
+        setHistoryError('获取历史记录失败')
+      } finally {
+        setIsLoadingHistory(false)
+      }
+      return
+    }
+
     // RAGFlow 处理逻辑
     if (agentConfig?.platform === 'RAGFLOW' && (agentConfig.localAgentId || agentConfig.agentId)) {
       if (isLoadingHistory) return
@@ -1119,7 +1198,16 @@ export default function EnhancedChatWithSidebar({
       setIsLoadingHistory(false)
       console.log('[EnhancedChat] 历史对话获取完成')
     }
-  }, [agentConfig?.difyUrl, agentConfig?.difyKey, agentConfig?.userId, agentConfig?.platform, agentConfig?.agentId, agentConfig?.localAgentId])
+  }, [
+    agentConfig?.difyUrl,
+    agentConfig?.difyKey,
+    agentConfig?.userId,
+    agentConfig?.platform,
+    agentConfig?.agentId,
+    agentConfig?.localAgentId,
+    isMoltIntegrated,
+    moltAgentId,
+  ])
 
   // 创建新会话
   const createNewSession = () => {
@@ -1131,6 +1219,8 @@ export default function EnhancedChatWithSidebar({
     difyClientRef.current?.stopCurrentRequest?.()
     ragflowProxyClientRef.current?.cancel?.()
     ragflowClientRef.current?.cancel?.()
+    moltAbortControllerRef.current?.abort()
+    moltAbortControllerRef.current = null
     setIsStreaming(false)
     setIsLoading(false)
     setIsLoadingHistory(false)
@@ -1168,7 +1258,8 @@ export default function EnhancedChatWithSidebar({
   // 加载历史对话的消息（支持缓存）
   const loadHistoryConversation = useCallback(async (historyConv: DifyHistoryConversation) => {
     const canLoadHistory =
-      (agentConfig?.platform === 'DIFY' && agentConfig?.difyUrl && agentConfig?.difyKey)
+      (isMoltIntegrated && moltAgentId)
+      || (agentConfig?.platform === 'DIFY' && agentConfig?.difyUrl && agentConfig?.difyKey)
       || (agentConfig?.platform === 'RAGFLOW' && (agentConfig?.localAgentId || agentConfig?.agentId))
 
     if (!canLoadHistory) return
@@ -1206,7 +1297,37 @@ export default function EnhancedChatWithSidebar({
         }, 15000) // 15秒超时（历史消息可能较多）
 
         try {
-          if (agentConfig?.platform === 'RAGFLOW' && (agentConfig.localAgentId || agentConfig.agentId)) {
+          if (isMoltIntegrated && moltAgentId) {
+            if (!moltClientRef.current) {
+              moltClientRef.current = new MoltBrowserClient()
+            }
+
+            const response = await moltClientRef.current.getConversationMessages(moltAgentId, historyConv.id, {
+              signal: timeoutController.signal,
+            })
+            clearTimeout(timeoutId)
+
+            convertedMessages = (response.data || []).map((msg: any, index: number) => ({
+              id: msg.id || msg.message_id || `${historyConv.id}_${index}` || nanoid(),
+              role: msg.role?.toLowerCase?.() === 'user' ? 'user' : 'assistant',
+              content: safeStringifyContent(
+                msg.content ?? msg.answer ?? msg.data?.content ?? msg.outputs?.content ?? msg.output?.content ?? ''
+              ),
+              timestamp: msg.created_at
+                ? new Date(msg.created_at).getTime()
+                : msg.createdAt
+                  ? new Date(msg.createdAt).getTime()
+                  : Date.now(),
+              attachments: (msg.attachments || []).map((file: any) => ({
+                id: file.resource_id || file.id || nanoid(),
+                name: file.filename || file.name || 'file',
+                type: file.mime_type || file.type || 'application/octet-stream',
+                size: file.size || 0,
+                url: file.url,
+                source: 'agent' as const,
+              })),
+            }))
+          } else if (agentConfig?.platform === 'RAGFLOW' && (agentConfig.localAgentId || agentConfig.agentId)) {
             // RAGFlow 历史消息逻辑
             if (ragflowProxyClientRef.current) {
               const messages = await ragflowProxyClientRef.current.getHistory(historyConv.id)
@@ -1400,7 +1521,7 @@ export default function EnhancedChatWithSidebar({
         setIsLoadingHistory(false)
       }
     }
-  }, [agentConfig, agentName, actualAgentAvatar])
+  }, [agentConfig, agentName, actualAgentAvatar, isMoltIntegrated, moltAgentId])
 
   // 历史对话刷新逻辑放到“客户端初始化”useEffect 内部执行：
   // 这样可以确保 RAGFlow 代理客户端（ragflowProxyClientRef）已就绪，避免首次进入聊天页走旧回退接口导致“看起来没刷新”。
@@ -1745,13 +1866,21 @@ export default function EnhancedChatWithSidebar({
     difyClientRef.current = null
     ragflowClientRef.current = null
     ragflowProxyClientRef.current = null
+    moltClientRef.current = null
 
     if (!agentConfig?.platform || !agentConfig?.userId) {
       console.warn('[EnhancedChat] Agent配置不完整，缺少平台或用户ID')
       return
     }
 
-    if (agentConfig.platform === 'DIFY') {
+    if (isMoltIntegrated) {
+      if (moltAgentId) {
+        console.log('[EnhancedChat] 初始化 Molt 客户端')
+        moltClientRef.current = new MoltBrowserClient()
+      } else {
+        console.warn('[EnhancedChat] Molt 配置不完整，缺少 agentId')
+      }
+    } else if (agentConfig.platform === 'DIFY') {
       if (agentConfig.difyUrl && agentConfig.difyKey) {
         console.log('[EnhancedChat] 初始化 DIFY 客户端')
         difyClientRef.current = new EnhancedDifyClient({
@@ -1798,6 +1927,8 @@ export default function EnhancedChatWithSidebar({
     agentConfig?.agentId,
     agentConfig?.userId,
     agentConfig?.localAgentId,
+    isMoltIntegrated,
+    moltAgentId,
     fetchHistoryConversations,
   ])
 
@@ -1826,6 +1957,11 @@ export default function EnhancedChatWithSidebar({
     if (ragflowClientRef.current) {
       ragflowClientRef.current.cancel()
       console.log('[EnhancedChat] RAGFlow 直连请求已停止')
+    }
+    if (moltAbortControllerRef.current) {
+      moltAbortControllerRef.current.abort()
+      moltAbortControllerRef.current = null
+      console.log('[EnhancedChat] Molt 请求已停止')
     }
 
     // 更新状态
@@ -1885,7 +2021,13 @@ export default function EnhancedChatWithSidebar({
     lastSendTimeRef.current = now
 
     // 检查客户端是否初始化
-    if (agentConfig?.platform === 'DIFY') {
+    if (isMoltIntegrated) {
+      if (!moltClientRef.current || !moltAgentId) {
+        console.error('[EnhancedChat] Molt 客户端未初始化')
+        toast.error('Molt 聊天服务未初始化，请检查Agent配置')
+        return
+      }
+    } else if (agentConfig?.platform === 'DIFY') {
       if (!difyClientRef.current) {
         console.error('[EnhancedChat] DIFY 客户端未初始化')
         toast.error('DIFY 聊天服务未初始化，请检查Agent配置')
@@ -1951,7 +2093,9 @@ export default function EnhancedChatWithSidebar({
       const sessionNameForPersist = isFirstUserQuestionInSession ? proposedSessionTitle : currentSession.title
 
       // 根据平台发送消息
-      if (agentConfig?.platform === 'DIFY') {
+      if (isMoltIntegrated) {
+        await sendMoltMessage(messageContent, conversationId || '', assistantMessage, fullContent)
+      } else if (agentConfig?.platform === 'DIFY') {
         await sendDifyMessage(messageContent, conversationId || '', assistantMessage, fullContent)
       } else if (agentConfig?.platform === 'RAGFLOW') {
         await sendRAGFlowMessage(
@@ -1994,8 +2138,144 @@ export default function EnhancedChatWithSidebar({
     return () => {
       // 清理最后发送时间引用
       lastSendTimeRef.current = 0
+      moltAbortControllerRef.current?.abort()
+      moltAbortControllerRef.current = null
     }
   }, [])
+
+  const readMoltString = (data: unknown, keys: string[]) => {
+    if (!data || typeof data !== 'object') return ''
+    const record = data as Record<string, unknown>
+    for (const key of keys) {
+      const value = record[key]
+      if (typeof value === 'string') return value
+    }
+    return ''
+  }
+
+  const sendMoltMessage = async (
+    messageContent: string,
+    conversationId: string,
+    assistantMessage: Message,
+    initialFullContent: string
+  ) => {
+    const client = moltClientRef.current
+    const agentId = moltAgentId
+    if (!client || !agentId) {
+      throw new Error('Molt 客户端未初始化')
+    }
+
+    let fullContent = initialFullContent
+    let activeConversationId = conversationId || ''
+    let assistantAttachments: FileAttachment[] = assistantMessage.attachments || []
+    const abortController = new AbortController()
+    moltAbortControllerRef.current = abortController
+    const idempotencyKey = `workspace-${nanoid()}`
+    const moltAttachments = attachments
+      .filter((attachment) => Boolean(attachment.uploadFileId))
+      .map((attachment) => ({
+        type: attachment.type.startsWith('image/') ? 'image' : 'file',
+        transfer_method: 'upload_id',
+        upload_id: String(attachment.uploadFileId),
+        filename: attachment.name,
+        mime_type: attachment.type,
+      }))
+
+    const updateAssistant = (patch: Partial<Message>, sessionPatch: Partial<ChatSession> = {}) => {
+      setSessions(prev => prev.map(session =>
+        session.id === currentSessionId ?
+          {
+            ...session,
+            ...sessionPatch,
+            messages: session.messages.map(msg =>
+              msg.id === assistantMessage.id ? { ...msg, ...patch } : msg
+            )
+          } :
+          session
+      ))
+    }
+
+    try {
+      for await (const event of client.chatStreaming(agentId, {
+        message: messageContent,
+        ...(activeConversationId ? { conversation_id: activeConversationId } : {}),
+        routing_mode: 'matrix',
+        ...(moltAttachments.length > 0 ? { attachments: moltAttachments } : {}),
+      }, { idempotencyKey, signal: abortController.signal })) {
+        const typedEvent = event as MoltSseEvent
+        switch (typedEvent.event) {
+          case 'conversation_created': {
+            const nextConversationId = readMoltString(typedEvent.data, ['conversation_id', 'conversationId'])
+            if (nextConversationId) activeConversationId = nextConversationId
+            break
+          }
+          case 'message': {
+            const content = readMoltString(typedEvent.data, ['content', 'answer', 'delta'])
+            if (content) {
+              fullContent = mergeStreamingText(fullContent, content)
+              updateAssistant({ content: fullContent, isStreaming: true })
+            }
+            break
+          }
+          case 'attachment': {
+            const data = typedEvent.data as Record<string, unknown>
+            const url = typeof data?.url === 'string' ? data.url : ''
+            const filename = typeof data?.filename === 'string' ? data.filename : `file_${Date.now()}`
+            const mimeType = typeof data?.mime_type === 'string' ? data.mime_type : 'application/octet-stream'
+            const attachment: FileAttachment = {
+              id: typeof data?.resource_id === 'string' ? data.resource_id : nanoid(),
+              name: filename,
+              type: mimeType,
+              url,
+              size: 0,
+              source: 'agent' as const,
+            }
+            assistantAttachments = [...assistantAttachments, attachment]
+            updateAssistant({
+              attachments: assistantAttachments,
+            })
+            break
+          }
+          case 'message_end': {
+            const nextConversationId = readMoltString(typedEvent.data, ['conversation_id', 'conversationId'])
+            if (nextConversationId) activeConversationId = nextConversationId
+            updateAssistant(
+              { content: fullContent, isStreaming: false },
+              { conversationId: activeConversationId, difyConversationId: activeConversationId },
+            )
+            break
+          }
+          case 'error': {
+            const message = readMoltString(typedEvent.data, ['message']) || 'Molt 处理失败'
+            updateAssistant({
+              content: fullContent ? `${fullContent}\n\n${message}` : message,
+              isStreaming: false,
+              hasError: true,
+            })
+            throw new Error(message)
+          }
+          case 'done':
+            updateAssistant(
+              { content: fullContent, isStreaming: false },
+              { conversationId: activeConversationId, difyConversationId: activeConversationId },
+            )
+            break
+          default:
+            break
+        }
+      }
+    } catch (error) {
+      if (abortController.signal.aborted) {
+        updateAssistant({ isStreaming: false })
+        return
+      }
+      throw error
+    } finally {
+      if (moltAbortControllerRef.current === abortController) {
+        moltAbortControllerRef.current = null
+      }
+    }
+  }
 
   // DIFY 消息发送
   const sendDifyMessage = async (messageContent: string, conversationId: string, assistantMessage: Message, fullContent: string) => {

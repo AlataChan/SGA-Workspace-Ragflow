@@ -22,6 +22,7 @@ services:
       - CSRF_SECRET=${CSRF_SECRET}
       - JWT_SECRET=${JWT_SECRET}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - TOKEN_ENCRYPTION_KEY=${TOKEN_ENCRYPTION_KEY}
       - LOG_LEVEL=info
       - LOG_FORMAT=json
       - LOG_FILE_PATH=/app/logs/app.log

@@ -1,5 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { gateLegacyMoltRoute } from '@/lib/molt/legacy-gate'
 import { logger } from '@/lib/utils/simple-logger'
+
+const DEFAULT_DIFY_BASE_URL = (process.env.DEFAULT_DIFY_BASE_URL || "").replace(/\/+$/, "")
+const DEFAULT_DIFY_API_KEY = (process.env.DEFAULT_DIFY_API_KEY || "").trim()
+
+function createDemoDifyConfig(name: string) {
+  const apiUrl = DEFAULT_DIFY_BASE_URL ? `${DEFAULT_DIFY_BASE_URL}/chat-messages` : ""
+
+  return {
+    name,
+    platform: 'dify',
+    apiUrl,
+    apiKey: DEFAULT_DIFY_API_KEY,
+    appId: DEFAULT_DIFY_API_KEY,
+    appType: 'agent'
+  }
+}
+
+function getAgentConfigs() {
+  return {
+    'demo-agent-1': {
+      name: 'GPT助手',
+      platform: 'openai',
+      apiUrl: process.env.OPENAI_API_URL || 'https://api.openai.com/v1/chat/completions',
+      apiKey: process.env.OPENAI_API_KEY || '',
+      model: 'gpt-3.5-turbo'
+    },
+    'demo-agent-2': createDemoDifyConfig('Dify智能体'),
+    'demo-agent-3': {
+      name: '代码助手',
+      platform: 'openai',
+      apiUrl: process.env.OPENAI_API_URL || 'https://api.openai.com/v1/chat/completions',
+      apiKey: process.env.OPENAI_API_KEY || '',
+      model: 'gpt-4'
+    },
+    'demo-agent-4': createDemoDifyConfig('文档助手')
+  }
+}
 
 // 创建流式响应
 function createStreamResponse(difyResponse: Response) {
@@ -144,39 +182,6 @@ function createMockStreamResponse(agentName: string, message: string, userId: st
   })
 }
 
-// 简化的智能体配置
-const AGENT_CONFIGS = {
-  'demo-agent-1': {
-    name: 'GPT助手',
-    platform: 'openai',
-    apiUrl: process.env.OPENAI_API_URL || 'https://api.openai.com/v1/chat/completions',
-    apiKey: process.env.OPENAI_API_KEY || '',
-    model: 'gpt-3.5-turbo'
-  },
-  'demo-agent-2': {
-    name: 'Dify智能体',
-    platform: 'dify',
-    apiUrl: 'http://192.144.232.60/v1/chat-messages',
-    apiKey: 'hvTuW1NrJZ5JDjdQ', // 使用你提供的真实token
-    appId: 'hvTuW1NrJZ5JDjdQ',
-    appType: 'agent'
-  },
-  'demo-agent-3': {
-    name: '代码助手',
-    platform: 'openai',
-    apiUrl: process.env.OPENAI_API_URL || 'https://api.openai.com/v1/chat/completions',
-    apiKey: process.env.OPENAI_API_KEY || '',
-    model: 'gpt-4'
-  },
-  'demo-agent-4': {
-    name: '文档助手',
-    platform: 'dify',
-    apiUrl: 'http://192.144.232.60/v1/chat-messages',
-    apiKey: 'app-P0zICVDnPuLSteB4iM7SClQi',
-    appId: 'app-P0zICVDnPuLSteB4iM7SClQi'
-  }
-}
-
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
@@ -184,6 +189,18 @@ export async function POST(
   try {
     const { agentId } = await params
     const body = await request.json()
+
+    const { verifyUserAuth } = await import("@/lib/auth/user")
+    const workspaceUser = await verifyUserAuth(request).catch(() => null)
+    if (workspaceUser) {
+      const moltGate = gateLegacyMoltRoute("chat", {
+        companyId: workspaceUser.companyId,
+        agentId,
+      })
+      if (moltGate) {
+        return moltGate
+      }
+    }
 
     // 支持两种请求格式：
     // 1. 旧格式：{ message, userId, conversationId }
@@ -215,7 +232,8 @@ export async function POST(
     })
 
     // 获取智能体配置
-    const agentConfig = AGENT_CONFIGS[agentId as keyof typeof AGENT_CONFIGS]
+    const agentConfigs = getAgentConfigs()
+    const agentConfig = agentConfigs[agentId as keyof typeof agentConfigs]
     if (!agentConfig) {
       return NextResponse.json(
         { error: '智能体不存在' },
@@ -242,7 +260,7 @@ async function callDifyAPI(config: any, message: string, userId: string, convers
     // 如果没有配置API密钥，返回模拟流式响应
     if (!config.apiKey) {
       logger.info('使用模拟Dify流式响应')
-      const mockAnswer = `这是来自${config.name}的模拟响应：\n\n您说："${message}"\n\n我是基于Dify平台的智能助手，目前处于演示模式。要启用真实的AI对话，请在环境变量中配置DIFY_API_KEY和DIFY_API_URL。\n\n用户ID: ${userId}`
+      const mockAnswer = `这是来自${config.name}的模拟响应：\n\n您说："${message}"\n\n我是基于Dify平台的智能助手，目前处于演示模式。要启用真实的AI对话，请在环境变量中配置 DEFAULT_DIFY_API_KEY 和 DEFAULT_DIFY_BASE_URL。\n\n用户ID: ${userId}`
       return createMockStreamResponse(config.name, mockAnswer, userId, conversationId)
     }
 
@@ -364,7 +382,8 @@ export async function GET(
 ) {
   try {
     const { agentId } = await params
-    const agentConfig = AGENT_CONFIGS[agentId as keyof typeof AGENT_CONFIGS]
+    const agentConfigs = getAgentConfigs()
+    const agentConfig = agentConfigs[agentId as keyof typeof agentConfigs]
     
     if (!agentConfig) {
       return NextResponse.json(
@@ -377,7 +396,7 @@ export async function GET(
       id: agentId,
       name: agentConfig.name,
       platform: agentConfig.platform,
-      status: agentConfig.apiKey ? 'active' : 'demo'
+      status: agentConfig.apiKey && agentConfig.apiUrl ? 'active' : 'demo'
     })
 
   } catch (error) {

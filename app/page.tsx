@@ -14,35 +14,25 @@ export default function HomePage() {
   useEffect(() => {
     const checkSystemInit = async () => {
       try {
-        // 先测试数据库连接
-        console.log('测试数据库连接...')
-        const dbResponse = await fetch('/api/test/db')
-        const dbData = await dbResponse.json()
+        console.log('检查系统初始化状态...')
+        const response = await fetch('/api/system/init-check', { cache: 'no-store' })
+        const data = await response.json()
 
-        if (dbData.success) {
+        if (data.success) {
           setDbStatus('success')
-          console.log('数据库连接正常')
+          console.log('系统状态检查正常')
 
-          // 数据库正常，继续检查系统初始化
-          const response = await fetch('/api/system/init-check')
-          const data = await response.json()
-
-          if (data.success) {
-            if (data.isInitialized) {
-              // 系统已初始化，跳转到登录页面
-              setTimeout(() => router.push('/auth/login'), 1000)
-            } else {
-              // 系统未初始化，跳转到初始化页面
-              setTimeout(() => router.push('/setup'), 1000)
-            }
-          } else {
-            // 检查失败，默认跳转到登录页面
+          if (data.isInitialized) {
+            // 系统已初始化，跳转到登录页面
             setTimeout(() => router.push('/auth/login'), 1000)
+          } else {
+            // 系统未初始化，跳转到初始化页面
+            setTimeout(() => router.push('/setup'), 1000)
           }
         } else {
           setDbStatus('error')
-          setError(dbData.error?.message || '数据库连接失败')
-          console.error('数据库连接失败:', dbData.error)
+          setError(data.error || '系统检查失败')
+          console.error('系统状态检查失败:', data.error)
         }
       } catch (error) {
         console.error('系统检查失败:', error)
@@ -64,7 +54,7 @@ export default function HomePage() {
           <p className="text-muted-foreground">正在检查系统状态...</p>
           <div className="mt-4 flex items-center justify-center space-x-2">
             <Database className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">检查数据库连接</span>
+            <span className="text-sm text-muted-foreground">检查系统初始化状态</span>
           </div>
         </div>
       </div>
@@ -77,7 +67,7 @@ export default function HomePage() {
         <div className="text-center max-w-md mx-auto p-6">
           <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-foreground mb-2">系统启动失败</h1>
-          <p className="text-muted-foreground mb-4">数据库连接失败，请检查以下配置：</p>
+          <p className="text-muted-foreground mb-4">系统状态检查失败，请检查以下配置：</p>
 
           <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 mb-4 text-left">
             <p className="text-sm text-destructive font-medium mb-2">错误信息：</p>

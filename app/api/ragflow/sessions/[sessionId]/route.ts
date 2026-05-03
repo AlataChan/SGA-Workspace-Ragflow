@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { RAGFlowHTTPClient } from '@/lib/ragflow-http-client'
+import { verifyUserAuth } from '@/lib/auth/user'
 
 // 从环境变量获取配置
 function getRAGFlowConfig() {
@@ -29,6 +30,14 @@ export async function DELETE(
   { params }: { params: { sessionId: string } }
 ) {
   try {
+    const user = await verifyUserAuth(request)
+    if (!user) {
+      return NextResponse.json(
+        { code: 401, data: null, message: '未授权' },
+        { status: 401 }
+      )
+    }
+
     const config = getRAGFlowConfig()
     const client = new RAGFlowHTTPClient(config)
 
@@ -64,4 +73,3 @@ export async function DELETE(
     )
   }
 }
-

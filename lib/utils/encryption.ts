@@ -9,14 +9,12 @@ import crypto from 'crypto'
 const ALGORITHM = 'aes-256-cbc'
 const IV_LENGTH = 16 // AES block size
 
-// 从环境变量获取加密密钥，如果没有则使用默认值（仅开发环境）
+// 从环境变量获取加密密钥；未配置时直接失败，避免落入固定默认值。
 const getEncryptionKey = (): Buffer => {
   const key = process.env.TOKEN_ENCRYPTION_KEY
   
   if (!key) {
-    console.warn('⚠️  TOKEN_ENCRYPTION_KEY 未设置，使用默认密钥（仅供开发）')
-    // 开发环境默认密钥（32字节）
-    return Buffer.from('dev-encryption-key-32-bytes!!')
+    throw new Error('TOKEN_ENCRYPTION_KEY 未配置，请设置为 32 字节字符串或 64 位十六进制字符')
   }
   
   // 确保密钥长度为 32 字节
@@ -55,6 +53,9 @@ export function encrypt(text: string): string {
     return `${iv.toString('hex')}:${encrypted}`
   } catch (error) {
     console.error('加密失败:', error)
+    if (error instanceof Error && error.message.includes('TOKEN_ENCRYPTION_KEY')) {
+      throw new Error(error.message)
+    }
     throw new Error('Token 加密失败')
   }
 }
@@ -87,6 +88,9 @@ export function decrypt(encryptedText: string): string {
     return decrypted
   } catch (error) {
     console.error('解密失败:', error)
+    if (error instanceof Error && error.message.includes('TOKEN_ENCRYPTION_KEY')) {
+      throw new Error(error.message)
+    }
     throw new Error('Token 解密失败')
   }
 }
@@ -114,7 +118,6 @@ export function testEncryption(): boolean {
     return false
   }
 }
-
 
 
 

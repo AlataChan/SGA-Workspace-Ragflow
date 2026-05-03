@@ -7,6 +7,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withAuth } from '@/lib/auth/middleware'
 import { getEffectiveAgentIdsForUser } from '@/lib/auth/agent-access'
+import { buildDelegation } from '@/lib/molt/delegation'
+import { isMoltProxyEnabled } from '@/lib/molt/flags'
+import { MoltServerClient } from '@/lib/molt/server-client'
+import { env } from '@/lib/config/env'
+import type { MoltAgentInfo } from '@/lib/molt/types'
 
 // CORS headers
 const corsHeaders = {
@@ -18,6 +23,86 @@ const corsHeaders = {
 // Handle preflight requests
 export async function OPTIONS() {
   return new NextResponse(null, { status: 200, headers: corsHeaders })
+}
+
+type AgentLike = {
+  id: string
+  isOnline?: boolean
+  [key: string]: any
+}
+
+type DepartmentWithAgents = {
+  agents: Array<{ id: string; isOnline?: boolean | null }>
+  [key: string]: any
+}
+
+function shouldEnrichAgent(companyId: string, agentId: string) {
+  return (
+    isMoltProxyEnabled("chat", { companyId, agentId }) ||
+    isMoltProxyEnabled("upload", { companyId, agentId }) ||
+    isMoltProxyEnabled("history", { companyId, agentId })
+  )
+}
+
+async function enrichAgentsWithMoltRuntime(
+  request: NextRequest & { user?: any },
+  user: { companyId: string },
+  agents: AgentLike[],
+) {
+  const eligibleIds = new Set(
+    agents
+      .filter((agent) => shouldEnrichAgent(user.companyId, agent.id))
+      .map((agent) => agent.id),
+  )
+  if (eligibleIds.size === 0 || !env.MOLT_API_BASE_URL || !env.MOLT_SERVICE_API_KEY) {
+    return agents
+  }
+
+  try {
+    const client = new MoltServerClient({
+      baseUrl: env.MOLT_API_BASE_URL,
+      serviceApiKey: env.MOLT_SERVICE_API_KEY,
+      timeoutMs: env.MOLT_REQUEST_TIMEOUT_MS,
+      delegation: () => buildDelegation(request),
+    })
+    const response = await client.listAgents({ signal: request.signal })
+    const runtimeById = new Map<string, MoltAgentInfo>()
+    for (const runtime of response.data) {
+      if (eligibleIds.has(runtime.id)) {
+        runtimeById.set(runtime.id, runtime)
+      }
+    }
+
+    return agents.map((agent) => {
+      const runtime = runtimeById.get(agent.id)
+      if (!runtime) {
+        return agent
+      }
+      const hasRuntimeStatus = typeof runtime.status === "string" && runtime.status.length > 0
+      return {
+        ...agent,
+        isOnline: hasRuntimeStatus ? runtime.status === "online" : agent.isOnline,
+        moltRuntime: runtime,
+      }
+    })
+  } catch (error) {
+    console.warn("[Molt Agents] Runtime enrichment failed:", error)
+    return agents
+  }
+}
+
+function buildDepartmentsWithStats(departments: DepartmentWithAgents[], agents: AgentLike[]) {
+  const onlineByAgentId = new Map(agents.map((agent) => [agent.id, Boolean(agent.isOnline)]))
+
+  return departments.map(dept => ({
+    ...dept,
+    agentCount: dept.agents.length,
+    onlineAgentCount: dept.agents.filter((agent) =>
+      onlineByAgentId.has(agent.id)
+        ? onlineByAgentId.get(agent.id)
+        : Boolean(agent.isOnline)
+    ).length,
+  }))
 }
 
 // GET /api/user/agents - 获取当前用户有权限访问的Agent列表
@@ -91,16 +176,12 @@ export const GET = withAuth(async (request) => {
         orderBy: { sortOrder: 'asc' }
       })
 
-      // 统计每个部门的Agent数量
-      const departmentsWithStats = departments.map(dept => ({
-        ...dept,
-        agentCount: dept.agents.length,
-        onlineAgentCount: dept.agents.filter(agent => agent.isOnline).length,
-      }))
+      const enrichedAgents = await enrichAgentsWithMoltRuntime(request as any, user, processedAgents)
+      const departmentsWithStats = buildDepartmentsWithStats(departments, enrichedAgents)
 
       return NextResponse.json({
         data: {
-          agents: processedAgents,
+          agents: enrichedAgents,
           departments: departmentsWithStats,
           isAdmin: true
         },
@@ -194,16 +275,16 @@ export const GET = withAuth(async (request) => {
       orderBy: { sortOrder: 'asc' }
     })
 
-    // 统计每个部门的Agent数量
-    const departmentsWithStats = userDepartments.map(dept => ({
-      ...dept,
-      agentCount: dept.agents.length,
-      onlineAgentCount: dept.agents.filter(agent => agent.isOnline).length,
-    }))
+    const enrichedUserAgents = await enrichAgentsWithMoltRuntime(
+      request as any,
+      user,
+      processedUserAgents,
+    )
+    const departmentsWithStats = buildDepartmentsWithStats(userDepartments, enrichedUserAgents)
 
     return NextResponse.json({
       data: {
-        agents: processedUserAgents,
+        agents: enrichedUserAgents,
         departments: departmentsWithStats,
         isAdmin: false
       },

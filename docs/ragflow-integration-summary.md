@@ -1,7 +1,7 @@
 # RAGFlow 集成配置总结
 
 **日期**: 2025-12-20  
-**状态**: ✅ 配置完成，测试通过  
+**状态**: ✅ 配置完成，测试通过（下文敏感值已脱敏）
 **环境**: 远程RAGFlow部署
 
 ---
@@ -12,9 +12,9 @@
 
 | 配置项 | 值 | 状态 |
 |--------|-----|------|
-| **RAGFlow URL** | `http://43.139.167.250:9301` | ✅ 可访问 |
-| **API Base URL** | `http://43.139.167.250:9301/api/v1` | ✅ 可用 |
-| **API Key** | `ragflow-oFtwVwk4wN6xBDJGbuUaPwM-QwOWQBgTMFYPkW8kSQY` | ✅ 有效 |
+| **RAGFlow URL** | `http://your-ragflow-host:9301` | 示例值（已脱敏） |
+| **API Base URL** | `http://your-ragflow-host:9301/api/v1` | 示例值（已脱敏） |
+| **API Key** | `ragflow-your-api-key` | 示例值（已脱敏） |
 | **Chat ID** | `5969765e909a11f0901cde75c101e789` | ✅ 可用 |
 | **Agent ID** | 未配置 | ⚠️ 可选 |
 | **Dataset ID** | 未配置 | ⚠️ 可选 |
@@ -25,8 +25,8 @@
 
 ```bash
 # RAGFlow配置
-RAGFLOW_URL=http://43.139.167.250:9301
-RAGFLOW_API_KEY=ragflow-oFtwVwk4wN6xBDJGbuUaPwM-QwOWQBgTMFYPkW8kSQY
+RAGFLOW_URL=http://your-ragflow-host:9301
+RAGFLOW_API_KEY=ragflow-your-api-key
 RAGFLOW_CHAT_ID=5969765e909a11f0901cde75c101e789
 RAGFLOW_AGENT_ID=
 RAGFLOW_KB_ID=
@@ -53,8 +53,8 @@ RAGFLOW_KB_ID=
 
 #### 1. 配置验证 ✅
 ```
-✅ RAGFLOW_URL: http://43.139.167.250:9301
-✅ RAGFLOW_API_KEY: ragflow-oFtwVwk4wN6xBDJGbuUaPwM-QwOWQBgT...
+✅ RAGFLOW_URL: http://your-ragflow-host:9301
+✅ RAGFLOW_API_KEY: ragflow-your-api-key
 ✅ RAGFLOW_CHAT_ID: 5969765e909a11f0901cde75c101e789
 ⚠️ RAGFLOW_AGENT_ID: 未配置 (可选)
 ⚠️ RAGFLOW_KB_ID: 未配置 (可选)
@@ -197,8 +197,8 @@ npx tsx scripts/test-ragflow-knowledge-base.ts
 cat .env.local | grep RAGFLOW
 
 # 验证API连接
-curl -X GET "http://43.139.167.250:9301/api/v1/datasets" \
-  -H "Authorization: Bearer ragflow-oFtwVwk4wN6xBDJGbuUaPwM-QwOWQBgTMFYPkW8kSQY"
+curl -X GET "http://your-ragflow-host:9301/api/v1/datasets" \
+  -H "Authorization: Bearer ragflow-your-api-key"
 ```
 
 ---
@@ -269,4 +269,3 @@ curl -X GET "http://43.139.167.250:9301/api/v1/datasets" \
 
 **最后更新**: 2025-12-20  
 **提交**: `2e29ebe` - feat: 添加RAGFlow远程部署配置和连接测试
-

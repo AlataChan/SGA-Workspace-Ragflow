@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveAllowedDifyImageUrl, shouldProxyDifyImageUrl } from '@/lib/utils/dify-file-url'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,17 +14,27 @@ export async function GET(request: NextRequest) {
 
     console.log('[ImageProxy] 代理图片请求:', imageUrl)
 
-    // 获取图片，处理DIFY格式的URL
-    let response: Response
-    let finalUrl = imageUrl
+    const configuredDifyBaseUrl = process.env.DEFAULT_DIFY_BASE_URL || ''
+    const finalUrl = resolveAllowedDifyImageUrl(imageUrl, configuredDifyBaseUrl)
 
-    // 如果是相对路径，转换为完整的DIFY URL
-    if (imageUrl.startsWith('/files/')) {
-      // 从请求头或查询参数中获取DIFY基础URL
-      const difyBaseUrl = request.headers.get('x-dify-base-url') || 'http://43.139.167.250:9005'
-      finalUrl = `${difyBaseUrl}${imageUrl}`
-      console.log('[ImageProxy] 转换相对路径为完整URL:', finalUrl)
+    if (!finalUrl) {
+      if (shouldProxyDifyImageUrl(imageUrl) && !configuredDifyBaseUrl) {
+        return NextResponse.json(
+          { error: 'Dify base URL is not configured' },
+          { status: 503 }
+        )
+      }
+
+      return NextResponse.json(
+        { error: 'Only configured Dify file URLs can be proxied' },
+        { status: 403 }
+      )
     }
+
+    console.log('[ImageProxy] 解析后的 Dify 图片URL:', finalUrl)
+
+    // 获取图片，严格限制为配置中的 Dify 文件地址
+    let response: Response
 
     try {
       response = await fetch(finalUrl, {

@@ -4,7 +4,7 @@ import { useState } from 'react'
 
 export default function DebugHistoryPage() {
   const [config, setConfig] = useState({
-    difyUrl: 'http://192.144.232.60/v1',
+    difyUrl: 'https://your-dify-host.example.com/v1',
     difyKey: '',
     userId: 'test-user'
   })

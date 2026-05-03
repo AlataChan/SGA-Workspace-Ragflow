@@ -88,7 +88,7 @@ open http://localhost:9380
 
 **密钥格式**:
 ```
-ragflow-BlMGQyNzM0OTBhNzExZjA4MzU4ZGU3NW...
+ragflow-your-api-key
 ```
 
 **✅ 获取结果**: `ragflow-xxxxxx...` (保存到安全位置)
@@ -259,7 +259,7 @@ npx tsx scripts/test-ragflow-api.ts
 cat > .env.local << EOF
 # RAGFlow配置
 RAGFLOW_URL=http://localhost:9380
-RAGFLOW_API_KEY=ragflow-BlMGQyNzM0OTBhNzExZjA4MzU4ZGU3NW
+RAGFLOW_API_KEY=ragflow-your-api-key
 RAGFLOW_AGENT_ID=8d9ca0e2b2f911ef9ca20242ac120006
 RAGFLOW_KB_ID=6e211ee0723611efa10a0242ac120007
 EOF
@@ -277,7 +277,7 @@ EOF
   platform: "RAGFLOW",
   platformConfig: {
     baseUrl: "http://localhost:9380",
-    apiKey: "ragflow-BlMGQyNzM0OTBhNzExZjA4MzU4ZGU3NW",
+    apiKey: "ragflow-your-api-key",
     agentId: "8d9ca0e2b2f911ef9ca20242ac120006",
     datasetId: "6e211ee0723611efa10a0242ac120007"  // 可选
   }
@@ -338,4 +338,3 @@ docker images | grep ragflow
 ---
 
 **🎉 完成以上步骤后，您就可以在项目中调用RAGFlow API了！**
-

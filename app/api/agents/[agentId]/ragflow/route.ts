@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyUserAuth } from '@/lib/auth/user'
+import { gateLegacyMoltRoute } from '@/lib/molt/legacy-gate'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,6 +86,17 @@ export async function POST(
       return NextResponse.json({ error: '未授权' }, { status: 401 })
     }
 
+    const body = await request.json()
+    const { action, userId, sessionId, sessionName, question, page = 1, pageSize = 20 } = body
+    const surface = action === 'sendMessage' || action === 'createSession' ? 'chat' : 'history'
+    const moltGate = gateLegacyMoltRoute(surface, {
+      companyId: user.companyId,
+      agentId,
+    })
+    if (moltGate) {
+      return moltGate
+    }
+
     // 获取 Agent 配置
     const config = await getAgentRAGFlowConfig(agentId, user.companyId)
     if ('error' in config) {
@@ -92,10 +104,6 @@ export async function POST(
     }
 
     const { baseUrl, apiKey, ragflowId, idType } = config
-
-    // 解析请求体
-    const body = await request.json()
-    const { action, userId, sessionId, sessionName, question, page = 1, pageSize = 20 } = body
 
     // 使用认证用户的 ID
     const effectiveUserId = userId || user.userId || 'anonymous'

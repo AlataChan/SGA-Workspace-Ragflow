@@ -13,7 +13,7 @@ RAGFlow 提供了完整的知识图谱 API 接口，支持图谱数据获取、�
 
 ### 示例 API 密钥
 ```
-ragflow-BlMGQyNzM0OTBhNzExZjA4MzU4ZGU3NW
+ragflow-your-api-key
 ```
 
 ## 📋 数据集管理
@@ -21,7 +21,7 @@ ragflow-BlMGQyNzM0OTBhNzExZjA4MzU4ZGU3NW
 ### 1. 列出所有数据集
 ```bash
 curl -X GET "http://localhost:9380/api/v1/datasets" \
-  -H "Authorization: Bearer ragflow-BlMGQyNzM0OTBhNzExZjA4MzU4ZGU3NW"
+  -H "Authorization: Bearer ragflow-your-api-key"
 ```
 
 **响应示例：**
@@ -51,13 +51,13 @@ curl -X GET "http://localhost:9380/api/v1/datasets" \
 ### 2. 获取完整知识图谱
 ```bash
 curl -X GET "http://localhost:9380/api/v1/datasets/{kb_id}/knowledge_graph" \
-  -H "Authorization: Bearer ragflow-BlMGQyNzM0OTBhNzExZjA4MzU4ZGU3NW"
+  -H "Authorization: Bearer ragflow-your-api-key"
 ```
 
 **实际示例：**
 ```bash
 curl -X GET "http://localhost:9380/api/v1/datasets/dc949110906a11f08b78aa7cd3e67281/knowledge_graph" \
-  -H "Authorization: Bearer ragflow-BlMGQyNzM0OTBhNzExZjA4MzU4ZGU3NW"
+  -H "Authorization: Bearer ragflow-your-api-key"
 ```
 
 **响应结构：**
@@ -131,7 +131,7 @@ curl -X GET "http://localhost:9380/api/v1/datasets/dc949110906a11f08b78aa7cd3e67
 ### 1. 搜索财务相关实体
 ```bash
 curl -X POST "http://localhost:9380/api/v1/datasets/dc949110906a11f08b78aa7cd3e67281/search" \
-  -H "Authorization: Bearer ragflow-BlMGQyNzM0OTBhNzExZjA4MzU4ZGU3NW" \
+  -H "Authorization: Bearer ragflow-your-api-key" \
   -H "Content-Type: application/json" \
   -d '{
     "query": "财务",
@@ -144,7 +144,7 @@ curl -X POST "http://localhost:9380/api/v1/datasets/dc949110906a11f08b78aa7cd3e6
 ### 2. 获取节点关联文件
 ```bash
 curl -X GET "http://localhost:9380/api/v1/datasets/dc949110906a11f08b78aa7cd3e67281/nodes/财务部/files" \
-  -H "Authorization: Bearer ragflow-BlMGQyNzM0OTBhNzExZjA4MzU4ZGU3NW"
+  -H "Authorization: Bearer ragflow-your-api-key"
 ```
 
 ### 3. 下载节点内容
@@ -216,7 +216,7 @@ class RAGFlowKnowledgeGraph:
         return response.json()
 
 # 使用示例
-kg = RAGFlowKnowledgeGraph("http://localhost:9380", "ragflow-BlMGQyNzM0OTBhNzExZjA4MzU4ZGU3NW")
+kg = RAGFlowKnowledgeGraph("http://localhost:9380", "ragflow-your-api-key")
 
 # 获取数据集
 datasets = kg.get_datasets()

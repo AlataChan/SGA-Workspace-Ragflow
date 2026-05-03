@@ -20,6 +20,7 @@ services:
       # 安全密钥
       - JWT_SECRET=${JWT_SECRET}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - TOKEN_ENCRYPTION_KEY=${TOKEN_ENCRYPTION_KEY}
       
       # 数据库连接
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
@@ -97,4 +98,3 @@ volumes:
 networks:
   app-network:
     driver: bridge
-

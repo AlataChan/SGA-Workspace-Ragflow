@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withAuth, type AuthenticatedRequest } from "@/lib/auth/middleware";
 import { canUserAccessAgent } from "@/lib/auth/agent-access";
+import { gateLegacyMoltRoute } from "@/lib/molt/legacy-gate";
 import prisma from "@/lib/prisma";
 
 // CORS headers
@@ -128,6 +129,15 @@ export const POST = withAuth(async (req: AuthenticatedRequest) => {
         { error: "缺少必填参数：agentId" },
         { status: 400, headers: corsHeaders }
       );
+    }
+
+    const moltGate = gateLegacyMoltRoute("upload", {
+      companyId: req.user!.companyId,
+      agentId,
+      headers: corsHeaders,
+    });
+    if (moltGate) {
+      return moltGate;
     }
 
     const config = await resolveDifyConfigByAgentId(agentId, req);

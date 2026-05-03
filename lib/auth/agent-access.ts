@@ -2,7 +2,7 @@
  * Agent 权限判断（v2：支持部门授权规则 policy）
  *
  * 规则：
- * - ADMIN：默认全量可用
+ * - ADMIN：默认可用同公司 Agent
  * - revoked（黑名单）优先级最高：命中则不可用
  * - explicit（user_agent_permissions）其次：命中则可用
  * - policy（agent_department_grants）最后：命中则可用
@@ -70,12 +70,19 @@ function activeRevocationFilter() {
 export type AgentAccessSource = 'explicit' | 'policy'
 
 export async function canUserAccessAgent(user: CurrentUser, agentId: string) {
-  if (user.role === UserRole.ADMIN) return true
+  if (user.role === UserRole.ADMIN) {
+    const agent = await prisma.agent.findFirst({
+      where: { id: agentId, companyId: user.companyId },
+      select: { id: true },
+    })
+    return Boolean(agent)
+  }
 
   const revoked = await prisma.userAgentPermissionRevocation.findFirst({
     where: {
       userId: user.userId,
       agentId,
+      agent: { companyId: user.companyId },
       ...activeRevocationFilter(),
     },
     select: { id: true },
@@ -86,6 +93,7 @@ export async function canUserAccessAgent(user: CurrentUser, agentId: string) {
     where: {
       userId: user.userId,
       agentId,
+      agent: { companyId: user.companyId },
     },
     select: { id: true },
   })
@@ -129,6 +137,7 @@ export async function getEffectiveAgentIdsForUser(user: CurrentUser) {
   const revokedRows = await prisma.userAgentPermissionRevocation.findMany({
     where: {
       userId: user.userId,
+      agent: { companyId: user.companyId },
       ...activeRevocationFilter(),
     },
     select: { agentId: true },
@@ -139,6 +148,7 @@ export async function getEffectiveAgentIdsForUser(user: CurrentUser) {
   const explicitRows = await prisma.userAgentPermission.findMany({
     where: {
       userId: user.userId,
+      agent: { companyId: user.companyId },
       ...(revokedAgentIds.length > 0 ? { agentId: { notIn: revokedAgentIds } } : {}),
     },
     select: { agentId: true },
@@ -183,4 +193,3 @@ export async function getEffectiveAgentIdsForUser(user: CurrentUser) {
     revokedAgentIds,
   }
 }
-

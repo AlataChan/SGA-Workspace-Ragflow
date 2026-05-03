@@ -13,7 +13,7 @@ https://your-domain.com
 ### 2. **API Key**
 从RAGFlow界面获取的API密钥，格式示例：
 ```
-ragflow-BlMGQyNzM0OTBhNzExZjA4MzU4ZGU3NW
+ragflow-your-api-key
 ```
 
 ### 3. **知识库ID (kbId)**
@@ -79,7 +79,7 @@ curl -X GET "http://localhost:9380/api/v1/graphrag/kb/{YOUR_KB_ID}/statistics" \
 ```
 名称: 公司知识图谱
 RAGFlow URL: http://localhost:9380
-API Key: ragflow-BlMGQyNzM0OTBhNzExZjA4MzU4ZGU3NW
+API Key: ragflow-your-api-key
 知识库ID: dc949110906a11f08b78aa7cd3e67281
 ```
 

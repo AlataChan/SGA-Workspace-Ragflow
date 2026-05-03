@@ -2,9 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
+const ENABLE_SYSTEM_RESET = process.env.ENABLE_SYSTEM_RESET === 'true'
 
 export async function POST(request: NextRequest) {
   try {
+    if (!ENABLE_SYSTEM_RESET) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '系统重置已禁用，请设置 ENABLE_SYSTEM_RESET=true 后重试',
+        },
+        { status: 403 }
+      )
+    }
+
     console.log('开始重置数据库...')
 
     // 按照外键依赖顺序删除数据

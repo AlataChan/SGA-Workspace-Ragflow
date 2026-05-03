@@ -47,8 +47,7 @@ export async function GET(request: NextRequest) {
         id: true,
         name: true,
         description: true,
-        kbId: true,
-        ragflowUrl: true,
+        isActive: true,
         nodeCount: true,
         edgeCount: true,
         lastSyncAt: true,
@@ -57,9 +56,21 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    const safeKnowledgeBases = knowledgeBases.map((knowledgeBase) => ({
+      id: knowledgeBase.id,
+      name: knowledgeBase.name,
+      description: knowledgeBase.description,
+      isActive: knowledgeBase.isActive,
+      nodeCount: knowledgeBase.nodeCount,
+      edgeCount: knowledgeBase.edgeCount,
+      lastSyncAt: knowledgeBase.lastSyncAt,
+      createdAt: knowledgeBase.createdAt,
+      updatedAt: knowledgeBase.updatedAt,
+    }))
+
     return NextResponse.json({
       success: true,
-      data: knowledgeBases
+      data: safeKnowledgeBases
     })
 
   } catch (error) {

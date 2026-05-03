@@ -4,6 +4,16 @@ import prisma from '@/lib/prisma'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
+  if (process.env.ENABLE_DB_TEST_ENDPOINTS !== 'true') {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Not Found',
+      },
+      { status: 404 }
+    )
+  }
+
   try {
     console.log('🔍 开始测试数据库连接...')
     

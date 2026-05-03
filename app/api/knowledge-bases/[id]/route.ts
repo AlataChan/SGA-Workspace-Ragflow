@@ -69,10 +69,12 @@ export async function GET(
       console.warn('获取 RAGFlow 详情失败:', detailResult.error)
     }
 
+    const { apiKey: _apiKey, ...safeKnowledgeBase } = knowledgeBase
+
     return NextResponse.json({
       success: true,
       data: {
-        ...knowledgeBase,
+        ...safeKnowledgeBase,
         ragflowDetail: detailResult.data
       }
     })

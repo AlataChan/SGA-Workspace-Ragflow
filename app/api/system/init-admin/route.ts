@@ -2,8 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import prisma from '@/lib/prisma'
 
+const ENABLE_SYSTEM_INIT_ADMIN = process.env.ENABLE_SYSTEM_INIT_ADMIN === 'true'
+
 export async function POST(request: NextRequest) {
   try {
+    if (!ENABLE_SYSTEM_INIT_ADMIN) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '系统初始化已禁用，请设置 ENABLE_SYSTEM_INIT_ADMIN=true 后重试'
+        },
+        { status: 403 }
+      )
+    }
+
     const body = await request.json()
     const { username, userId, phone, email, password, displayName, position } = body
 

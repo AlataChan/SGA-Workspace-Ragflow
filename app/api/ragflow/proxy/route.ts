@@ -6,6 +6,7 @@
  */
 
 import { NextRequest } from 'next/server'
+import { verifyUserAuth } from '@/lib/auth/user'
 
 /**
  * POST /api/ragflow/proxy
@@ -13,6 +14,14 @@ import { NextRequest } from 'next/server'
  */
 export async function POST(request: NextRequest) {
   try {
+    const user = await verifyUserAuth(request)
+    if (!user) {
+      return new Response(
+        JSON.stringify({ code: 401, message: '未授权' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
     const body = await request.json()
     const { action, baseUrl, apiKey, agentId, userId, sessionId, question } = body
 
@@ -193,4 +202,3 @@ async function handleSendMessage(
     throw error
   }
 }
-

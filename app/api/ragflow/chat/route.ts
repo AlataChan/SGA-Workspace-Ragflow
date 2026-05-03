@@ -6,6 +6,7 @@
 
 import { NextRequest } from 'next/server'
 import { RAGFlowHTTPClient } from '@/lib/ragflow-http-client'
+import { verifyUserAuth } from '@/lib/auth/user'
 
 // 从环境变量获取配置
 function getRAGFlowConfig() {
@@ -26,6 +27,20 @@ function getRAGFlowConfig() {
  */
 export async function POST(request: NextRequest) {
   try {
+    const user = await verifyUserAuth(request)
+    if (!user) {
+      return new Response(
+        JSON.stringify({
+          code: 401,
+          message: '未授权',
+        }),
+        {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      )
+    }
+
     const config = getRAGFlowConfig()
     const client = new RAGFlowHTTPClient(config)
 
@@ -104,4 +119,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

@@ -17,6 +17,7 @@ model Company {
   departments     Department[]
   knowledgeGraphs KnowledgeGraph[]
   users           User[]
+  moltConversationMappings MoltConversationMapping[]
 
   @@map("companies")
 }
@@ -85,6 +86,7 @@ model User {
   knowledgeGraphPermissions     UserKnowledgeGraphPermission[]
   knowledgeGraphPermissionRevocations UserKnowledgeGraphPermissionRevocation[]
   tempKnowledgeBase             UserTempKnowledgeBase?
+  moltConversationMappings      MoltConversationMapping[]
   company                       Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   department                    Department?                   @relation(fields: [departmentId], references: [id])
 
@@ -168,6 +170,7 @@ model Agent {
   userPermissions    UserAgentPermission[]
   departmentGrants   AgentDepartmentGrant[]
   userPermissionRevocations UserAgentPermissionRevocation[]
+  moltConversationMappings MoltConversationMapping[]
 
   @@map("agents")
 }
@@ -288,6 +291,7 @@ model ChatSession {
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
   messages    ChatMessage[]
+  moltConversationMapping MoltConversationMapping?
   agent       Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -306,6 +310,29 @@ model ChatMessage {
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("chat_messages")
+}
+
+model MoltConversationMapping {
+  id                  String   @id @default(cuid())
+  workspaceSessionId  String   @unique @map("workspace_session_id")
+  moltConversationId  String?  @unique @map("molt_conversation_id")
+  agentId             String   @map("agent_id")
+  userId              String   @map("user_id")
+  companyId           String   @map("company_id")
+  source              MoltConversationSource @default(MOLT)
+  migrationStatus     MoltMigrationStatus @default(NEW) @map("migration_status")
+  lastSyncCursor      String?  @map("last_sync_cursor")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  company Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent   Agent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  session ChatSession @relation(fields: [workspaceSessionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, agentId])
+  @@index([companyId, agentId])
+  @@map("molt_conversation_mappings")
 }
 
 model UploadedFile {
@@ -365,6 +392,18 @@ enum AgentPlatform {
 enum MessageRole {
   USER
   ASSISTANT
+}
+
+enum MoltConversationSource {
+  MOLT
+  LEGACY_WORKSPACE
+}
+
+enum MoltMigrationStatus {
+  NEW
+  MIGRATING
+  MIGRATED
+  ARCHIVED
 }
 
 // ============================================

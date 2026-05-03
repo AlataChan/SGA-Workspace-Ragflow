@@ -7,6 +7,7 @@ import { validateAndSanitize, chatSchemas } from "@/lib/security/validation"
 import { checkRateLimit, chatRateLimiter } from "@/lib/security/rate-limiter"
 import { extractRequestMeta, logger } from "@/lib/utils/logger"
 import { verifyToken, extractTokenFromHeader } from "@/lib/auth/jwt"
+import { gateLegacyMoltRoute } from "@/lib/molt/legacy-gate"
 
 export async function POST(request: NextRequest) {
   const meta = extractRequestMeta(request)
@@ -77,6 +78,14 @@ export async function POST(request: NextRequest) {
 
     if (!session || session.userId !== user.id) {
       throw new AuthorizationError("会话不存在或无权限访问")
+    }
+
+    const moltGate = gateLegacyMoltRoute("chat", {
+      companyId: user.companyId,
+      agentId,
+    })
+    if (moltGate) {
+      return moltGate
     }
 
     // 记录聊天速率限制

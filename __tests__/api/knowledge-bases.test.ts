@@ -75,6 +75,8 @@ describe('Knowledge Base API (route handlers)', () => {
     expect(Array.isArray(data.data)).toBe(true)
     expect(data.data).toHaveLength(1)
     expect(data.data[0].id).toBe('kb-1')
+    expect(data.data[0].kbId).toBeUndefined()
+    expect(data.data[0].ragflowUrl).toBeUndefined()
   })
 
   it('POST /api/knowledge-bases returns 401 when not admin', async () => {
@@ -239,7 +241,7 @@ describe('Knowledge Base API (route handlers)', () => {
     const data = await response.json()
     expect(data.success).toBe(true)
     expect(data.data.id).toBe('kb-1')
+    expect(data.data.apiKey).toBeUndefined()
     expect(data.data.ragflowDetail.id).toBe('ragflow-kb-123')
   })
 })
-

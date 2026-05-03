@@ -29,6 +29,7 @@ services:
       - NEXT_PUBLIC_APP_URL=http://localhost:8100
       - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-change-this}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-your-encryption-key-32chars}
+      - TOKEN_ENCRYPTION_KEY=${TOKEN_ENCRYPTION_KEY}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-sga_user}:${POSTGRES_PASSWORD:-sga_password}@postgres:5432/${POSTGRES_DB:-sga_workspace}
       - REDIS_URL=redis://redis:6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}

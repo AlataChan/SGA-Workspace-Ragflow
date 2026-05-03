@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { gateLegacyMoltRoute } from "@/lib/molt/legacy-gate";
 
 // 默认配置（向后兼容）
-const DEFAULT_DIFY_BASE_URL = "http://192.144.232.60/v1";
-const DEFAULT_DIFY_API_KEY = "app-P0zICVDnPuLSteB4iM7SClQi";
+const DEFAULT_DIFY_BASE_URL = (process.env.DEFAULT_DIFY_BASE_URL || "").replace(/\/+$/, "");
+const DEFAULT_DIFY_API_KEY = process.env.DEFAULT_DIFY_API_KEY || "";
 
 // 超时和重试配置
 const DIFY_TIMEOUT_MS = 180000; // 180秒，适应工具调用的长时间需求
@@ -56,9 +57,47 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     console.log("[Dify Chat] 请求体:", JSON.stringify(body, null, 2));
 
+    const localAgentIdRaw =
+      body.agentConfig?.localAgentId ||
+      body.agentConfig?.agentId ||
+      body.agentId;
+    const localAgentId =
+      typeof localAgentIdRaw === "string" ? localAgentIdRaw.trim() : "";
+    if (localAgentId) {
+      const { verifyUserAuth } = await import("@/lib/auth/user");
+      const workspaceUser = await verifyUserAuth(req).catch(() => null);
+      if (workspaceUser) {
+        const moltGate = gateLegacyMoltRoute("chat", {
+          companyId: workspaceUser.companyId,
+          agentId: localAgentId,
+        });
+        if (moltGate) {
+          return moltGate;
+        }
+      } else {
+        const { env } = await import("@/lib/config/env");
+        if (env.MOLT_PROXY_ENABLED_CHAT) {
+          return NextResponse.json(
+            { error: "未授权" },
+            { status: 401 },
+          );
+        }
+      }
+    }
+
     // 获取Agent配置（优先使用传入的配置）
-    const difyBaseUrl = body.agentConfig?.difyUrl || DEFAULT_DIFY_BASE_URL;
-    const difyApiKey = body.agentConfig?.difyKey || DEFAULT_DIFY_API_KEY;
+    const difyBaseUrl = String(body.agentConfig?.difyUrl || DEFAULT_DIFY_BASE_URL || "").replace(/\/+$/, "");
+    const difyApiKey = String(body.agentConfig?.difyKey || DEFAULT_DIFY_API_KEY || "").trim();
+
+    if (!difyBaseUrl || !difyApiKey) {
+      return NextResponse.json(
+        {
+          error:
+            "Dify 默认配置缺失，请设置 DEFAULT_DIFY_BASE_URL 和 DEFAULT_DIFY_API_KEY，或在请求中显式传入 agentConfig.difyUrl / agentConfig.difyKey",
+        },
+        { status: 503 },
+      );
+    }
 
     console.log("[Dify Chat] 使用配置:", {
       difyBaseUrl,

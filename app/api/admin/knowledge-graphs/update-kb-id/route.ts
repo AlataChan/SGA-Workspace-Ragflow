@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { PrismaClient } from "@prisma/client"
-import { verifyUserAuth } from "@/lib/auth/user"
+import { verifyAdminAuth } from "@/lib/auth/admin"
 
 const prisma = new PrismaClient()
 
 // 更新知识图谱的知识库ID
 export async function POST(request: NextRequest) {
   try {
-    const user = await verifyUserAuth(request)
+    const user = await verifyAdminAuth(request)
     if (!user) {
-      return NextResponse.json({ error: "未授权" }, { status: 401 })
+      return NextResponse.json({ error: "未授权，需要管理员权限" }, { status: 401 })
     }
 
     const { knowledgeGraphId, kbId } = await request.json()
@@ -49,9 +49,9 @@ export async function POST(request: NextRequest) {
 // 获取当前知识图谱配置
 export async function GET(request: NextRequest) {
   try {
-    const user = await verifyUserAuth(request)
+    const user = await verifyAdminAuth(request)
     if (!user) {
-      return NextResponse.json({ error: "未授权" }, { status: 401 })
+      return NextResponse.json({ error: "未授权，需要管理员权限" }, { status: 401 })
     }
 
     const knowledgeGraphs = await prisma.knowledgeGraph.findMany({

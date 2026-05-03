@@ -150,6 +150,7 @@ DATABASE_URL=postgresql://postgres:postgres123@localhost:5433/ai_workspace
 # Authentication
 JWT_SECRET=your-jwt-secret-key
 ENCRYPTION_KEY=your-32-character-encryption-key
+TOKEN_ENCRYPTION_KEY=your-64-char-hex-token-encryption-key
 
 # Redis
 REDIS_PASSWORD=redis123

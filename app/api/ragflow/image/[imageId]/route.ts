@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { verifyUserAuth } from '@/lib/auth/user';
 
 export async function GET(request: NextRequest, { params }: { params: { imageId: string } }) {
     try {
+        const user = await verifyUserAuth(request);
+        if (!user) {
+            return new NextResponse('未授权', { status: 401 });
+        }
+
         const imageId = params.imageId;
         if (!imageId) {
             return new NextResponse('Missing image ID', { status: 400 });
@@ -25,8 +31,11 @@ export async function GET(request: NextRequest, { params }: { params: { imageId:
             return new NextResponse('Missing agent_id param', { status: 400 });
         }
 
-        const agent = await prisma.agent.findUnique({
-            where: { id: agentId }
+        const agent = await prisma.agent.findFirst({
+            where: {
+                id: agentId,
+                companyId: user.companyId
+            }
         });
         if (!agent) {
             return new NextResponse('Agent not found', { status: 404 });

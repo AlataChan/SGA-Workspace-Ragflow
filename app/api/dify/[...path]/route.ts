@@ -1,7 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const DIFY_BASE_URL = "http://192.144.232.60";
-const DIFY_API_KEY = "hvTuW1NrJZ5JDjdQ";
+const DIFY_BASE_URL = (process.env.DEFAULT_DIFY_BASE_URL || "").replace(/\/+$/, "");
+const DIFY_API_KEY = (process.env.DEFAULT_DIFY_API_KEY || "").trim();
+
+function buildTargetUrl(baseUrl: string, path: string[]) {
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
+  const joinedPath = path.join("/").replace(/^\/+/, "");
+
+  if (!joinedPath) {
+    return /\/v1$/i.test(normalizedBaseUrl) ? normalizedBaseUrl : `${normalizedBaseUrl}/v1`;
+  }
+
+  const normalizedPath = joinedPath === "v1" ? "" : joinedPath.replace(/^v1\//, "");
+
+  if (/\/v1$/i.test(normalizedBaseUrl)) {
+    return normalizedPath ? `${normalizedBaseUrl}/${normalizedPath}` : normalizedBaseUrl;
+  }
+
+  return normalizedPath ? `${normalizedBaseUrl}/v1/${normalizedPath}` : `${normalizedBaseUrl}/v1`;
+}
 
 async function handle(
   req: NextRequest,
@@ -11,10 +28,19 @@ async function handle(
 
   try {
     const { path } = await params;
-    const subpath = path.join("/");
+
+    if (!DIFY_BASE_URL || !DIFY_API_KEY) {
+      return NextResponse.json(
+        {
+          error:
+            "Dify 默认配置缺失，请设置 DEFAULT_DIFY_BASE_URL 和 DEFAULT_DIFY_API_KEY",
+        },
+        { status: 503 },
+      );
+    }
     
     // 构建Dify API URL
-    const targetUrl = `${DIFY_BASE_URL}/v1/${subpath}`;
+    const targetUrl = buildTargetUrl(DIFY_BASE_URL, path);
     console.log("[Dify Route] 目标URL:", targetUrl);
 
     // 获取请求体

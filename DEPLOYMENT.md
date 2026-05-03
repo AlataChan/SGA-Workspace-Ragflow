@@ -58,6 +58,7 @@ nano .env
 ```bash
 JWT_SECRET=your-jwt-secret-32-chars-minimum
 ENCRYPTION_KEY=your-32-char-encryption-key
+TOKEN_ENCRYPTION_KEY=your-64-char-hex-token-encryption-key
 POSTGRES_PASSWORD=your-secure-postgres-password
 REDIS_PASSWORD=your-redis-password
 DEFAULT_ADMIN_EMAIL=admin@yourcompany.com

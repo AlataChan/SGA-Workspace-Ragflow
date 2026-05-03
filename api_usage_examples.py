@@ -11,7 +11,7 @@ from typing import Dict, List, Any
 
 # 配置信息
 BASE_URL = "http://localhost:9380"
-API_KEY = "ragflow-BlMGQyNzM0OTBhNzExZjA4MzU4ZGU3NW"
+API_KEY = "ragflow-your-api-key"
 KB_ID = "dc949110906a11f08b78aa7cd3e67281"
 
 def example_1_basic_api_calls():

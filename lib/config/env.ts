@@ -5,9 +5,56 @@ function emptyStringToUndefined(value: unknown) {
 }
 
 const optionalEmail = z.preprocess(emptyStringToUndefined, z.string().email().optional())
+const optionalUrl = z.preprocess(
+  emptyStringToUndefined,
+  z.string().url().transform((value) => value.replace(/\/+$/, "")).optional()
+)
+const optionalNonEmptyString = z.preprocess(
+  emptyStringToUndefined,
+  z.string().min(1).optional()
+)
+const optionalSecret = z.preprocess(
+  emptyStringToUndefined,
+  z.string().min(32).optional()
+)
+
+function envBoolean(defaultValue: boolean) {
+  return z.preprocess((value) => {
+    if (value === undefined || value === null || value === "") {
+      return undefined
+    }
+    if (typeof value === "boolean") {
+      return value
+    }
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase()
+      if (["true", "1", "yes", "on"].includes(normalized)) {
+        return true
+      }
+      if (["false", "0", "no", "off"].includes(normalized)) {
+        return false
+      }
+    }
+    return value
+  }, z.boolean().default(defaultValue))
+}
+
+const csvStringList = z.preprocess((value) => {
+  if (Array.isArray(value)) {
+    return value
+  }
+  if (typeof value !== "string") {
+    return []
+  }
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+}, z.array(z.string()))
+.transform((entries) => [...new Set(entries)])
 
 // 环境变量验证模式
-const envSchema = z.object({
+export const envSchema = z.object({
   // 应用配置
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   NEXT_PUBLIC_APP_NAME: z.string().default("企业AI工作空间"),
@@ -69,9 +116,23 @@ const envSchema = z.object({
   DEFAULT_ADMIN_PASSWORD: z.string().min(8),
   
   // Dify配置
-  DEFAULT_DIFY_BASE_URL: z.string().url().default("http://192.144.232.60/v1"),
+  DEFAULT_DIFY_BASE_URL: z.string().url().default("https://your-dify-host.example.com/v1"),
   DEFAULT_DIFY_TIMEOUT: z.coerce.number().min(1000).default(500000), // 500秒，适应长任务调用
   DIFY_MAX_RETRIES: z.coerce.number().min(0).max(10).default(3), // 最大重试次数
+
+  // Molt集成配置
+  MOLT_API_BASE_URL: optionalUrl,
+  MOLT_SERVICE_API_KEY: optionalNonEmptyString,
+  MOLT_DELEGATION_SECRET: optionalSecret,
+  MOLT_DELEGATION_SECRET_PREVIOUS: optionalSecret,
+  MOLT_PROXY_ENABLED_CHAT: envBoolean(false),
+  MOLT_PROXY_ENABLED_UPLOAD: envBoolean(false),
+  MOLT_PROXY_ENABLED_HISTORY: envBoolean(false),
+  MOLT_PROXY_TENANT_ALLOWLIST: csvStringList.default([]),
+  MOLT_PROXY_AGENT_ALLOWLIST: csvStringList.default([]),
+  MOLT_LEGACY_ETL_TENANTS: csvStringList.default([]),
+  MOLT_REQUEST_TIMEOUT_MS: z.coerce.number().min(1000).default(120000),
+  MOLT_STREAM_HEARTBEAT_MS: z.coerce.number().min(1000).default(15000),
   
   // 功能开关
   ENABLE_USER_REGISTRATION: z.coerce.boolean().default(false),
@@ -89,12 +150,42 @@ const envSchema = z.object({
   NEXT_PUBLIC_DEBUG: z.coerce.boolean().default(false),
   ENABLE_API_DOCS: z.coerce.boolean().default(false),
   ENABLE_ADMIN_PANEL: z.coerce.boolean().default(true),
+}).superRefine((env, ctx) => {
+  const anyMoltProxyEnabled =
+    env.MOLT_PROXY_ENABLED_CHAT ||
+    env.MOLT_PROXY_ENABLED_UPLOAD ||
+    env.MOLT_PROXY_ENABLED_HISTORY
+
+  if (env.NODE_ENV !== "production" || !anyMoltProxyEnabled) {
+    return
+  }
+
+  const requiredFields: Array<keyof typeof env> = [
+    "MOLT_API_BASE_URL",
+    "MOLT_SERVICE_API_KEY",
+    "MOLT_DELEGATION_SECRET",
+  ]
+
+  for (const field of requiredFields) {
+    if (!env[field]) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [field],
+        message: `${field} is required in production when any MOLT_PROXY_ENABLED_* flag is true`,
+      })
+    }
+  }
 })
 
+// 类型定义
+export type Env = z.infer<typeof envSchema>
+
 // 验证环境变量
-function validateEnv() {
+export function validateEnvInput(input: Record<string, unknown> = process.env):
+  | { success: true; data: Env; error: null }
+  | { success: false; data: null; error: string } {
   try {
-    const env = envSchema.parse(process.env)
+    const env = envSchema.parse(input)
     return { success: true, data: env, error: null }
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -115,15 +206,36 @@ function validateEnv() {
   }
 }
 
+function validateEnv() {
+  return validateEnvInput(process.env)
+}
+
+function isMoltProxyFlagEnabled(value: unknown): boolean {
+  if (typeof value === "boolean") {
+    return value
+  }
+  if (typeof value !== "string") {
+    return false
+  }
+  return ["true", "1", "yes", "on"].includes(value.trim().toLowerCase())
+}
+
 // 导出验证后的环境变量
 const envResult = validateEnv()
 
 if (!envResult.success) {
   console.error("环境变量验证失败:", envResult.error)
+  const moltProxyEnabled =
+    isMoltProxyFlagEnabled(process.env.MOLT_PROXY_ENABLED_CHAT) ||
+    isMoltProxyFlagEnabled(process.env.MOLT_PROXY_ENABLED_UPLOAD) ||
+    isMoltProxyFlagEnabled(process.env.MOLT_PROXY_ENABLED_HISTORY)
 
   // 在构建时或客户端环境中，不能调用 process.exit
-  if (typeof window === 'undefined' && process.env.NODE_ENV !== 'production') {
-    // 开发环境服务端，退出进程
+  if (
+    typeof window === 'undefined' &&
+    (process.env.NODE_ENV !== 'production' || moltProxyEnabled)
+  ) {
+    // 开发环境服务端或生产 Molt 代理启用时，退出进程
     process.exit(1)
   } else {
     // 构建时、生产环境或客户端环境，使用默认值
@@ -152,9 +264,17 @@ export const env = envResult.success ? envResult.data : {
   METRICS_ENDPOINT: "/api/metrics",
   ENABLE_METRICS: true,
   DEFAULT_COMPANY_NAME: "示例企业",
-  DEFAULT_DIFY_BASE_URL: "http://192.144.232.60/v1",
+  DEFAULT_DIFY_BASE_URL: "https://your-dify-host.example.com/v1",
   DEFAULT_DIFY_TIMEOUT: 500000,
   DIFY_MAX_RETRIES: 3,
+  MOLT_PROXY_ENABLED_CHAT: false,
+  MOLT_PROXY_ENABLED_UPLOAD: false,
+  MOLT_PROXY_ENABLED_HISTORY: false,
+  MOLT_PROXY_TENANT_ALLOWLIST: [],
+  MOLT_PROXY_AGENT_ALLOWLIST: [],
+  MOLT_LEGACY_ETL_TENANTS: [],
+  MOLT_REQUEST_TIMEOUT_MS: 120000,
+  MOLT_STREAM_HEARTBEAT_MS: 15000,
   ENABLE_USER_REGISTRATION: false,
   ENABLE_PASSWORD_RESET: true,
   ENABLE_MULTI_COMPANY: false,
@@ -167,9 +287,6 @@ export const env = envResult.success ? envResult.data : {
   ENABLE_API_DOCS: false,
   ENABLE_ADMIN_PANEL: true,
 } as any
-
-// 类型定义
-export type Env = z.infer<typeof envSchema>
 
 // 工具函数
 export function isDevelopment() {

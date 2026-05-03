@@ -76,7 +76,7 @@ const mockData = {
       name: 'Dify智能体',
       description: '基于Dify平台的智能助手，具备强大的对话能力和知识库支持',
       platform: 'dify',
-      apiUrl: 'http://192.144.232.60/v1',
+      apiUrl: 'https://your-dify-host.example.com/v1',
       apiKey: 'demo-dify-key',
       modelConfig: {
         temperature: 0.8,
