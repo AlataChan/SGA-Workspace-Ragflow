@@ -4,13 +4,15 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { withAdminAuth } from '@/lib/auth/middleware'
+import { uploadFile, generateFileKey, isStorageConfigured, resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
-import { withAdminAuth } from '@/lib/auth/middleware'
 
 // POST /api/admin/company/logo - 上传公司Logo
 export const POST = withAdminAuth(async (request) => {
   try {
+    const user = request.user!
     const formData = await request.formData()
     const file = formData.get('logo') as File
 
@@ -52,33 +54,42 @@ export const POST = withAdminAuth(async (request) => {
       )
     }
 
-    // 生成文件名
+    const bytes = await file.arrayBuffer()
+    const buffer = Buffer.from(bytes)
+
+    // S3 已配置：上传到对象存储，DB 存 key；返回预签名 URL 用于预览
+    if (isStorageConfigured()) {
+      const logoKey = generateFileKey(file.name, `companies/${user.companyId}/logos`)
+      await uploadFile(logoKey, buffer, file.type || 'application/octet-stream')
+      const logoUrl = await resolveImageDisplayUrl(logoKey)
+
+      return NextResponse.json({
+        data: {
+          logoKey,
+          logoUrl,
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type,
+        },
+        message: 'Logo上传成功'
+      })
+    }
+
+    // 未配置对象存储：回退到本地 /uploads/logos（旧逻辑）
     const timestamp = Date.now()
     const fileExtension = file.name.split('.').pop() || 'png'
     const fileName = `company-logo-${timestamp}.${fileExtension}`
-
-    // 确保上传目录存在
     const uploadDir = join(process.cwd(), 'public', 'uploads', 'logos')
-    try {
-      await mkdir(uploadDir, { recursive: true })
-    } catch (error) {
-      // 目录可能已存在，忽略错误
-    }
-
-    // 保存文件
+    await mkdir(uploadDir, { recursive: true })
     const filePath = join(uploadDir, fileName)
-    const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
-    
     await writeFile(filePath, buffer)
 
-    // 生成访问URL
     const logoUrl = `/uploads/logos/${fileName}`
-
     return NextResponse.json({
       data: {
+        logoKey: logoUrl,
         logoUrl,
-        fileName,
+        fileName: file.name,
         fileSize: file.size,
         fileType: file.type,
       },

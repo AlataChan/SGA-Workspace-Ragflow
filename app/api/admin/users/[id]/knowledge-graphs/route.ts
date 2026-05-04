@@ -1,9 +1,17 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { withAdminAuth } from "@/lib/auth/middleware"
 import type { CurrentUser } from "@/lib/auth/middleware"
 import { z } from "zod"
 import { getEffectiveKnowledgeGraphIdsForUser } from "@/lib/auth/knowledge-graph-access"
+import { writeAuditEvent } from "@/lib/security/audit-events"
+
+function getRequestMeta(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? request.headers.get("x-real-ip") ?? undefined
+  const userAgent = request.headers.get("user-agent") ?? undefined
+  const requestId = request.headers.get("x-request-id") ?? undefined
+  return { ip, userAgent, requestId }
+}
 
 // CORS headers
 const corsHeaders = {
@@ -214,6 +222,7 @@ export const POST = withAdminAuth(async (request, context) => {
       )
     }
 
+    const meta = getRequestMeta(request)
     const [newPermission] = await prisma.$transaction([
       prisma.userKnowledgeGraphPermission.create({
         data: {
@@ -242,6 +251,20 @@ export const POST = withAdminAuth(async (request, context) => {
         data: { isActive: false },
       }),
     ])
+
+    await writeAuditEvent({
+      companyId: user.companyId,
+      actorUserId: user.userId,
+      targetUserId,
+      eventType: "PERM_KNOWLEDGE_GRAPH_GRANT",
+      result: "SUCCESS",
+      resourceType: "KNOWLEDGE_GRAPH",
+      resourceId: knowledgeGraphId,
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+      requestId: meta.requestId,
+      details: { knowledgeGraphId, targetUserId, grantedBy: user.userId },
+    })
 
     return NextResponse.json(
       { data: newPermission, message: "知识图谱权限添加成功" },
@@ -300,6 +323,7 @@ export const DELETE = withAdminAuth(async (request, context) => {
       select: { id: true },
     })
 
+    const meta = getRequestMeta(request)
     const tx: any[] = []
     if (existingPermission) {
       tx.push(prisma.userKnowledgeGraphPermission.delete({ where: { id: existingPermission.id } }))
@@ -330,6 +354,20 @@ export const DELETE = withAdminAuth(async (request, context) => {
     )
 
     await prisma.$transaction(tx)
+
+    await writeAuditEvent({
+      companyId: user.companyId,
+      actorUserId: user.userId,
+      targetUserId,
+      eventType: "PERM_KNOWLEDGE_GRAPH_REVOKE",
+      result: "SUCCESS",
+      resourceType: "KNOWLEDGE_GRAPH",
+      resourceId: knowledgeGraphId,
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+      requestId: meta.requestId,
+      details: { knowledgeGraphId, targetUserId, revokedBy: user.userId },
+    })
 
     return NextResponse.json(
       { data: { explicitDeleted: existingPermission ? 1 : 0, revoked: true }, message: "知识图谱权限撤销成功" },

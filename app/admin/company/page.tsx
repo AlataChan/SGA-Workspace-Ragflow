@@ -131,7 +131,12 @@ export default function CompanySettingsPage() {
 
       if (response.ok) {
         const data = await response.json()
-        return data.data.logoUrl
+        // 存储层改造：这里返回的是用于入库的 key
+        if (data?.data?.logoUrl) {
+          // 上传成功后可用签名URL刷新预览（可选）
+          setLogoPreview(data.data.logoUrl)
+        }
+        return data?.data?.logoKey || null
       } else {
         const error = await response.json()
         throw new Error(error.error?.message || '上传失败')
@@ -155,7 +160,8 @@ export default function CompanySettingsPage() {
     setMessage(null)
 
     try {
-      let logoUrl: string | undefined = companyInfo?.logoUrl
+      // logoUrl 字段将存“对象 key”（兼容旧逻辑字段名不变）
+      let logoUrl: string | undefined = (companyInfo as any)?.logoKey || companyInfo?.logoUrl
 
       // 如果有新的Logo文件，先上传
       if (formData.logoFile) {

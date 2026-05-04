@@ -85,6 +85,3 @@ export const GET = withAdminAuth(async (request) => {
     await prisma.$disconnect()
   }
 })
-
-
-

@@ -3179,7 +3179,9 @@ export default function EnhancedChatWithSidebar({
                               ) : (
                                 <>
                                   <h4 className="text-sm font-medium text-foreground truncate">
-                                    {historyConv.name || '未命名对话'}
+                                    {(historyConv.name || '未命名对话').length > 15
+                                      ? (historyConv.name || '未命名对话').slice(0, 15) + '...'
+                                      : historyConv.name || '未命名对话'}
                                   </h4>
                                   <p className="text-xs text-muted-foreground mt-1">
                                     {(() => {

@@ -6,6 +6,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withAdminAuth } from '@/lib/auth/middleware'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,7 @@ type OrgUser = {
   email: string | null
   phone: string
   avatarUrl: string | null
+  avatarKey?: string | null
   departmentId: string | null
   position: string | null
   role: string
@@ -86,6 +88,14 @@ export const GET = withAdminAuth(async (request) => {
       }),
     ])
 
+    const signedUsers = await Promise.all(
+      (users as OrgUser[]).map(async (u) => ({
+        ...u,
+        avatarUrl: await resolveImageDisplayUrl(u.avatarUrl),
+        avatarKey: u.avatarUrl ?? null,
+      }))
+    )
+
     const nodesById = new Map<string, OrgDepartmentNode>()
     for (const dept of departments) {
       nodesById.set(dept.id, {
@@ -96,7 +106,7 @@ export const GET = withAdminAuth(async (request) => {
     }
 
     const unassignedUsers: OrgUser[] = []
-    for (const orgUser of users as OrgUser[]) {
+    for (const orgUser of signedUsers) {
       if (!orgUser.departmentId) {
         unassignedUsers.push(orgUser)
         continue

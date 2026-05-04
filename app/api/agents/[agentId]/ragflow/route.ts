@@ -276,6 +276,7 @@ async function handleChatSendMessage(
   const requestBody: Record<string, any> = {
     question,
     stream: true,
+    reasoning: true,
     user_id: userId
   }
 

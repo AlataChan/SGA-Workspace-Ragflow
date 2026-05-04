@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withAdminAuth } from '@/lib/auth/middleware'
 import { z } from 'zod'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 
 // CORS headers for cross-origin requests
 const corsHeaders = {
@@ -131,8 +132,28 @@ export const GET = withAdminAuth(async (request, context) => {
       )
     }
 
+    const signedAgent = {
+      ...agent,
+      avatarUrl: await resolveImageDisplayUrl(agent.avatarUrl),
+      photoUrl: await resolveImageDisplayUrl(agent.photoUrl),
+      avatarKey: agent.avatarUrl ?? null,
+      photoKey: agent.photoUrl ?? null,
+      userPermissions: await Promise.all(
+        agent.userPermissions.map(async (perm) => ({
+          ...perm,
+          user: perm.user
+            ? {
+                ...perm.user,
+                avatarUrl: await resolveImageDisplayUrl(perm.user.avatarUrl),
+                avatarKey: perm.user.avatarUrl ?? null,
+              }
+            : perm.user,
+        }))
+      ),
+    }
+
     return NextResponse.json({
-      data: agent,
+      data: signedAgent,
       message: '获取Agent详情成功'
     })
 
@@ -322,8 +343,16 @@ export const PUT = withAdminAuth(async (request, context) => {
       }
     })
 
+    const signedAgent = {
+      ...updatedAgent,
+      avatarUrl: await resolveImageDisplayUrl(updatedAgent.avatarUrl),
+      photoUrl: await resolveImageDisplayUrl(updatedAgent.photoUrl),
+      avatarKey: updatedAgent.avatarUrl ?? null,
+      photoKey: updatedAgent.photoUrl ?? null,
+    }
+
     return NextResponse.json({
-      data: updatedAgent,
+      data: signedAgent,
       message: 'Agent更新成功'
     }, { headers: corsHeaders })
 

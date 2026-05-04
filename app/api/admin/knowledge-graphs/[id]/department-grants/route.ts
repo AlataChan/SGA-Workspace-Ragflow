@@ -6,11 +6,19 @@
  * DELETE /api/admin/knowledge-graphs/[id]/department-grants   - 停用规则（按 grantId 或 departmentId）
  */
 
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { withAdminAuth } from "@/lib/auth/middleware"
 import { z } from "zod"
 import { UserRole } from "@prisma/client"
+import { writeAuditEvent } from "@/lib/security/audit-events"
+
+function getRequestMeta(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? request.headers.get("x-real-ip") ?? undefined
+  const userAgent = request.headers.get("user-agent") ?? undefined
+  const requestId = request.headers.get("x-request-id") ?? undefined
+  return { ip, userAgent, requestId }
+}
 
 export const dynamic = "force-dynamic"
 
@@ -364,6 +372,28 @@ export const POST = withAdminAuth(async (request, context) => {
       rulesDisabled = result.count
     }
 
+    const meta = getRequestMeta(request)
+    await writeAuditEvent({
+      companyId: user.companyId,
+      actorUserId: user.userId,
+      eventType: "PERM_KNOWLEDGE_GRAPH_DEPARTMENT_GRANT_SAVE",
+      result: "SUCCESS",
+      resourceType: "KNOWLEDGE_GRAPH",
+      resourceId: knowledgeGraphId,
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+      requestId: meta.requestId,
+      details: {
+        knowledgeGraphId,
+        departmentIds: uniqueDeptIds,
+        includeSubDepartments: input.includeSubDepartments,
+        syncMode: input.syncMode,
+        rulesUpserted,
+        rulesDisabled,
+        usersWillHaveAccess: stats.usersWillHaveAccess,
+      },
+    })
+
     return NextResponse.json({
       data: {
         rulesUpserted,
@@ -427,6 +457,22 @@ export const DELETE = withAdminAuth(async (request, context) => {
       },
       data: { isActive: false },
     })
+
+    if (result.count > 0) {
+      const meta = getRequestMeta(request)
+      await writeAuditEvent({
+        companyId: user.companyId,
+        actorUserId: user.userId,
+        eventType: "PERM_KNOWLEDGE_GRAPH_DEPARTMENT_GRANT_DISABLE",
+        result: "SUCCESS",
+        resourceType: "KNOWLEDGE_GRAPH",
+        resourceId: knowledgeGraphId,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+        requestId: meta.requestId,
+        details: { knowledgeGraphId, grantId, departmentId, disabled: result.count },
+      })
+    }
 
     if (result.count === 0) {
       return NextResponse.json(

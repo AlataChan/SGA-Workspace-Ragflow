@@ -14,8 +14,10 @@ model Company {
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
   agents          Agent[]
+  agentDepartmentGrants AgentDepartmentGrant[]
   departments     Department[]
   knowledgeGraphs KnowledgeGraph[]
+  knowledgeGraphDepartmentGrants KnowledgeGraphDepartmentGrant[]
   users           User[]
   moltConversationMappings MoltConversationMapping[]
 
@@ -23,30 +25,34 @@ model Company {
 }
 
 model Department {
-  id          String   @id @default(cuid())
-  companyId   String   @map("company_id")
-  name        String
-  parentId    String?  @map("parent_id")
-  description String?
-  icon        String?
-  sortOrder   Int      @default(0) @map("sort_order")
-  isActive    Boolean?  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  agents      Agent[]
-  agentDepartmentGrants AgentDepartmentGrant[]
-  knowledgeGraphDepartmentGrants KnowledgeGraphDepartmentGrant[]
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  users       User[]
-  parent      Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children    Department[] @relation("DepartmentHierarchy")
+  id                    String   @id @default(cuid())
+  companyId             String   @map("company_id")
+  name                  String
+  description           String?
+  icon                  String?
+  sortOrder             Int      @default(0) @map("sort_order")
+  isActive              Boolean? @default(true) @map("is_active")
+  parentId              String?  @map("parent_id")
+  parentSids            String?  @map("parent_sids")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
 
-  @@index([companyId, parentId], name: "idx_departments_company_parent")
+  agents                         Agent[]
+  agentDepartmentGrants          AgentDepartmentGrant[]
+  knowledgeGraphDepartmentGrants KnowledgeGraphDepartmentGrant[]
+  company                        Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  users                          User[]
+
+  parent   Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children Department[] @relation("DepartmentHierarchy")
+
+  @@index([companyId, parentId], name: "idx_department_company_parent")
   @@map("departments")
 }
 
 model User {
   id               String                @id @default(cuid())
+  ldapuid          String?
   companyId        String                @map("company_id")
   username         String                @map("username")
   userId           String                @default("") @map("user_id")
@@ -87,6 +93,8 @@ model User {
   knowledgeGraphPermissionRevocations UserKnowledgeGraphPermissionRevocation[]
   tempKnowledgeBase             UserTempKnowledgeBase?
   moltConversationMappings      MoltConversationMapping[]
+  auditEventsAsActor            SecurityAuditEvent[]          @relation("AuditActor")
+  auditEventsAsTarget           SecurityAuditEvent[]          @relation("AuditTarget")
   company                       Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   department                    Department?                   @relation(fields: [departmentId], references: [id])
 
@@ -138,6 +146,9 @@ model SecurityAuditEvent {
 
   details Json? @map("details")
 
+  actorUser  User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  targetUser User? @relation("AuditTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+
   @@index([companyId, occurredAt], name: "idx_audit_company_time")
   @@index([companyId, targetUserId, occurredAt], name: "idx_audit_company_target_time")
   @@index([companyId, eventType, occurredAt], name: "idx_audit_company_type_time")
@@ -164,13 +175,13 @@ model Agent {
   sortOrder          Int                   @default(0) @map("sort_order")
   createdAt          DateTime              @default(now()) @map("created_at")
   updatedAt          DateTime              @updatedAt @map("updated_at")
-  company            Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  department         Department            @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  sessions           ChatSession[]
-  userPermissions    UserAgentPermission[]
-  departmentGrants   AgentDepartmentGrant[]
+  company                   Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  department                Department                      @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  sessions                  ChatSession[]
+  userPermissions           UserAgentPermission[]
   userPermissionRevocations UserAgentPermissionRevocation[]
   moltConversationMappings MoltConversationMapping[]
+  departmentGrants          AgentDepartmentGrant[]
 
   @@map("agents")
 }
@@ -188,26 +199,6 @@ model UserAgentPermission {
   @@map("user_agent_permissions")
 }
 
-model AgentDepartmentGrant {
-  id                   String   @id @default(cuid())
-  companyId             String   @map("company_id")
-  agentId               String   @map("agent_id")
-  departmentId          String   @map("department_id")
-  includeSubDepartments Boolean  @default(true) @map("include_sub_departments")
-  isActive              Boolean  @default(true) @map("is_active")
-
-  createdBy String   @map("created_by")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  agent      Agent      @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-
-  @@unique([agentId, departmentId], name: "unique_agent_department_grant")
-  @@index([companyId, agentId], name: "idx_agent_department_grant_company_agent")
-  @@index([companyId, departmentId], name: "idx_agent_department_grant_company_department")
-  @@map("agent_department_grants")
-}
 
 model UserAgentPermissionRevocation {
   id      String @id @default(cuid())
@@ -229,6 +220,27 @@ model UserAgentPermissionRevocation {
   @@map("user_agent_permission_revocations")
 }
 
+model AgentDepartmentGrant {
+  id                   String   @id @default(cuid())
+  companyId             String   @map("company_id")
+  agentId               String   @map("agent_id")
+  departmentId          String   @map("department_id")
+  includeSubDepartments Boolean  @default(true) @map("include_sub_departments")
+  isActive              Boolean  @default(true) @map("is_active")
+
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  agent      Agent      @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, departmentId], name: "unique_agent_department_grant")
+  @@index([companyId, agentId], name: "idx_agent_department_grant_company_agent")
+  @@index([companyId, departmentId], name: "idx_agent_department_grant_company_department")
+  @@map("agent_department_grants")
+}
 model UserKnowledgeGraphPermission {
   id                String         @id @default(cuid())
   userId            String         @map("user_id")
@@ -240,27 +252,6 @@ model UserKnowledgeGraphPermission {
 
   @@unique([userId, knowledgeGraphId], name: "userId_knowledgeGraphId")
   @@map("user_knowledge_graph_permissions")
-}
-
-model KnowledgeGraphDepartmentGrant {
-  id                    String  @id @default(cuid())
-  companyId             String  @map("company_id")
-  knowledgeGraphId      String  @map("knowledge_graph_id")
-  departmentId          String  @map("department_id")
-  includeSubDepartments Boolean @default(true) @map("include_sub_departments")
-  isActive              Boolean @default(true) @map("is_active")
-
-  createdBy String   @map("created_by")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  knowledgeGraph KnowledgeGraph @relation(fields: [knowledgeGraphId], references: [id], onDelete: Cascade)
-  department     Department     @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-
-  @@unique([knowledgeGraphId, departmentId], name: "unique_kg_department_grant")
-  @@index([companyId, knowledgeGraphId], name: "idx_kg_department_grant_company_kg")
-  @@index([companyId, departmentId], name: "idx_kg_department_grant_company_department")
-  @@map("knowledge_graph_department_grants")
 }
 
 model UserKnowledgeGraphPermissionRevocation {
@@ -281,6 +272,28 @@ model UserKnowledgeGraphPermissionRevocation {
   @@unique([userId, knowledgeGraphId], name: "unique_user_kg_revocation")
   @@index([knowledgeGraphId, isActive], name: "idx_user_kg_revocation_kg_active")
   @@map("user_knowledge_graph_permission_revocations")
+}
+
+model KnowledgeGraphDepartmentGrant {
+  id                    String  @id @default(cuid())
+  companyId             String  @map("company_id")
+  knowledgeGraphId      String  @map("knowledge_graph_id")
+  departmentId          String  @map("department_id")
+  includeSubDepartments Boolean @default(true) @map("include_sub_departments")
+  isActive              Boolean @default(true) @map("is_active")
+
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company        Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  knowledgeGraph KnowledgeGraph @relation(fields: [knowledgeGraphId], references: [id], onDelete: Cascade)
+  department     Department     @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([knowledgeGraphId, departmentId], name: "unique_kg_department_grant")
+  @@index([companyId, knowledgeGraphId], name: "idx_kg_department_grant_company_kg")
+  @@index([companyId, departmentId], name: "idx_kg_department_grant_company_department")
+  @@map("knowledge_graph_department_grants")
 }
 
 model ChatSession {
@@ -366,10 +379,10 @@ model KnowledgeGraph {
   sortOrder   Int       @default(0) @map("sort_order")
   createdAt         DateTime                       @default(now()) @map("created_at")
   updatedAt         DateTime                       @updatedAt @map("updated_at")
-  company           Company                        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  userPermissions   UserKnowledgeGraphPermission[]
-  departmentGrants  KnowledgeGraphDepartmentGrant[]
+  company                   Company                               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userPermissions           UserKnowledgeGraphPermission[]
   userPermissionRevocations UserKnowledgeGraphPermissionRevocation[]
+  departmentGrants          KnowledgeGraphDepartmentGrant[]
 
   @@unique([companyId, name], name: "companyId_name")
   @@map("knowledge_graphs")

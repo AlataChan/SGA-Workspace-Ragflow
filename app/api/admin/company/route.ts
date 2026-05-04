@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withAdminAuth } from '@/lib/auth/middleware'
 import { z } from 'zod'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,8 +50,16 @@ export const GET = withAdminAuth(async (request) => {
       )
     }
 
+    const storedLogoValue = company.logoUrl
+    const signedLogoUrl = await resolveImageDisplayUrl(storedLogoValue)
+    const logoKey = storedLogoValue ?? null
+
     return NextResponse.json({
-      data: company,
+      data: {
+        ...company,
+        logoUrl: signedLogoUrl,
+        logoKey,
+      },
       message: '获取公司信息成功'
     })
 
@@ -110,8 +119,16 @@ export const PUT = withAdminAuth(async (request) => {
       }
     })
 
+    const storedLogoValue = updatedCompany.logoUrl
+    const signedLogoUrl = await resolveImageDisplayUrl(storedLogoValue)
+    const logoKey = storedLogoValue ?? null
+
     return NextResponse.json({
-      data: updatedCompany,
+      data: {
+        ...updatedCompany,
+        logoUrl: signedLogoUrl,
+        logoKey,
+      },
       message: '公司信息更新成功'
     })
 

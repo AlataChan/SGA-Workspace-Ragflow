@@ -238,6 +238,9 @@ export default function AgentsPage() {
     platformConfig: defaultPlatformConfigs.DIFY,
     sortOrder: 0
   })
+  // 图片预览（DB 存 key，预览用签名 URL）
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null)
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null)
 
   // 连接测试状态
   const [connectionTestResult, setConnectionTestResult] = useState<{
@@ -355,6 +358,8 @@ export default function AgentsPage() {
       sortOrder: agents.length + 1
     })
     setConnectionTestResult({ success: false, message: '', tested: false })
+    setPhotoPreviewUrl(null)
+    setAvatarPreviewUrl(null)
   }
 
   useEffect(() => {
@@ -383,12 +388,15 @@ export default function AgentsPage() {
       englishName: agent.englishName || "",
       position: agent.position,
       description: agent.description || "",
-      avatarUrl: agent.avatarUrl || "",
-      photoUrl: agent.photoUrl || "",
+      // 存储值（入库）使用 key；预览使用签名 URL
+      avatarUrl: (agent as any).avatarKey || "",
+      photoUrl: (agent as any).photoKey || "",
       platform: agent.platform,
       platformConfig: { ...defaultPlatformConfigs[agent.platform], ...(agent.platformConfig || {}) },
       sortOrder: agent.sortOrder
     })
+    setPhotoPreviewUrl(agent.photoUrl || null)
+    setAvatarPreviewUrl(agent.avatarUrl || null)
     // 重置连接测试状态
     setConnectionTestResult({ success: false, message: '', tested: false })
     setIsEditDialogOpen(true)
@@ -1156,14 +1164,16 @@ export default function AgentsPage() {
 
               {/* 照片上传 */}
               <SuperSimpleUpload
-                photoUrl={formData.photoUrl}
-                avatarUrl={formData.avatarUrl}
-                onUpload={(photoUrl, avatarUrl) => {
+                photoUrl={photoPreviewUrl || undefined}
+                avatarUrl={avatarPreviewUrl || undefined}
+                onUpload={({ photoKey, avatarKey, photoUrl, avatarUrl }) => {
                   setFormData(prev => ({
                     ...prev,
-                    photoUrl,
-                    avatarUrl
+                    photoUrl: photoKey,
+                    avatarUrl: avatarKey
                   }))
+                  setPhotoPreviewUrl(photoUrl || null)
+                  setAvatarPreviewUrl(avatarUrl || null)
                 }}
               />
 
@@ -1530,15 +1540,17 @@ export default function AgentsPage() {
 
               {/* 图片上传 */}
               <SuperSimpleUpload
-                onUpload={(photoUrl, avatarUrl) => {
+                onUpload={({ photoKey, avatarKey, photoUrl, avatarUrl }) => {
                   setFormData(prev => ({
                     ...prev,
-                    photoUrl,
-                    avatarUrl
+                    photoUrl: photoKey,
+                    avatarUrl: avatarKey
                   }))
+                  setPhotoPreviewUrl(photoUrl || null)
+                  setAvatarPreviewUrl(avatarUrl || null)
                 }}
-                photoUrl={formData.photoUrl}
-                avatarUrl={formData.avatarUrl}
+                photoUrl={photoPreviewUrl || undefined}
+                avatarUrl={avatarPreviewUrl || undefined}
               />
 
               {/* 平台配置 */}

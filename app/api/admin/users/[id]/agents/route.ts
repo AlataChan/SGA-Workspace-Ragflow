@@ -5,12 +5,21 @@
  * DELETE /api/admin/users/[id]/agents/[agentId] - 移除Agent权限
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withAdminAuth } from '@/lib/auth/middleware'
 import type { CurrentUser } from '@/lib/auth/middleware'
 import { z } from 'zod'
 import { getEffectiveAgentIdsForUser } from '@/lib/auth/agent-access'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
+import { writeAuditEvent } from '@/lib/security/audit-events'
+
+function getRequestMeta(request: NextRequest) {
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? request.headers.get('x-real-ip') ?? undefined
+  const userAgent = request.headers.get('user-agent') ?? undefined
+  const requestId = request.headers.get('x-request-id') ?? undefined
+  return { ip, userAgent, requestId }
+}
 
 // CORS headers for cross-origin requests
 const corsHeaders = {
@@ -64,11 +73,17 @@ export const GET = withAdminAuth(async (request, context) => {
       )
     }
 
+    const signedTargetUser = {
+      ...targetUser,
+      avatarUrl: await resolveImageDisplayUrl(targetUser.avatarUrl),
+      avatarKey: targetUser.avatarUrl ?? null,
+    }
+
     // 管理员用户拥有全部权限：无需返回完整列表，避免大 payload
     if (targetUser.role === 'ADMIN') {
       return NextResponse.json({
         data: {
-          user: targetUser,
+          user: signedTargetUser,
           userAgents: [],
           availableAgents: [],
           permissions: [],
@@ -143,6 +158,14 @@ export const GET = withAdminAuth(async (request, context) => {
         })
       : []
 
+    const signedEffectiveAgents = await Promise.all(
+      effectiveAgents.map(async (agent) => ({
+        ...agent,
+        avatarUrl: await resolveImageDisplayUrl(agent.avatarUrl),
+        avatarKey: agent.avatarUrl ?? null,
+      }))
+    )
+
     // 可添加的 Agent = 所有 Agent − 当前已具备访问权限的 Agent（policy/explicit）
     // 说明：被撤销的 Agent 不在 effectiveSet 中，会出现在可添加列表，可用于“显式恢复”（POST 会清除撤销黑名单）。
     const availableAgents = await prisma.agent.findMany({
@@ -173,17 +196,25 @@ export const GET = withAdminAuth(async (request, context) => {
       ],
     })
 
+    const signedAvailableAgents = await Promise.all(
+      availableAgents.map(async (agent) => ({
+        ...agent,
+        avatarUrl: await resolveImageDisplayUrl(agent.avatarUrl),
+        avatarKey: agent.avatarUrl ?? null,
+      }))
+    )
+
     // 将 accessSource 标注到返回的 userAgents
-    const userAgents = effectiveAgents.map((agent) => ({
+    const userAgents = signedEffectiveAgents.map((agent) => ({
       ...agent,
       accessSource: sourcesByAgentId[agent.id] ?? 'policy',
     }))
 
     return NextResponse.json({
       data: {
-        user: targetUser,
+        user: signedTargetUser,
         userAgents,
-        availableAgents: availableAgents,
+        availableAgents: signedAvailableAgents,
         permissions: userAgentPermissions,
         revokedAgentIds,
       },
@@ -291,6 +322,7 @@ export const POST = withAdminAuth(async (request, context) => {
     }
 
     // 创建权限
+    const meta = getRequestMeta(request)
     const [newPermission] = await prisma.$transaction([
       prisma.userAgentPermission.create({
         data: {
@@ -330,6 +362,20 @@ export const POST = withAdminAuth(async (request, context) => {
         }
       })
     ])
+
+    await writeAuditEvent({
+      companyId: user.companyId,
+      actorUserId: user.userId,
+      targetUserId,
+      eventType: 'PERM_AGENT_GRANT',
+      result: 'SUCCESS',
+      resourceType: 'AGENT',
+      resourceId: agentId,
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+      requestId: meta.requestId,
+      details: { agentId, targetUserId, grantedBy: user.userId },
+    })
 
     return NextResponse.json({
       data: newPermission,
@@ -400,6 +446,7 @@ export const DELETE = withAdminAuth(async (request, context) => {
       }
     })
 
+    const meta = getRequestMeta(request)
     // 删除显式权限（如果存在） + 记录撤销黑名单（避免后续部门规则/批量授权恢复）
     const tx: any[] = []
     if (existingPermission) {
@@ -431,6 +478,20 @@ export const DELETE = withAdminAuth(async (request, context) => {
     )
 
     await prisma.$transaction(tx)
+
+    await writeAuditEvent({
+      companyId: user.companyId,
+      actorUserId: user.userId,
+      targetUserId,
+      eventType: 'PERM_AGENT_REVOKE',
+      result: 'SUCCESS',
+      resourceType: 'AGENT',
+      resourceId: agentId,
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+      requestId: meta.requestId,
+      details: { agentId, targetUserId, revokedBy: user.userId },
+    })
 
     return NextResponse.json({
       data: { explicitDeleted: existingPermission ? 1 : 0, revoked: true },

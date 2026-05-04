@@ -20,14 +20,17 @@ type DepartmentNode = {
   sortOrder: number
   isActive: boolean
   parentId: string | null
+  hasChildren?: boolean
   children: DepartmentNode[]
 }
 
 type DepartmentTreeResponse = {
-  data: {
-    companyId: string
-    departments: DepartmentNode[]
-  }
+  data:
+    | DepartmentNode[]
+    | {
+        companyId?: string
+        departments?: DepartmentNode[]
+      }
   message: string
 }
 
@@ -112,6 +115,7 @@ export default function KnowledgeGraphDepartmentGrantDialog({
 
   const [search, setSearch] = useState("")
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  const [loadingChildIds, setLoadingChildIds] = useState<Set<string>>(new Set())
   const [selectedDepartmentIds, setSelectedDepartmentIds] = useState<Set<string>>(new Set())
 
   const [includeSubDepartments, setIncludeSubDepartments] = useState(true)
@@ -123,16 +127,52 @@ export default function KnowledgeGraphDepartmentGrantDialog({
   const [result, setResult] = useState<DepartmentGrantPreview | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  const normalizeDepartmentNode = (node: any): DepartmentNode => ({
+    id: String(node?.id ?? ""),
+    companyId: String(node?.companyId ?? ""),
+    name: String(node?.name ?? ""),
+    icon: node?.icon ? String(node.icon) : null,
+    sortOrder: typeof node?.sortOrder === "number" ? node.sortOrder : 0,
+    isActive: node?.isActive !== false,
+    parentId: node?.parentId ? String(node.parentId) : null,
+    hasChildren: Boolean(node?.hasChildren) || (Array.isArray(node?.children) && node.children.length > 0),
+    children: [],
+  })
+
+  // 懒加载：只拉取当前层级，不加载下级部门数据
+  const fetchDepartmentChildren = async (parentId: string | null): Promise<DepartmentNode[]> => {
+    const url = parentId
+      ? `/api/admin/departments/children?parentId=${encodeURIComponent(parentId)}`
+      : "/api/admin/departments/children"
+
+    const response = await fetch(url, { cache: "no-cache" })
+    if (!response.ok) {
+      throw new Error(`获取部门失败 (HTTP ${response.status})`)
+    }
+
+    const json = (await response.json().catch(() => ({}))) as Partial<DepartmentTreeResponse> & any
+    const list = Array.isArray(json?.data) ? json.data : []
+
+    return list.map((raw: any) => normalizeDepartmentNode(raw))
+  }
+
+  const attachChildrenToTree = (tree: DepartmentNode[], parentId: string, children: DepartmentNode[]): DepartmentNode[] => {
+    return tree.map((node) => {
+      if (node.id === parentId) {
+        return { ...node, children, hasChildren: children.length > 0 || node.hasChildren }
+      }
+      if (node.children.length === 0) return node
+      return { ...node, children: attachChildrenToTree(node.children, parentId, children) }
+    })
+  }
+
   const fetchDepartmentTree = async () => {
     try {
       setIsLoadingDepartments(true)
-      const response = await fetch("/api/admin/departments/tree", { cache: "no-cache" })
-      if (!response.ok) {
-        throw new Error(`获取部门树失败 (HTTP ${response.status})`)
-      }
-      const json = (await response.json()) as DepartmentTreeResponse
-      setDepartments(json.data.departments)
-      setExpandedIds(new Set(json.data.departments.map((d) => d.id)))
+      const tree = await fetchDepartmentChildren(null)
+      setDepartments(tree)
+      setExpandedIds(new Set())
+      setLoadingChildIds(new Set())
     } catch (e) {
       console.error("获取部门树失败:", e)
       setDepartments(null)
@@ -176,6 +216,7 @@ export default function KnowledgeGraphDepartmentGrantDialog({
     // reset
     setSearch("")
     setSelectedDepartmentIds(new Set())
+    setLoadingChildIds(new Set())
     setIncludeSubDepartments(true)
     setPreview(null)
     setResult(null)
@@ -259,13 +300,56 @@ export default function KnowledgeGraphDepartmentGrantDialog({
     return rows.filter((r) => searchDisplayIds.has(r.node.id))
   }, [departments, effectiveExpandedIds, searchDisplayIds])
 
-  const toggleExpanded = (deptId: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(deptId)) next.delete(deptId)
-      else next.add(deptId)
-      return next
-    })
+  const toggleExpanded = async (deptId: string) => {
+    const isExpanded = expandedIds.has(deptId)
+    if (isExpanded) {
+      setExpandedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(deptId)
+        return next
+      })
+      return
+    }
+
+    const findNode = (nodes: DepartmentNode[]): DepartmentNode | null => {
+      for (const node of nodes) {
+        if (node.id === deptId) return node
+        if (node.children.length > 0) {
+          const found = findNode(node.children)
+          if (found) return found
+        }
+      }
+      return null
+    }
+
+    const current = departments ? findNode(departments) : null
+    const mayHaveChildren = Boolean(current?.hasChildren)
+    const needsLoad = mayHaveChildren && (current?.children.length ?? 0) === 0 && !loadingChildIds.has(deptId)
+
+    if (needsLoad) {
+      setLoadingChildIds((prev) => new Set(prev).add(deptId))
+      try {
+        const children = await fetchDepartmentChildren(deptId)
+        setDepartments((prev) => (prev ? attachChildrenToTree(prev, deptId, children) : prev))
+      } catch (e) {
+        console.error("加载子部门失败:", e)
+        setError(e instanceof Error ? e.message : "加载子部门失败")
+        setLoadingChildIds((prev) => {
+          const next = new Set(prev)
+          next.delete(deptId)
+          return next
+        })
+        return
+      } finally {
+        setLoadingChildIds((prev) => {
+          const next = new Set(prev)
+          next.delete(deptId)
+          return next
+        })
+      }
+    }
+
+    setExpandedIds((prev) => new Set(prev).add(deptId))
   }
 
   const expandAll = () => {
@@ -469,7 +553,8 @@ export default function KnowledgeGraphDepartmentGrantDialog({
                   <div className="space-y-1">
                     {flatRows.map(({ node, depth }) => {
                       const isExpanded = expandedIds.has(node.id)
-                      const hasChildren = node.children.length > 0
+                      const isLoadingChildren = loadingChildIds.has(node.id)
+                      const hasChildren = Boolean(node.hasChildren) || node.children.length > 0
                       const checked = selectedDepartmentIds.has(node.id)
 
                       return (
@@ -484,7 +569,9 @@ export default function KnowledgeGraphDepartmentGrantDialog({
                             onClick={() => toggleExpanded(node.id)}
                           >
                             {hasChildren ? (
-                              isExpanded ? (
+                              isLoadingChildren ? (
+                                <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
+                              ) : isExpanded ? (
                                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
                               ) : (
                                 <ChevronRight className="h-4 w-4 text-muted-foreground" />

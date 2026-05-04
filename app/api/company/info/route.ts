@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withAuth } from '@/lib/auth/middleware'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 
 // CORS headers
 const corsHeaders = {
@@ -50,8 +51,16 @@ export const GET = withAuth(async (request) => {
       )
     }
 
+    const storedLogoValue = company.logoUrl
+    const signedLogoUrl = await resolveImageDisplayUrl(storedLogoValue)
+    const logoKey = storedLogoValue ?? null
+
     return NextResponse.json({
-      data: company,
+      data: {
+        ...company,
+        logoUrl: signedLogoUrl,
+        logoKey,
+      },
       message: '获取公司信息成功'
     }, { headers: corsHeaders })
 

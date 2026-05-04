@@ -3,9 +3,12 @@ import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import sharp from 'sharp'
+import { withAdminAuth } from '@/lib/auth/middleware'
+import { isStorageConfigured, uploadFile, resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 
-export async function POST(request: NextRequest) {
+export const POST = withAdminAuth(async (request: NextRequest) => {
   try {
+    const user = request.user!
     const formData = await request.formData()
     const file = formData.get('file') as File
     
@@ -55,6 +58,89 @@ export async function POST(request: NextRequest) {
       const imageInfo = await sharp(buffer).metadata()
       console.log('原始图片信息:', { width: imageInfo.width, height: imageInfo.height, format: imageInfo.format })
 
+      // S3 已配置：输出到 Buffer 并上传到对象存储；否则沿用本地 /uploads 方案
+      if (isStorageConfigured()) {
+        // 处理展示照片 - 高质量，保持比例
+        const photoBuffer = await sharp(buffer)
+          .resize(1200, 1200, {
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
+          .sharpen()
+          .jpeg({
+            quality: 92,
+            progressive: true,
+            mozjpeg: true,
+          })
+          .toBuffer()
+
+        // 智能头像生成 - 高分辨率，智能裁剪
+        let avatarPipeline = sharp(buffer)
+
+        // 如果是人像照片，尝试智能裁剪到面部区域（这里使用中心/顶部策略）
+        if (imageInfo.width && imageInfo.height) {
+          const isPortrait = imageInfo.height > imageInfo.width
+          const isLandscape = imageInfo.width > imageInfo.height
+
+          if (isPortrait) {
+            avatarPipeline = avatarPipeline.resize(400, 400, {
+              fit: 'cover',
+              position: 'top',
+            })
+          } else if (isLandscape) {
+            avatarPipeline = avatarPipeline.resize(400, 400, {
+              fit: 'cover',
+              position: 'center',
+            })
+          } else {
+            avatarPipeline = avatarPipeline.resize(400, 400, {
+              fit: 'cover',
+              position: 'center',
+            })
+          }
+        } else {
+          avatarPipeline = avatarPipeline.resize(400, 400, {
+            fit: 'cover',
+            position: 'center',
+          })
+        }
+
+        const avatarBuffer = await avatarPipeline
+          .sharpen()
+          .jpeg({
+            quality: 95,
+            progressive: true,
+            mozjpeg: true,
+          })
+          .toBuffer()
+
+        const rand = Math.random().toString(36).slice(2, 10)
+        const photoKey = `agents/${user.companyId}/photos/${timestamp}-${rand}.jpg`
+        const avatarKey = `agents/${user.companyId}/avatars/${timestamp}-${rand}.jpg`
+
+        await Promise.all([
+          uploadFile(photoKey, photoBuffer, 'image/jpeg'),
+          uploadFile(avatarKey, avatarBuffer, 'image/jpeg'),
+        ])
+
+        const [photoUrl, avatarUrl] = await Promise.all([
+          resolveImageDisplayUrl(photoKey),
+          resolveImageDisplayUrl(avatarKey),
+        ])
+
+        return NextResponse.json({
+          success: true,
+          photoKey,
+          avatarKey,
+          photoUrl,
+          avatarUrl,
+          originalSize: file.size,
+          originalType: file.type,
+          timestamp,
+        })
+      }
+
+      // ===== fallback: 本地存储（未配置对象存储）=====
       // 处理展示照片 - 高质量，保持比例
       await sharp(buffer)
         .resize(1200, 1200, {
@@ -71,34 +157,27 @@ export async function POST(request: NextRequest) {
 
       // 智能头像生成 - 高分辨率，智能裁剪
       let avatarPipeline = sharp(buffer)
-
-      // 如果是人像照片，尝试智能裁剪到面部区域
-      // 这里使用中心裁剪，但可以根据需要添加面部检测
       if (imageInfo.width && imageInfo.height) {
         const isPortrait = imageInfo.height > imageInfo.width
         const isLandscape = imageInfo.width > imageInfo.height
 
         if (isPortrait) {
-          // 竖向照片，裁剪上半部分（通常是头部区域）
           avatarPipeline = avatarPipeline.resize(400, 400, {
             fit: 'cover',
             position: 'top' // 从顶部开始裁剪
           })
         } else if (isLandscape) {
-          // 横向照片，裁剪中心区域
           avatarPipeline = avatarPipeline.resize(400, 400, {
             fit: 'cover',
             position: 'center'
           })
         } else {
-          // 正方形照片，直接缩放
           avatarPipeline = avatarPipeline.resize(400, 400, {
             fit: 'cover',
             position: 'center'
           })
         }
       } else {
-        // 默认处理
         avatarPipeline = avatarPipeline.resize(400, 400, {
           fit: 'cover',
           position: 'center'
@@ -106,22 +185,23 @@ export async function POST(request: NextRequest) {
       }
 
       await avatarPipeline
-        .sharpen() // 增加锐化
+        .sharpen()
         .jpeg({
-          quality: 95, // 头像使用更高质量
+          quality: 95,
           progressive: true,
           mozjpeg: true
         })
         .toFile(avatarPath)
 
-      // 返回两个URL
       const photoUrl = `/uploads/agents/${originalName}`
       const avatarUrl = `/uploads/agents/${avatarName}`
-      
+
       return NextResponse.json({
         success: true,
-        photoUrl,    // 展示照片URL
-        avatarUrl,   // 聊天头像URL
+        photoKey: photoUrl,
+        avatarKey: avatarUrl,
+        photoUrl,
+        avatarUrl,
         originalSize: file.size,
         originalType: file.type,
         timestamp
@@ -142,6 +222,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
+})
 
 export const dynamic = 'force-dynamic'

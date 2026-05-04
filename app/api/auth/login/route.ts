@@ -15,10 +15,12 @@ import {
   validateAuthSessionForJwtPayload,
 } from "@/lib/auth/auth-session"
 import { setAuthCookie } from '@/lib/auth/middleware'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 import { writeAuditEvent } from "@/lib/security/audit-events"
 import { enforceSameOrigin } from "@/lib/security/origin-check"
 import { UserRole } from "@prisma/client"
 import { z } from "zod"
+import { authenticateWithLdap } from "@/lib/services/ldap-service"
 
 function getRequestIp(request: NextRequest): string | undefined {
   const forwardedFor = request.headers.get("x-forwarded-for")
@@ -63,7 +65,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { identifier, password, type, rememberMe, confirmReplace } = validationResult.data
+    const { identifier, password, type, rememberMe, confirmReplace, loginMode } = validationResult.data
+
+    // 本地模式和LDAP模式都要求密码不能为空
+    if (!password) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: '密码不能为空',
+          }
+        },
+        { status: 400 }
+      )
+    }
 
     // 查找用户: 支持用户名或手机号
     // 注意：不再支持使用 userId 登录
@@ -74,8 +89,13 @@ export async function POST(request: NextRequest) {
         break
       case 'username':
       default:
-        // 如果是 username 类型，查找 username 字段
-        whereClause = { username: identifier }
+        // 如果是 username 类型，同时查找 username 和 ldapuid 字段
+        whereClause = {
+          OR: [
+            { username: identifier },
+            { ldapuid: identifier }
+          ]
+        }
     }
 
     const now = new Date()
@@ -103,6 +123,21 @@ export async function POST(request: NextRequest) {
       take: 2,
     })
 
+    // 根据用户信息决定登录模式
+    let effectiveLoginMode = "local";
+    if ( matchedUsers.length >=1) {
+      const user = matchedUsers[0];
+      // 如果用户有 ldapuid 字段且 LDAP 已启用，则使用 LDAP 登录
+      if (user.ldapuid && (process.env.ENABLE_LDAP || "true")=== "true") {
+        effectiveLoginMode = "ldap";
+      } else {
+        effectiveLoginMode = "local";
+      }
+    } else if (!effectiveLoginMode) {
+      // 如果没有找到用户或找到多个用户，默认使用本地登录
+      effectiveLoginMode = "local";
+    }
+
     if (matchedUsers.length === 0) {
       await writeAuditEvent({
         companyId: "unknown",
@@ -123,29 +158,6 @@ export async function POST(request: NextRequest) {
           },
         },
         { status: 401 },
-      )
-    }
-
-    if (matchedUsers.length > 1) {
-      await writeAuditEvent({
-        companyId: "unknown",
-        eventType: "AUTH_LOGIN_FAILED",
-        result: "FAIL",
-        reason: "IDENTIFIER_AMBIGUOUS",
-        ip,
-        userAgent,
-        requestId,
-        details: { type },
-      })
-
-      return NextResponse.json(
-        {
-          error: {
-            code: "IDENTIFIER_AMBIGUOUS",
-            message: "用户标识不唯一，请联系管理员",
-          },
-        },
-        { status: 400 },
       )
     }
 
@@ -230,125 +242,188 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 验证密码
-    const isPasswordValid = await verifyPassword(password, user.passwordHash)
-    if (!isPasswordValid) {
-      const windowStartAt = user.loginFailedWindowStartAt
-      const windowExpired =
-        !windowStartAt || now.getTime() - windowStartAt.getTime() > 24 * 60 * 60 * 1000
+    const useLdap = process.env.ENABLE_LDAP === "true" && effectiveLoginMode === "ldap"
 
-      const nextWindowStartAt = windowExpired ? now : windowStartAt
-      const nextCount = windowExpired ? 1 : (user.loginFailedCount24h ?? 0) + 1
-
-      const lockShort = nextCount === 5
-      const lockLong = nextCount >= 10
-
-      const lockedUntil = lockLong
-        ? new Date(now.getTime() + 24 * 60 * 60 * 1000)
-        : lockShort
-          ? new Date(now.getTime() + 60 * 60 * 1000)
-          : null
-
-      const lockLevel = lockLong ? "LONG_24H" : lockShort ? "SHORT_60MIN" : null
-      const lockNeedsAdmin = lockLong
-
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          loginFailedCount24h: nextCount,
-          loginFailedWindowStartAt: nextWindowStartAt,
-          loginLockedUntil: lockedUntil,
-          loginLockLevel: lockLevel,
-          loginLockNeedsAdmin: lockNeedsAdmin,
-        },
-      })
-
-      await writeAuditEvent({
-        companyId: user.companyId,
-        targetUserId: user.id,
-        eventType: "AUTH_LOGIN_FAILED",
-        result: "FAIL",
-        reason: "BAD_PASSWORD",
-        ip,
-        userAgent,
-        requestId,
-        details: {
-          failedCount24h: nextCount,
-          lockLevel,
-          lockedUntil,
-        },
-      })
-
-      if (lockShort) {
-        await writeAuditEvent({
-          companyId: user.companyId,
-          targetUserId: user.id,
-          eventType: "AUTH_ACCOUNT_LOCKED_SHORT",
-          result: "SUCCESS",
-          reason: "THRESHOLD_REACHED",
-          ip,
-          userAgent,
-          requestId,
-          details: { failedCount24h: nextCount, lockedUntil },
-        })
-      }
-
-      if (lockLong) {
-        await writeAuditEvent({
-          companyId: user.companyId,
-          targetUserId: user.id,
-          eventType: "AUTH_ACCOUNT_LOCKED_LONG",
-          result: "SUCCESS",
-          reason: "THRESHOLD_REACHED",
-          ip,
-          userAgent,
-          requestId,
-          details: { failedCount24h: nextCount, lockedUntil },
-        })
-
-        const revoked = await revokeAuthSessionsForUser({
-          userId: user.id,
-          companyId: user.companyId,
-          reason: "LOCKED",
-        })
-
-        if (revoked.count > 0) {
-          await writeAuditEvent({
-            companyId: user.companyId,
-            actorUserId: user.id,
-            targetUserId: user.id,
-            eventType: "AUTH_SESSION_REVOKED",
-            result: "SUCCESS",
-            reason: "LOCKED",
-            ip,
-            userAgent,
-            requestId,
-            details: { count: revoked.count },
-          })
-        }
-      }
-
-      if (lockShort || lockLong) {
+    // ============================
+    // LDAP 登录模式
+    // ============================
+    if (useLdap) {
+      // 目前仅支持用户名 + 密码的 LDAP 登录
+      if (type !== "username") {
         return NextResponse.json(
           {
             error: {
-              code: "LOGIN_LOCKED",
-              message: lockLong ? "账号已锁定，请联系管理员" : "账号已锁定，请稍后重试",
+              code: "UNSUPPORTED_LOGIN_TYPE_FOR_LDAP",
+              message: "LDAP 登录目前仅支持用户名方式",
             },
           },
-          { status: 403 },
+          { status: 400 },
         )
       }
 
-      return NextResponse.json(
-        {
-          error: {
-            code: "INVALID_CREDENTIALS",
-            message: "用户名或密码错误",
+      const ldapResult = await authenticateWithLdap(identifier, password)
+
+      if (ldapResult.status === "SUCCESS") {
+        // 成功则直接继续后面的会话创建逻辑
+      } else if (ldapResult.status === "INVALID_CREDENTIALS") {
+        // LDAP 认证失败，回退到普通登录模式
+        effectiveLoginMode = "local";
+
+        console.log("LDAP 认证失败，回退到普通登录模式")
+      } else if (ldapResult.status === "DISABLED") {
+        // 未真正开启 LDAP，回退到本地密码模式
+        effectiveLoginMode = "local";
+      } else {
+        // 配置/连接异常，记录审计并返回服务不可用
+        await writeAuditEvent({
+          companyId: user.companyId,
+          targetUserId: user.id,
+          eventType: "AUTH_LOGIN_FAILED",
+          result: "FAIL",
+          reason: "LDAP_ERROR",
+          ip,
+          userAgent,
+          requestId,
+          details: {
+            status: ldapResult.status,
           },
-        },
-        { status: 401 },
-      )
+        })
+
+        return NextResponse.json(
+          {
+            error: {
+              code: "LDAP_UNAVAILABLE",
+              message: "LDAP 认证服务异常，请稍后重试或联系管理员",
+            },
+          },
+          { status: 503 },
+        )
+      }
+    }
+
+    // ============================
+    // 本地密码模式
+    // ============================
+    if (effectiveLoginMode === "local") {
+      const isPasswordValid = await verifyPassword(password!, user.passwordHash)
+      if (!isPasswordValid) {
+        const windowStartAt = user.loginFailedWindowStartAt
+        const windowExpired =
+          !windowStartAt || now.getTime() - windowStartAt.getTime() > 24 * 60 * 60 * 1000
+
+        const nextWindowStartAt = windowExpired ? now : windowStartAt
+        const nextCount = windowExpired ? 1 : (user.loginFailedCount24h ?? 0) + 1
+
+        const lockShort = nextCount === 5
+        const lockLong = nextCount >= 10
+
+        const lockedUntil = lockLong
+          ? new Date(now.getTime() + 24 * 60 * 60 * 1000)
+          : lockShort
+            ? new Date(now.getTime() + 60 * 60 * 1000)
+            : null
+
+        const lockLevel = lockLong ? "LONG_24H" : lockShort ? "SHORT_60MIN" : null
+        const lockNeedsAdmin = lockLong
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            loginFailedCount24h: nextCount,
+            loginFailedWindowStartAt: nextWindowStartAt,
+            loginLockedUntil: lockedUntil,
+            loginLockLevel: lockLevel,
+            loginLockNeedsAdmin: lockNeedsAdmin,
+          },
+        })
+
+        await writeAuditEvent({
+          companyId: user.companyId,
+          targetUserId: user.id,
+          eventType: "AUTH_LOGIN_FAILED",
+          result: "FAIL",
+          reason: "BAD_PASSWORD",
+          ip,
+          userAgent,
+          requestId,
+          details: {
+            failedCount24h: nextCount,
+            lockLevel,
+            lockedUntil,
+          },
+        })
+
+        if (lockShort) {
+          await writeAuditEvent({
+            companyId: user.companyId,
+            targetUserId: user.id,
+            eventType: "AUTH_ACCOUNT_LOCKED_SHORT",
+            result: "SUCCESS",
+            reason: "THRESHOLD_REACHED",
+            ip,
+            userAgent,
+            requestId,
+            details: { failedCount24h: nextCount, lockedUntil },
+          })
+        }
+
+        if (lockLong) {
+          await writeAuditEvent({
+            companyId: user.companyId,
+            targetUserId: user.id,
+            eventType: "AUTH_ACCOUNT_LOCKED_LONG",
+            result: "SUCCESS",
+            reason: "THRESHOLD_REACHED",
+            ip,
+            userAgent,
+            requestId,
+            details: { failedCount24h: nextCount, lockedUntil },
+          })
+
+          const revoked = await revokeAuthSessionsForUser({
+            userId: user.id,
+            companyId: user.companyId,
+            reason: "LOCKED",
+          })
+
+          if (revoked.count > 0) {
+            await writeAuditEvent({
+              companyId: user.companyId,
+              actorUserId: user.id,
+              targetUserId: user.id,
+              eventType: "AUTH_SESSION_REVOKED",
+              result: "SUCCESS",
+              reason: "LOCKED",
+              ip,
+              userAgent,
+              requestId,
+              details: { count: revoked.count },
+            })
+          }
+        }
+
+        if (lockShort || lockLong) {
+          return NextResponse.json(
+            {
+              error: {
+                code: "LOGIN_LOCKED",
+                message: lockLong ? "账号已锁定，请联系管理员" : "账号已锁定，请稍后重试",
+              },
+            },
+            { status: 403 },
+          )
+        }
+
+        return NextResponse.json(
+          {
+            error: {
+              code: "INVALID_CREDENTIALS",
+              message: "用户名或密码错误",
+            },
+          },
+          { status: 401 },
+        )
+      }
     }
 
     const activeSession = await getActiveAuthSessionForUser({
@@ -459,6 +534,11 @@ export async function POST(request: NextRequest) {
     })
 
     // 准备响应数据
+    const [signedAvatarUrl, signedCompanyLogoUrl] = await Promise.all([
+      resolveImageDisplayUrl(user.avatarUrl),
+      resolveImageDisplayUrl(user.company?.logoUrl),
+    ])
+
     const responseData = {
       data: {
         user: {
@@ -466,10 +546,17 @@ export async function POST(request: NextRequest) {
           userId: user.userId,
           phone: user.phone,
           displayName: user.displayName,
-          avatarUrl: user.avatarUrl,
+          avatarUrl: signedAvatarUrl,
+          avatarKey: user.avatarUrl ?? null,
           role: user.role,
           departmentId: user.departmentId,
-          company: user.company,
+          company: user.company
+            ? {
+                ...user.company,
+                logoUrl: signedCompanyLogoUrl,
+                logoKey: user.company.logoUrl ?? null,
+              }
+            : user.company,
         },
         token,
       },
@@ -568,6 +655,11 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    const [signedAvatarUrl, signedCompanyLogoUrl] = await Promise.all([
+      resolveImageDisplayUrl(user.avatarUrl),
+      resolveImageDisplayUrl(user.company?.logoUrl),
+    ])
+
     return NextResponse.json({
       authenticated: true,
       user: {
@@ -575,10 +667,17 @@ export async function GET(request: NextRequest) {
         userId: user.userId,
         phone: user.phone,
         displayName: user.displayName,
-        avatarUrl: user.avatarUrl,
+        avatarUrl: signedAvatarUrl,
+        avatarKey: user.avatarUrl ?? null,
         role: user.role,
         departmentId: user.departmentId,
-        company: user.company,
+        company: user.company
+          ? {
+              ...user.company,
+              logoUrl: signedCompanyLogoUrl,
+              logoKey: user.company.logoUrl ?? null,
+            }
+          : user.company,
       }
     })
 

@@ -3,11 +3,19 @@
  * POST /api/admin/agents/[id]/bulk/revoke-users
  */
 
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { withAdminAuth } from "@/lib/auth/middleware"
 import { UserRole } from "@prisma/client"
 import { z } from "zod"
+import { writeAuditEvent } from "@/lib/security/audit-events"
+
+function getRequestMeta(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? request.headers.get("x-real-ip") ?? undefined
+  const userAgent = request.headers.get("user-agent") ?? undefined
+  const requestId = request.headers.get("x-request-id") ?? undefined
+  return { ip, userAgent, requestId }
+}
 
 export const dynamic = "force-dynamic"
 
@@ -273,6 +281,28 @@ export const POST = withAdminAuth(async (request, context) => {
       revocationsCreated += created.count
       revocationsActivated += updated.count
     }
+
+    const meta = getRequestMeta(request)
+    await writeAuditEvent({
+      companyId: user.companyId,
+      actorUserId: user.userId,
+      eventType: "PERM_AGENT_BULK_REVOKE",
+      result: "SUCCESS",
+      resourceType: "AGENT",
+      resourceId: agentId,
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+      requestId: meta.requestId,
+      details: {
+        agentId,
+        mode: input.mode,
+        usersMatched: targetUserIds.length,
+        explicitDeleted,
+        revocationsCreated,
+        revocationsActivated,
+        reason: input.reason,
+      },
+    })
 
     return NextResponse.json(
       {

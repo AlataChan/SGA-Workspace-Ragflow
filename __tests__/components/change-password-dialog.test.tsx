@@ -36,8 +36,8 @@ describe("ChangePasswordDialog", () => {
     render(<ChangePasswordDialog open={true} onOpenChange={vi.fn()} />)
 
     await act(async () => {
-      await user.type(screen.getByLabelText("新密码"), "Abcd1234!")
-      await user.type(screen.getByLabelText("确认新密码"), "Abcd1234!")
+      await user.type(screen.getByLabelText("新密码"), "Abc1d2e3!")
+      await user.type(screen.getByLabelText("确认新密码"), "Abc1d2e3!")
       await user.click(screen.getByRole("button", { name: "确认修改" }))
       await vi.runOnlyPendingTimersAsync()
     })
@@ -45,6 +45,6 @@ describe("ChangePasswordDialog", () => {
     expect(fetch).toHaveBeenCalledTimes(1)
     const [, init] = (fetch as any).mock.calls[0]
     const body = JSON.parse(init.body)
-    expect(body).toEqual({ newPassword: "Abcd1234!" })
+    expect(body).toEqual({ newPassword: "Abc1d2e3!" })
   })
 })

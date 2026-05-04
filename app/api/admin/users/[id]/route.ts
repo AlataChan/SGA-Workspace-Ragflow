@@ -12,6 +12,7 @@ import { hashPassword, validatePasswordStrength } from '@/lib/auth/password'
 import { writeAuditEvent } from '@/lib/security/audit-events'
 import { enforceSameOrigin } from '@/lib/security/origin-check'
 import { z } from 'zod'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 
 // CORS headers
 const corsHeaders = {
@@ -68,25 +69,7 @@ export const PUT = withAdminAuth(async (request, context) => {
 
     const userData = validationResult.data
 
-    if (userData.password) {
-      const passwordStrength = validatePasswordStrength(userData.password)
-      if (!passwordStrength.isValid) {
-        return NextResponse.json(
-          {
-            error: {
-              code: 'VALIDATION_ERROR',
-              message: '请求参数错误',
-              details: {
-                password: passwordStrength.errors,
-              }
-            }
-          },
-          { status: 400, headers: corsHeaders }
-        )
-      }
-    }
-
-    // 检查目标用户是否存在
+    // 检查目标用户是否存在（密码校验需要用到目标用户 username）
     const targetUser = await prisma.user.findFirst({
       where: {
         id: userId,
@@ -104,6 +87,26 @@ export const PUT = withAdminAuth(async (request, context) => {
         },
         { status: 404, headers: corsHeaders }
       )
+    }
+
+    if (userData.password) {
+      const passwordStrength = validatePasswordStrength(userData.password, {
+        username: targetUser.username,
+      })
+      if (!passwordStrength.isValid) {
+        return NextResponse.json(
+          {
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: '请求参数错误',
+              details: {
+                password: passwordStrength.errors,
+              }
+            }
+          },
+          { status: 400, headers: corsHeaders }
+        )
+      }
     }
 
     // 保护超级管理员账号
@@ -226,6 +229,9 @@ export const PUT = withAdminAuth(async (request, context) => {
 
     // 移除敏感信息
     const { passwordHash, ...safeUser } = updatedUser
+    const storedAvatarValue = (safeUser as any).avatarUrl as string | null | undefined
+    const signedAvatarUrl = await resolveImageDisplayUrl(storedAvatarValue)
+    const avatarKey = storedAvatarValue ?? null
 
     if (userData.password) {
       await writeAuditEvent({
@@ -238,7 +244,11 @@ export const PUT = withAdminAuth(async (request, context) => {
     }
 
     return NextResponse.json({
-      data: safeUser,
+      data: {
+        ...safeUser,
+        avatarUrl: signedAvatarUrl,
+        avatarKey,
+      },
       message: '用户更新成功'
     }, { headers: corsHeaders })
 
@@ -310,6 +320,40 @@ export const DELETE = withAdminAuth(async (request, context) => {
         { status: 400, headers: corsHeaders }
       )
     }
+
+    // 先写删除审计，保留被删用户快照
+    await writeAuditEvent({
+      companyId: user.companyId,
+      actorUserId: user.userId,
+      targetUserId: targetUser.id,
+      eventType: 'USER_DELETED',
+      result: 'SUCCESS',
+      reason: 'ADMIN_ACTION',
+      resourceType: 'USER',
+      resourceId: targetUser.id,
+      ip: request.headers.get('x-forwarded-for') ?? undefined,
+      userAgent: request.headers.get('user-agent') ?? undefined,
+      requestId: request.headers.get('x-request-id') ?? undefined,
+      details: {
+        targetSnapshot: {
+          id: targetUser.id,
+          username: targetUser.username,
+          chineseName: targetUser.chineseName,
+          userId: targetUser.userId,
+          role: targetUser.role,
+        },
+      },
+    })
+
+    // 清除审计记录中对该用户的引用（保留审计记录本身）
+    await prisma.securityAuditEvent.updateMany({
+      where: { actorUserId: userId },
+      data: { actorUserId: null }
+    })
+    await prisma.securityAuditEvent.updateMany({
+      where: { targetUserId: userId },
+      data: { targetUserId: null }
+    })
 
     // 删除用户（级联删除相关数据）
     await prisma.user.delete({

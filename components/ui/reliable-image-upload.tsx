@@ -5,7 +5,12 @@ import { Label } from "@/components/ui/label"
 import { Upload, User, Image as ImageIcon } from "lucide-react"
 
 interface ReliableImageUploadProps {
-  onUpload: (photoUrl: string, avatarUrl: string) => void
+  onUpload: (result: {
+    photoKey: string
+    avatarKey: string
+    photoUrl: string
+    avatarUrl: string
+  }) => void
   photoUrl?: string
   avatarUrl?: string
 }
@@ -39,7 +44,12 @@ export function ReliableImageUpload({ onUpload, photoUrl, avatarUrl }: ReliableI
       
       const data = await response.json()
       console.log('上传成功:', data)
-      onUpload(data.photoUrl, data.avatarUrl)
+      onUpload({
+        photoKey: data.photoKey || data.photoUrl,
+        avatarKey: data.avatarKey || data.avatarUrl,
+        photoUrl: data.photoUrl,
+        avatarUrl: data.avatarUrl,
+      })
     } catch (error) {
       console.error("图片上传失败:", error)
       alert("图片上传失败，请重试")

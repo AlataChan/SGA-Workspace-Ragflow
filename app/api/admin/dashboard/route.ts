@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { withAdminAuth } from '@/lib/auth/middleware'
+import { resolveImageDisplayUrl } from '@/lib/storage/s3-client'
 
 // CORS headers
 const corsHeaders = {
@@ -106,6 +107,21 @@ export const GET = withAdminAuth(async (request) => {
       }),
     ])
 
+    const [signedRecentUsers, signedRecentAgents] = await Promise.all([
+      Promise.all(
+        recentUsers.map(async (u) => ({
+          ...u,
+          avatarUrl: await resolveImageDisplayUrl(u.avatarUrl),
+        }))
+      ),
+      Promise.all(
+        recentAgents.map(async (a) => ({
+          ...a,
+          avatarUrl: await resolveImageDisplayUrl(a.avatarUrl),
+        }))
+      ),
+    ])
+
     // 处理用户统计
     const totalUsers = userStats.reduce((sum, stat) => sum + stat._count, 0)
     const activeUsers = userStats
@@ -164,7 +180,7 @@ export const GET = withAdminAuth(async (request) => {
         agentCount: dept._count.agents,
         userCount: dept._count.users,
       })),
-      recentUsers: recentUsers.map(user => ({
+      recentUsers: signedRecentUsers.map(user => ({
         id: user.id,
         username: user.username,
         display_name: user.chineseName,
@@ -174,7 +190,7 @@ export const GET = withAdminAuth(async (request) => {
         created_at: user.createdAt.toISOString(),
         department: user.department?.name || '未分配',
       })),
-      recentAgents: recentAgents.map(agent => ({
+      recentAgents: signedRecentAgents.map(agent => ({
         id: agent.id,
         name: agent.chineseName,
         english_name: agent.englishName,
